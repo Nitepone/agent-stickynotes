@@ -130,6 +130,12 @@ TestCase {
         compare(failures, [], "pairs below 4.5:1")
     }
 
+    function test_sameColor_ignores_notation() {
+        verify(Theme.sameColor("#ff8800", "#FF8800"))
+        verify(Theme.sameColor("#0af", "#00aaff"))
+        verify(!Theme.sameColor("#ff8800", "#ff8801"))
+    }
+
     function test_contrast_function_matches_known_values() {
         compare(Theme.contrast("#000000", "#ffffff").toFixed(1), "21.0")
         compare(Theme.contrast("#ffffff", "#ffffff").toFixed(1), "1.0")

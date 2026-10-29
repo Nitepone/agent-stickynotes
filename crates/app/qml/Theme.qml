@@ -36,6 +36,12 @@ QtObject {
     readonly property color link: ensureContrast(
         secondary, [surface, background, columnBackground, columnEditBackground], 4.5)
 
+    // Ready-made accent colors offered in preferences.
+    readonly property var accentPresets: [
+        "#2563eb", "#0284c7", "#0d9488", "#16a34a", "#ca8a04",
+        "#ea580c", "#dc2626", "#db2777", "#7c3aed", "#475569"
+    ]
+
     // ---- Surfaces and text ----------------------------------------------
 
     readonly property color background: dark ? "#14171c" : "#e9edf2"
@@ -89,6 +95,10 @@ QtObject {
 
     function isHexColor(value) {
         return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value)
+    }
+
+    function sameColor(a, b) {
+        return Qt.color(a).toString() === Qt.color(b).toString()
     }
 
     function mix(a, b, amount) {

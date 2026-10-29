@@ -47,6 +47,7 @@ ApplicationWindow {
     property var linkCandidates: []
     property bool editMode: false
     property bool refreshPending: false
+    property bool preferencesOpen: false
     property bool closeConfirmed: false
     readonly property bool dragging: dragLayer.children.length > 0
 
@@ -72,7 +73,7 @@ ApplicationWindow {
     }
 
     // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]]
-    // where scene is board (default), edit, task, newtask, column, agent, project or generate
+    // where scene is board (default), edit, task, newtask, column, agent, project, prefs, theme-demo, theme-reset or generate
     // (generate starts a draft for the first task, using settings.json's claude_command).
     Timer {
         id: screenshotTimer
@@ -89,6 +90,18 @@ ApplicationWindow {
                 else if (scene === "column") columnDialog.openColumn(window.board.columns[0])
                 else if (scene === "agent") agentDialog.open()
                 else if (scene === "project") projectDialog.openProject(controller.projectJson())
+                else if (scene === "prefs") window.openPreferences()
+                else if (scene === "theme-reset") {
+                    controller.resetThemeColors()
+                    window.openPreferences()
+                }
+                else if (scene === "theme-demo") {
+                    // What the preferences controls do, through the real controller.
+                    controller.chooseThemeMode("dark")
+                    controller.choosePrimaryColor(Theme.accentPresets[5])
+                    controller.chooseSecondaryColor(Theme.accentPresets[2])
+                    window.openPreferences()
+                }
                 else if (scene === "generate" && first) {
                     boardView.taskClicked(first.tasks[0].id)
                     controller.startGeneration(taskDialog.formJson())
@@ -98,6 +111,9 @@ ApplicationWindow {
             }
             if (!controller.saveScreenshot(path))
                 console.warn("screenshot failed:", path)
+            // Quitting closes the window, which would ask about unsaved changes
+            // (the demo board is often "unsaved" after a backfill). Skip that.
+            window.closeConfirmed = true
             Qt.quit()
         }
     }
@@ -144,6 +160,12 @@ ApplicationWindow {
         for (const c of board.columns)
             if (c.id === columnId) return c.title
         return ""
+    }
+
+    function openPreferences() {
+        preferencesPage.currentIndex = 0          // Personalization first
+        preferencesOpen = true
+        Qt.callLater(preferencesPage.focusSidebar)
     }
 
     // ---- File handling -------------------------------------------------
@@ -253,6 +275,12 @@ ApplicationWindow {
         onTriggered: window.guardUnsaved(() => openDialog.open())
     }
     Action {
+        id: preferencesAction
+        text: qsTr("&Preferences…")
+        shortcut: "Ctrl+,"
+        onTriggered: window.openPreferences()
+    }
+    Action {
         id: saveAction
         text: qsTr("&Save")
         shortcut: StandardKey.Save
@@ -297,6 +325,8 @@ ApplicationWindow {
                 shortcut: "Ctrl+E"
                 onTriggered: exportDialog.open()
             }
+            MenuSeparator {}
+            MenuItem { action: preferencesAction }
             MenuSeparator {}
             Action {
                 text: qsTr("&Quit")
@@ -365,6 +395,11 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
 
             Button {
+                objectName: "preferencesButton"
+                text: qsTr("Preferences")
+                onClicked: window.openPreferences()
+            }
+            Button {
                 text: window.editMode ? qsTr("Done editing") : qsTr("Edit columns")
                 highlighted: window.editMode
                 onClicked: window.editMode = !window.editMode
@@ -406,6 +441,7 @@ ApplicationWindow {
     BoardView {
         id: boardView
         anchors.fill: parent
+        enabled: !window.preferencesOpen
         board: window.board
         dragLayer: dragLayer
         editMode: window.editMode
@@ -434,6 +470,7 @@ ApplicationWindow {
     }
 
     footer: ToolBar {
+        visible: !window.preferencesOpen
         implicitHeight: 60
 
         RowLayout {
@@ -458,6 +495,23 @@ ApplicationWindow {
                 dragInProgress: window.dragging
                 onTaskDropped: (taskId) => window.confirmDeleteTask(taskId)
             }
+        }
+    }
+
+    PreferencesPage {
+        id: preferencesPage
+        anchors.fill: parent
+        visible: window.preferencesOpen
+        onBackRequested: window.preferencesOpen = false
+
+        PersonalizationSection {
+            themeMode: controller.themeMode
+            primaryColor: controller.primaryColor
+            secondaryColor: controller.secondaryColor
+            onThemeModeChosen: (mode) => controller.chooseThemeMode(mode)
+            onPrimaryColorChosen: (color) => controller.choosePrimaryColor(color)
+            onSecondaryColorChosen: (color) => controller.chooseSecondaryColor(color)
+            onResetColorsRequested: controller.resetThemeColors()
         }
     }
 
