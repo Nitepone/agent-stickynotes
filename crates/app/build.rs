@@ -13,6 +13,7 @@ fn main() {
         QmlFile::from("qml/ConfirmDialog.qml"),
         QmlFile::from("qml/SectionLabel.qml"),
         QmlFile::from("qml/FormTextArea.qml"),
+        QmlFile::from("qml/WrappingField.qml"),
     ];
     CxxQtBuilder::new_qml_module(QmlModule::new("StickyNotes").qml_files(qml_files))
         .qt_module("Quick")

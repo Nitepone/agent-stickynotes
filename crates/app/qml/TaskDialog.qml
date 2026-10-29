@@ -175,14 +175,23 @@ Dialog {
                     required property int index
                     required property string text
                     Layout.fillWidth: true
-                    Label { text: "•"; color: Theme.subtleText }
-                    TextField {
+                    spacing: 6
+                    Label {
+                        Layout.alignment: Qt.AlignTop
+                        Layout.topMargin: 8
+                        text: "•"
+                        color: Theme.subtleText
+                    }
+                    WrappingField {
+                        objectName: "requirementField"
                         Layout.fillWidth: true
                         text: parent.text
                         placeholderText: qsTr("Requirement")
-                        onTextEdited: requirementsModel.setProperty(parent.index, "text", text)
+                        onTextChanged: requirementsModel.setProperty(parent.index, "text", text)
                     }
                     ToolButton {
+                        Layout.alignment: Qt.AlignTop
+                        objectName: "removeRequirement"
                         text: "✕"
                         onClicked: requirementsModel.remove(parent.index)
                     }
@@ -206,17 +215,23 @@ Dialog {
                     required property string text
                     required property bool done
                     Layout.fillWidth: true
+                    spacing: 6
                     CheckBox {
+                        Layout.alignment: Qt.AlignTop
+                        objectName: "criterionCheck"
                         checked: parent.done
                         onToggled: criteriaModel.setProperty(parent.index, "done", checked)
                     }
-                    TextField {
+                    WrappingField {
+                        objectName: "criterionField"
                         Layout.fillWidth: true
                         text: parent.text
                         placeholderText: qsTr("Acceptance criterion")
-                        onTextEdited: criteriaModel.setProperty(parent.index, "text", text)
+                        onTextChanged: criteriaModel.setProperty(parent.index, "text", text)
                     }
                     ToolButton {
+                        Layout.alignment: Qt.AlignTop
+                        objectName: "removeCriterion"
                         text: "✕"
                         onClicked: criteriaModel.remove(parent.index)
                     }
