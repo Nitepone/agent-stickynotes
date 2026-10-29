@@ -37,6 +37,7 @@ bin="$root/target/release/stickynotes"
 [ -x "$bin" ] || { echo "package-macos: $bin not found" >&2; exit 1; }
 
 rm -rf "$work"
+rm -f "$dist"/*.dmg     # packages left in a cached target directory
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$dist"
 cp "$bin" "$app/Contents/MacOS/stickynotes"
 cat > "$app/Contents/Info.plist" <<PLIST

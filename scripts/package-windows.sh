@@ -45,6 +45,7 @@ exe="$root/target/release/stickynotes.exe"
 [ -f "$exe" ] || { echo "package-windows: $exe not found" >&2; exit 1; }
 
 rm -rf "$stage"
+rm -f "$dist"/*.zip     # packages left in a cached target directory
 mkdir -p "$stage" "$dist"
 cp "$exe" "$stage/stickynotes.exe"
 

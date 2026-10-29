@@ -27,6 +27,8 @@ bin="$target_dir/release/stickynotes"
 [ -x "$bin" ] || { echo "package-appimage: $bin not found" >&2; exit 1; }
 
 rm -rf "$appdir"
+# A cached target directory may hold packages from earlier runs; only this one is wanted.
+rm -f "$dist"/*.AppImage
 mkdir -p "$appdir/usr/bin" "$dist"
 install -m 0755 "$bin" "$appdir/usr/bin/stickynotes"
 strip "$appdir/usr/bin/stickynotes" || true
