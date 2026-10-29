@@ -26,6 +26,8 @@ Item {
     SignalSpy { id: primarySpy; target: personalization; signalName: "primaryColorChosen" }
     SignalSpy { id: secondarySpy; target: personalization; signalName: "secondaryColorChosen" }
     SignalSpy { id: resetSpy; target: personalization; signalName: "resetColorsRequested" }
+    SignalSpy { id: noteSpy; target: personalization; signalName: "noteColorChosen" }
+    SignalSpy { id: noteResetSpy; target: personalization; signalName: "resetNoteColorRequested" }
     SignalSpy { id: motionSpy; target: personalization; signalName: "motionSettingChosen" }
 
     TestCase {
@@ -33,13 +35,15 @@ Item {
         when: windowShown
 
         function init() {
-            for (const spy of [backSpy, modeSpy, primarySpy, secondarySpy, resetSpy, motionSpy])
+            for (const spy of [backSpy, modeSpy, primarySpy, secondarySpy, resetSpy, motionSpy, noteSpy, noteResetSpy])
                 spy.clear()
             page.currentIndex = 0
             personalization.themeMode = "light"
             personalization.primaryColor = ""
             personalization.secondaryColor = ""
             personalization.motionSetting = "system"
+            personalization.noteColor = ""
+            Theme.noteColor = ""
             find("motionBox").currentIndex = 0
             Theme.mode = "light"
             Theme.primaryColor = ""
@@ -173,6 +177,51 @@ Item {
             mouseClick(find("swatch-" + preset, find("secondaryChoice")))
             compare(secondarySpy.count, 1)
             compare(secondarySpy.signalArguments[0][0], preset)
+        }
+
+        // ---- sticky note color -------------------------------------------
+
+        function test_the_note_color_control_offers_the_note_presets() {
+            const choice = find("noteChoice")
+            verify(choice, "note color control exists")
+            verify(choice.visible)
+            for (const preset of Theme.notePresets)
+                verify(find("swatch-" + preset, choice), preset)
+            verify(!find("swatch-" + Theme.accentPresets[6], choice), "not the accent colors")
+        }
+
+        function test_choosing_a_note_color_emits_it() {
+            const preset = Theme.notePresets[4]
+            mouseClick(find("swatch-" + preset, find("noteChoice")))
+            compare(noteSpy.count, 1)
+            compare(noteSpy.signalArguments[0][0], preset)
+        }
+
+        function test_the_note_swatch_in_use_is_marked_and_the_default_is_labelled() {
+            const choice = find("noteChoice")
+            verify(choice.isDefault)
+            Theme.noteColor = Theme.notePresets[5]
+            personalization.noteColor = Theme.notePresets[5]
+            verify(find("swatch-" + Theme.notePresets[5], choice).selected)
+            verify(!choice.isDefault)
+        }
+
+        function test_reset_note_color_is_only_enabled_for_a_custom_color() {
+            const reset = find("resetNoteColor")
+            verify(!reset.enabled)
+            personalization.noteColor = "#bfe3ff"
+            verify(reset.enabled)
+            mouseClick(reset)
+            compare(noteResetSpy.count, 1)
+        }
+
+        function test_a_hex_note_color_is_applied() {
+            const field = find("hexField", find("noteChoice"))
+            field.forceActiveFocus()
+            field.text = "#abcdef"
+            field.editingFinished()
+            compare(noteSpy.count, 1)
+            compare(noteSpy.signalArguments[0][0], "#abcdef")
         }
 
         function test_the_swatch_in_use_is_marked() {

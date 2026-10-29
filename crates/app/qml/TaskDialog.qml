@@ -22,6 +22,8 @@ Dialog {
     // [{ value, label }] of the relations a link can have.
     property var relationOptions: []
     property string loadedForm: ""
+    // Finds misspelled words for the text fields (see SpellUnderline); null for none.
+    property var spellRanges: null
 
     // Drafting requirements and criteria with an LLM. The owner runs it and
     // reports back through applyDraft() / showGenerationError().
@@ -252,6 +254,7 @@ Dialog {
             SectionLabel { text: qsTr("Description *") }
             FormTextArea {
                 id: descriptionField
+                spellRanges: dialog.spellRanges
                 Layout.fillWidth: true
                 Layout.minimumHeight: 70
                 placeholderText: qsTr("Short, sticky-note sized summary")
@@ -267,6 +270,7 @@ Dialog {
             SectionLabel { text: qsTr("Extended description") }
             FormTextArea {
                 id: extendedField
+                spellRanges: dialog.spellRanges
                 Layout.fillWidth: true
                 Layout.minimumHeight: 110
                 placeholderText: qsTr("Optional details, context, links…")
@@ -344,6 +348,7 @@ Dialog {
                     }
                     WrappingField {
                         objectName: "requirementField"
+                        spellRanges: dialog.spellRanges
                         Layout.fillWidth: true
                         text: parent.text
                         placeholderText: qsTr("Requirement")
@@ -384,6 +389,7 @@ Dialog {
                     }
                     WrappingField {
                         objectName: "criterionField"
+                        spellRanges: dialog.spellRanges
                         Layout.fillWidth: true
                         text: parent.text
                         placeholderText: qsTr("Acceptance criterion")

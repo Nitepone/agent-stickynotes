@@ -27,6 +27,19 @@ pub struct DraftRequest {
     pub document_prompt: String,
     #[serde(skip)]
     pub code_guidance: String,
+    /// The user's draft agent preferences (Preferences > Editor).
+    #[serde(skip)]
+    pub options: DraftOptions,
+}
+
+/// How the user wants the draft agent run. Empty text means the backend's own
+/// default.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DraftOptions {
+    /// Added to the built-in system prompt, which fixes the reply format.
+    pub system_prompt: String,
+    pub model: String,
+    pub effort: String,
 }
 
 /// New items proposed by a backend.
@@ -122,6 +135,10 @@ nothing is missing.
         for (heading, text) in [
             ("Project writing guidance", &self.document_prompt),
             ("Project code guidance", &self.code_guidance),
+            (
+                "Additional instructions from the user",
+                &self.options.system_prompt,
+            ),
         ] {
             if !text.trim().is_empty() {
                 prompt.push_str(&format!("\n\n{heading} (follow it):\n{}", text.trim()));
@@ -218,6 +235,7 @@ mod tests {
             acceptance_criteria: vec!["User can sign in".into()],
             document_prompt: "Plain English.".into(),
             code_guidance: String::new(),
+            options: DraftOptions::default(),
         }
     }
 
@@ -239,6 +257,25 @@ mod tests {
         assert!(
             !prompt.contains("Project code guidance"),
             "empty guidance is omitted"
+        );
+    }
+
+    #[test]
+    fn the_users_system_prompt_is_added_after_the_built_in_one() {
+        let mut req = request();
+        req.options.system_prompt = "  Write in British English.  ".into();
+        let prompt = req.system_prompt();
+        assert!(prompt.contains("ONLY a JSON object"), "format rules stay");
+        assert!(
+            prompt.ends_with(
+                "Additional instructions from the user (follow it):\nWrite in British English."
+            ),
+            "{prompt}"
+        );
+        assert!(
+            !request()
+                .system_prompt()
+                .contains("Additional instructions")
         );
     }
 

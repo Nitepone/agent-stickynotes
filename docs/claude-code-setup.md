@@ -19,8 +19,8 @@ The token is generated on first launch and stored in
 ## 2. Allow writes (when you want them)
 
 Agents can always read. To let them create, edit or move tasks, enable
-**Agent ▸ Allow Agent Write Access** (or click the grey *Agent: read-only*
-pill). The setting is remembered. While it is off, write tools return an
+**Agent ▸ Allow Agent Write Access** (or click the yellow robot icon in the
+toolbar). The setting is remembered. While it is off, write tools return an
 error that tells the agent to ask you.
 
 ## What the agent can do

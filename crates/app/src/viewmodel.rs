@@ -10,7 +10,7 @@ use stickynotes_core::{
 };
 use uuid::Uuid;
 
-use crate::drafting::{Draft, DraftError, DraftRequest};
+use crate::drafting::{Draft, DraftError, DraftOptions, DraftRequest};
 
 /// Most lines of description shown on a card before `[...]`.
 const CARD_MAX_LINES: usize = 6;
@@ -226,6 +226,7 @@ impl TaskForm {
         &self,
         document_prompt: &str,
         code_guidance: &str,
+        options: DraftOptions,
     ) -> Result<DraftRequest, String> {
         if self.description.trim().is_empty() {
             return Err("Write a description first; the draft is based on it.".into());
@@ -245,6 +246,7 @@ impl TaskForm {
             acceptance_criteria: texts(self.criteria.iter().map(|c| c.text.as_str()).collect()),
             document_prompt: document_prompt.to_string(),
             code_guidance: code_guidance.to_string(),
+            options,
         })
     }
 
@@ -495,7 +497,15 @@ mod tests {
                 "criteria":[{"id":"","text":"Can sign in"},{"id":"","text":" "}]}"#,
         )
         .unwrap();
-        let req = form.draft_request("Plain.", "Rust.").unwrap();
+        let options = DraftOptions {
+            system_prompt: "Be brief.".into(),
+            model: "opus".into(),
+            effort: "high".into(),
+        };
+        let req = form
+            .draft_request("Plain.", "Rust.", options.clone())
+            .unwrap();
+        assert_eq!(req.options, options);
         assert_eq!(req.description, "Add login");
         assert_eq!(req.extended_description, "Email");
         assert_eq!(req.requirements, ["Use HTTPS"]);
@@ -506,7 +516,11 @@ mod tests {
         );
 
         let blank = TaskForm::parse(r#"{"description":"  "}"#).unwrap();
-        assert!(blank.draft_request("", "").is_err());
+        assert!(
+            blank
+                .draft_request("", "", DraftOptions::default())
+                .is_err()
+        );
     }
 
     #[test]

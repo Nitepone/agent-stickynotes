@@ -90,7 +90,7 @@ columns, the board title or project settings. Those rules live in
 `QT_QPA_PLATFORM=offscreen` works. Set `STICKYNOTES_SCREENSHOT=out.png:<scene>[:delayMs]`
 and run `cargo run -p stickynotes -- board.json`: it renders to a PNG and exits.
 Scenes: `board`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`,
-`theme-demo`, `theme-reset`, `generate`, `interact`, `synthetic`. Always point
+`editor`, `note-demo`, `theme-demo`, `theme-reset`, `generate`, `interact`, `synthetic`. Always point
 `XDG_CONFIG_HOME` at a scratch directory (settings, the API token and
 `last_file` live there) and use a copy of the board, never the user's real files.
 Read the PNG to check the result. `STICKYNOTES_REDUCE_MOTION=1` forces reduced motion.

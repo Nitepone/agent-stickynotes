@@ -256,8 +256,11 @@ plus `•` when there are unsaved changes.
 - **Board:** Edit Columns (toggle), Rename Board…
 - **Agent:** ☑ Allow agent write access; Copy Claude Code setup command; Show
   API endpoint & token…
-- The toolbar mirrors the main actions. A status pill (`Agent: read-only` /
-  `Agent: read-write`) makes the agent's current access visible at a glance.
+- The toolbar has icon buttons: Save (a floppy disk, only while there are
+  unsaved changes), Preferences (a gear), Edit columns (a pencil) and the agent
+  (a robot head, yellow when agents can only read, green when they can write), so
+  the agent's current access is visible at a glance. The icons are drawn in QML
+  (`ToolIcon.qml`) in theme colors.
 
 **Columns (normal mode)**
 - Header: column title (click opens `ColumnDialog`) and a task count.

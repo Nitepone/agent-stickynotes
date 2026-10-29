@@ -30,6 +30,18 @@ pub struct Settings {
     /// When the user last used the app (milliseconds since the Unix epoch).
     /// Notes an agent changed after this glow until the user is back.
     pub last_interaction_ms: i64,
+    /// Sticky note color as `#rrggbb`; empty means the theme's yellow.
+    pub note_color: String,
+    /// Underline misspelled words in the task editor.
+    pub spell_check: bool,
+    /// Which backend drafts requirements and criteria (see `editor::AGENTS`).
+    pub draft_agent: String,
+    /// Added to the built-in prompt of the draft agent.
+    pub draft_system_prompt: String,
+    /// Claude Code model alias; empty means Claude Code's own default.
+    pub draft_model: String,
+    /// Claude Code thinking (effort) level; empty means its default.
+    pub draft_effort: String,
 }
 
 impl Default for Settings {
@@ -44,6 +56,12 @@ impl Default for Settings {
             secondary_color: String::new(),
             reduce_motion: crate::motion::SYSTEM.into(),
             last_interaction_ms: 0,
+            note_color: String::new(),
+            spell_check: true,
+            draft_agent: crate::editor::CLAUDE_CODE.into(),
+            draft_system_prompt: String::new(),
+            draft_model: String::new(),
+            draft_effort: String::new(),
         }
     }
 }
@@ -176,6 +194,45 @@ mod tests {
         let restored = config_in(dir.path()).load_settings();
         assert_eq!(restored.reduce_motion, "on");
         assert_eq!(restored.last_interaction_ms, 1_761_800_000_123);
+    }
+
+    #[test]
+    fn settings_files_from_before_editor_preferences_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("settings.json"),
+            r##"{"agent_write": true, "theme_mode": "dark", "primary_color": "#ff8800"}"##,
+        )
+        .unwrap();
+        let settings = config_in(dir.path()).load_settings();
+        assert!(settings.agent_write);
+        assert_eq!(settings.primary_color, "#ff8800");
+        assert_eq!(settings.note_color, "");
+        assert!(settings.spell_check, "spell check is on unless turned off");
+        assert_eq!(settings.draft_agent, "claude_code");
+        assert_eq!(settings.draft_system_prompt, "");
+        assert_eq!(settings.draft_model, "");
+        assert_eq!(settings.draft_effort, "");
+    }
+
+    #[test]
+    fn editor_and_note_choices_survive_a_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_in(dir.path());
+        let mut settings = config.load_settings();
+        settings.note_color = "#bfe3ff".into();
+        settings.spell_check = false;
+        settings.draft_system_prompt = "Write in British English.".into();
+        settings.draft_model = "opus".into();
+        settings.draft_effort = "high".into();
+        config.save_settings(&settings).unwrap();
+
+        let restored = config_in(dir.path()).load_settings();
+        assert_eq!(restored.note_color, "#bfe3ff");
+        assert!(!restored.spell_check);
+        assert_eq!(restored.draft_system_prompt, "Write in British English.");
+        assert_eq!(restored.draft_model, "opus");
+        assert_eq!(restored.draft_effort, "high");
     }
 
     #[test]

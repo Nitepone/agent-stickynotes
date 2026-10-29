@@ -21,6 +21,10 @@ fn main() {
         QmlFile::from("qml/SectionLabel.qml"),
         QmlFile::from("qml/FormTextArea.qml"),
         QmlFile::from("qml/WrappingField.qml"),
+        QmlFile::from("qml/EditorSection.qml"),
+        QmlFile::from("qml/ToolIcon.qml"),
+        QmlFile::from("qml/IconButton.qml"),
+        QmlFile::from("qml/SpellUnderline.qml"),
     ];
     CxxQtBuilder::new_qml_module(QmlModule::new("StickyNotes").qml_files(qml_files))
         .qt_module("Quick")

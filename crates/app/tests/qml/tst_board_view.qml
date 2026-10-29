@@ -182,6 +182,33 @@ Item {
             }
         }
 
+        // The note's paper: the rectangle that carries the note color.
+        function paperOf(card) {
+            let found = null
+            ;(function walk(it) {
+                for (const child of it.children) {
+                    if (child.hasOwnProperty("radius") && child.radius === 4 && child.color.a === 1
+                            && child.border.color.a === 0 && !found)
+                        found = child
+                    walk(child)
+                }
+            })(card)
+            return found
+        }
+
+        function test_notes_take_their_color_from_the_theme_and_follow_changes() {
+            const card = item("card-t0")
+            const paper = paperOf(card)
+            verify(paper, "found the note's paper")
+            compare(paper.color.toString(), Theme.defaultNote.toString())
+            Theme.noteColor = "#bfe3ff"
+            compare(paper.color.toString(), Qt.color("#bfe3ff").toString())
+            compare(numberLabel("card-t0").color.toString(), Theme.noteNumber.toString())
+            verify(Theme.contrast(numberLabel("card-t0").color, paper.color) >= 4.5)
+            Theme.noteColor = ""
+            compare(paper.color.toString(), Theme.defaultNote.toString())
+        }
+
         function test_clicking_the_number_still_opens_the_task() {
             mouseClick(numberLabel("card-t1"))
             compare(clickedSpy.count, 1)

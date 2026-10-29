@@ -13,6 +13,8 @@ ColumnLayout {
     property string description: ""
     // True when the user has not picked a color and the theme's default shows.
     property bool isDefault: true
+    // Swatches offered.
+    property var presets: Theme.accentPresets
     // The color currently in use (custom or default).
     property color effective: "transparent"
 
@@ -51,7 +53,7 @@ ColumnLayout {
         spacing: 8
 
         Repeater {
-            model: Theme.accentPresets
+            model: choice.presets
             delegate: Rectangle {
                 id: swatch
                 required property string modelData

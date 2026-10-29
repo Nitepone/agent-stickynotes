@@ -11,7 +11,7 @@ loopback so Claude Code (or any agent) can read and update the board.
   and advance them one column to the right, after checking the next column's
   description.
 - Agent write access is **off** by default. Toggle it from the **Agent** menu
-  or the pill in the toolbar.
+  or the robot icon at the right of the toolbar (yellow: agents can only read, green: they can write).
 
 ## Build and run
 
@@ -41,10 +41,21 @@ with default columns is created.
 | Link tasks | In a task's dialog, **References**: pick a relation and a task, **Add**, then **Save**. The other task shows the matching reverse link. |
 | Give agents project instructions | **Board ▸ Project Settings…** (document prompt, code guidance); **Agent ▸ Export Claude Code Skill…** writes them into a `SKILL.md` |
 | See what an agent changed | Notes an agent created, moved, edited or ticked criteria on **glow green** at the edges (a highlight circles the note; an edited note also gets a sheen). The glow stays until you are back, then fades over 20 seconds. Your own changes never glow. With reduced motion (Preferences ▸ Personalization ▸ Motion, or the desktop's setting) the glow is still. |
-| Change the look | **File ▸ Preferences…** (Ctrl+,) or the **Preferences** button: Personalization has Light/Dark and primary and secondary accent colors (presets, a hex code, or a picker), plus a reset. Changes apply immediately and are remembered. |
+| Change the look | **File ▸ Preferences…** (Ctrl+,) or the gear icon in the toolbar: Personalization has Light/Dark, primary and secondary accent colors and the sticky note color (presets, a hex code, or a picker), plus resets. Text on a note adjusts to stay readable on any color. Changes apply immediately and are remembered. |
+| Spell check and the draft agent | Preferences ▸ Editor: turn the red underlines for misspelled words in the task editor on or off, and choose how the draft agent runs (agent type, an extra system prompt, and for Claude Code the model and thinking level). |
 | Edit a column | Click the column title |
-| Reorder / add / delete columns | **Edit columns** (toolbar) or **Board ▸ Edit Columns** |
-| Save / open / new | **File** menu or toolbar. You are warned before unsaved changes are lost. |
+| Reorder / add / delete columns | the pencil icon (toolbar) or **Board ▸ Edit Columns** |
+| Save / open / new | **File** menu. A floppy-disk icon appears in the toolbar while there are unsaved changes. You are warned before unsaved changes are lost. |
+
+### Spell check
+
+The task editor underlines misspelled words using a Hunspell dictionary
+(`.aff` + `.dic`) for your language (from `LANG`), or American English. It looks
+in `/usr/share/hunspell`, `/usr/share/myspell`, Homebrew's and macOS's spelling
+folders, a `dictionaries` folder next to the executable (the AppImage ships
+`en_US` there), and `$STICKYNOTES_DICT_DIR`. With no dictionary nothing is
+underlined, and Preferences ▸ Editor says so. Acronyms, `camelCase`, words with
+digits and paths or addresses are not flagged.
 
 ### Drafting with Claude Code
 
@@ -52,7 +63,9 @@ The draft button runs `claude -p` as a subprocess, with no tools, MCP servers or
 session history, and sends it a system prompt plus the task as JSON (the
 project's document and code guidance are included as context). Nothing is
 saved until you click **Save**, existing items are kept, and a draft can be
-cancelled. If `claude` is not on your PATH, set `"claude_command"` in
+cancelled. Preferences ▸ Editor adds your own system prompt to the built-in one
+(which fixes the reply format) and sets Claude Code's `--model` and `--effort`.
+If `claude` is not on your PATH, set `"claude_command"` in
 `~/.config/agent-stickynotes/settings.json`. The backend sits behind the
 `DraftBackend` trait (`crates/app/src/drafting.rs`), so an Ollama-style endpoint
 or local model can be added without touching the UI.
@@ -114,7 +127,7 @@ cargo test -p stickynotes real_claude -- --ignored   # optional: one real Claude
 
 Headless screenshots for UI checks:
 `STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]] QT_QPA_PLATFORM=offscreen cargo run -- board.json`,
-where `scene` is `board`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`, `theme-demo`, `theme-reset`, `interact`, `synthetic` or `generate`.
+where `scene` is `board`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`, `editor`, `note-demo`, `theme-demo`, `theme-reset`, `interact`, `synthetic` or `generate`.
 
 ### Layout
 

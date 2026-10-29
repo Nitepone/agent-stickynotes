@@ -13,12 +13,15 @@ PreferencesSection {
     property string themeMode: "light"      // "light" or "dark"
     property string primaryColor: ""        // custom color, or "" for the default
     property string secondaryColor: ""
+    property string noteColor: ""           // custom note color, or "" for the yellow
     property string motionSetting: "system"     // "system", "on" or "off"
 
     signal themeModeChosen(string mode)
     signal primaryColorChosen(string color)
     signal secondaryColorChosen(string color)
     signal resetColorsRequested()
+    signal noteColorChosen(string color)
+    signal resetNoteColorRequested()
     signal motionSettingChosen(string setting)
 
     ScrollView {
@@ -129,6 +132,32 @@ PreferencesSection {
 
             Label {
                 Layout.topMargin: 12
+                text: qsTr("Sticky notes")
+                font.pixelSize: 22
+                font.bold: true
+                color: Theme.text
+            }
+
+            ColorChoice {
+                objectName: "noteChoice"
+                Layout.fillWidth: true
+                label: qsTr("Note color")
+                description: qsTr("The color of the notes on the board. Text on a note adjusts to stay readable.")
+                presets: Theme.notePresets
+                isDefault: section.noteColor === ""
+                effective: Theme.note
+                onChosen: (color) => section.noteColorChosen(color)
+            }
+
+            Button {
+                objectName: "resetNoteColor"
+                text: qsTr("Reset note color")
+                enabled: section.noteColor !== ""
+                onClicked: section.resetNoteColorRequested()
+            }
+
+            Label {
+                Layout.topMargin: 12
                 text: qsTr("Motion")
                 font.pixelSize: 22
                 font.bold: true
@@ -158,7 +187,7 @@ PreferencesSection {
                 Binding {
                     target: motionBox
                     property: "currentIndex"
-                    value: Math.max(0, motionBox.indexOfValue(section.motionSetting))
+                    value: motionBox.count >= 0 ? Math.max(0, motionBox.indexOfValue(section.motionSetting)) : 0
                 }
             }
         }

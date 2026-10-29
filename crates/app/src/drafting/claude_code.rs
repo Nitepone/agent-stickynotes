@@ -49,6 +49,14 @@ impl ClaudeCodeBackend {
             "--strict-mcp-config".into(),
             "--disable-slash-commands".into(),
         ];
+        for (flag, value) in [
+            ("--model", &request.options.model),
+            ("--effort", &request.options.effort),
+        ] {
+            if !value.is_empty() {
+                args.extend([flag.into(), value.into()]);
+            }
+        }
         // `--tools` takes a list, so it goes last; the empty list disables every tool.
         args.extend(["--tools".into(), "".into()]);
         args
@@ -236,6 +244,27 @@ mod tests {
         let at = args.iter().position(|a| a == "--tools").unwrap();
         assert_eq!(args[at + 1], "");
         assert_eq!(at + 2, args.len(), "--tools must be last");
+    }
+
+    #[test]
+    fn model_and_effort_are_passed_only_when_chosen() {
+        let flags = |req: &DraftRequest| -> Vec<String> {
+            ClaudeCodeBackend::args(req)
+                .iter()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect()
+        };
+        let default = flags(&request());
+        assert!(!default.iter().any(|a| a == "--model" || a == "--effort"));
+
+        let mut chosen = request();
+        chosen.options.model = "opus".into();
+        chosen.options.effort = "high".into();
+        let args = flags(&chosen);
+        let after = |flag: &str| args[args.iter().position(|a| a == flag).unwrap() + 1].clone();
+        assert_eq!(after("--model"), "opus");
+        assert_eq!(after("--effort"), "high");
+        assert_eq!(args[args.len() - 2], "--tools", "--tools stays last");
     }
 
     #[test]

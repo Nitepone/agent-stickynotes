@@ -14,6 +14,7 @@ QtObject {
     property string mode: "light"       // "light" or "dark"
     property string primaryColor: ""    // "#rrggbb", or "" for the mode's default
     property string secondaryColor: ""  // "#rrggbb", or "" for the mode's default
+    property string noteColor: ""       // "#rrggbb", or "" for the yellow note
 
     readonly property bool dark: mode === "dark"
 
@@ -57,14 +58,22 @@ QtObject {
     readonly property color controlHover: dark ? "#363e4a" : "#cdd3dd"
     readonly property color controlDown: dark ? "#424c5a" : "#bcc4d1"
 
-    // ---- Sticky notes (a yellow note stays yellow in both modes) ---------
+    // ---- Sticky notes (a note keeps its color in both modes) ---------------
 
-    readonly property color note: dark ? "#e8d572" : "#fff1a6"
-    readonly property color noteText: "#2b2813"
-    readonly property color noteNumber: "#5e5a3f"       // gray, quieter than the text
-    readonly property color noteSubtleText: "#4d4a33"
-    readonly property color noteDoneText: "#166534"
-    readonly property color noteHoverBorder: dark ? "#f5e38a" : "#c9b85a"
+    readonly property color defaultNote: dark ? "#e8d572" : "#fff1a6"
+    readonly property color note: isHexColor(noteColor) ? Qt.color(noteColor) : defaultNote
+    // Ready-made note colors offered in preferences.
+    readonly property var notePresets: [
+        "#fff1a6", "#ffd8a8", "#ffc2d4", "#e2c9ff",
+        "#bfe3ff", "#b9ecd0", "#d4efa6", "#e5e7eb"
+    ]
+    // Text on a note: the usual dark tones, moved only as far as needed to
+    // stay legible (WCAG AA) on whatever color the user picked.
+    readonly property color noteText: legibleOn("#2b2813", note, 4.5)
+    readonly property color noteNumber: legibleOn("#5e5a3f", note, 4.5)    // gray, quieter than the text
+    readonly property color noteSubtleText: legibleOn("#4d4a33", note, 4.5)
+    readonly property color noteDoneText: legibleOn("#166534", note, 4.5)
+    readonly property color noteHoverBorder: mix(note, noteText, 0.35)
     readonly property color noteShadow: dark ? "#66000000" : "#33000000"
     readonly property color progressTrack: "#26000000"
     readonly property color progressDone: "#16a34a"
@@ -87,9 +96,10 @@ QtObject {
     readonly property color textOnDanger: readableOn(danger)
     readonly property color success: dark ? "#4ade80" : "#136f34"
     readonly property color bannerBackground: dark ? "#3a2f12" : "#fef3c7"
-    readonly property color agentReadOnly: dark ? "#4b5563" : "#6b7280"
-    readonly property color agentReadWrite: "#15803d"
-    readonly property color textOnStatus: "#ffffff"          // text on the two agent colors
+    readonly property color agentReadWrite: "#15803d"        // agents may write: green
+    readonly property color agentReadOnly: "#facc15"         // agents may only read: yellow
+    readonly property color textOnAgentReadWrite: "#ffffff"
+    readonly property color textOnAgentReadOnly: "#1f2937"
 
     // Where things are dropped.
     readonly property color dropIndicator: primary
@@ -139,6 +149,17 @@ QtObject {
     function readableOn(background) {
         return contrast(background, "#ffffff") >= contrast(background, "#000000")
                ? Qt.color("#ffffff") : Qt.color("#000000")
+    }
+
+    // `color`, moved toward black or white (whichever contrasts more with
+    // `background`) until it reaches `ratio` against it. Unchanged if it already does.
+    function legibleOn(color, background, ratio) {
+        let c = Qt.color(color)
+        const towards = contrast("#000000", background) >= contrast("#ffffff", background)
+                        ? Qt.color("#000000") : Qt.color("#ffffff")
+        for (let i = 0; i < 30 && contrast(c, background) < ratio; i++)
+            c = mix(c, towards, 0.1)
+        return c
     }
 
     // `color`, moved toward white (dark mode) or black (light mode) until it

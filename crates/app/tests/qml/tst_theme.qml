@@ -9,6 +9,7 @@ TestCase {
         Theme.mode = "light"
         Theme.primaryColor = ""
         Theme.secondaryColor = ""
+        Theme.noteColor = ""
     }
 
     function same(a, b, message) {
@@ -100,6 +101,92 @@ TestCase {
         same(Theme.secondary, "#4f46e5")
     }
 
+    // ---- sticky note color -------------------------------------------------
+
+    readonly property var noteTextTokens: ["noteText", "noteNumber", "noteSubtleText", "noteDoneText"]
+
+    function test_notes_are_yellow_until_a_color_is_chosen() {
+        same(Theme.note, Theme.defaultNote)
+        same(Theme.defaultNote, "#fff1a6")
+        Theme.mode = "dark"
+        same(Theme.note, "#e8d572")
+    }
+
+    function test_a_chosen_note_color_applies_in_both_modes() {
+        Theme.noteColor = "#bfe3ff"
+        same(Theme.note, "#bfe3ff")
+        Theme.mode = "dark"
+        same(Theme.note, "#bfe3ff", "a chosen color is not changed by the mode")
+    }
+
+    function test_resetting_the_note_color_restores_the_yellow() {
+        Theme.noteColor = "#bfe3ff"
+        Theme.noteColor = ""
+        same(Theme.note, "#fff1a6")
+    }
+
+    function test_an_invalid_note_color_falls_back_to_the_default() {
+        for (const bad of ["red", "#12345", "#gggggg", "bfe3ff", "  "]) {
+            Theme.noteColor = bad
+            same(Theme.note, Theme.defaultNote, JSON.stringify(bad))
+        }
+    }
+
+    function test_default_note_text_is_unchanged_by_the_legibility_adjustment() {
+        same(Theme.noteText, "#2b2813")
+        same(Theme.noteNumber, "#5e5a3f")
+        same(Theme.noteSubtleText, "#4d4a33")
+        same(Theme.noteDoneText, "#166534")
+    }
+
+    function test_note_text_is_readable_on_every_preset_in_both_modes() {
+        const failures = []
+        for (const mode of ["light", "dark"]) {
+            Theme.mode = mode
+            for (const color of Theme.notePresets) {
+                Theme.noteColor = color
+                for (const token of noteTextTokens) {
+                    const ratio = Theme.contrast(Theme[token], Theme.note)
+                    if (ratio < 4.5)
+                        failures.push(mode + " " + color + " " + token + " = " + ratio.toFixed(2))
+                }
+            }
+        }
+        compare(failures, [], "pairs below 4.5:1")
+    }
+
+    function test_note_text_is_readable_on_any_custom_color() {
+        const failures = []
+        for (const mode of ["light", "dark"]) {
+            Theme.mode = mode
+            for (const color of ["#000000", "#ffffff", "#7f7f7f", "#ff0000", "#0000ff", "#00ff00",
+                                 "#ffff00", "#1a1a2e", "#800080", "#2b2813"]) {
+                Theme.noteColor = color
+                for (const token of noteTextTokens) {
+                    const ratio = Theme.contrast(Theme[token], Theme.note)
+                    if (ratio < 4.5)
+                        failures.push(mode + " " + color + " " + token + " = " + ratio.toFixed(2))
+                }
+            }
+        }
+        compare(failures, [], "pairs below 4.5:1")
+    }
+
+    function test_text_turns_light_on_a_dark_note() {
+        Theme.noteColor = "#1a1a2e"
+        verify(Theme.luminance(Theme.noteText) > Theme.luminance(Theme.note))
+    }
+
+    function test_presets_are_valid_distinct_colors() {
+        const seen = {}
+        for (const color of Theme.notePresets) {
+            verify(Theme.isHexColor(color), color)
+            verify(!seen[color.toLowerCase()], "duplicate " + color)
+            seen[color.toLowerCase()] = true
+        }
+        verify(Theme.notePresets.length >= 6)
+    }
+
     // ---- WCAG AA contrast with the default colors ------------------------
 
     // [foreground, background] token pairs that carry text (4.5:1 for body text).
@@ -113,7 +200,7 @@ TestCase {
         ["text", "bannerBackground"], ["warning", "bannerBackground"],
         ["link", "surface"], ["link", "background"], ["link", "columnEditBackground"],
         ["textOnPrimary", "primary"], ["textOnSecondary", "secondary"], ["textOnDanger", "danger"],
-        ["textOnStatus", "agentReadOnly"], ["textOnStatus", "agentReadWrite"],
+        ["textOnAgentReadOnly", "agentReadOnly"], ["textOnAgentReadWrite", "agentReadWrite"],
         ["danger", "fieldBackground"],
     ]
 

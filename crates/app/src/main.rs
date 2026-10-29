@@ -1,6 +1,7 @@
 mod context;
 mod controller;
 mod drafting;
+mod editor;
 mod motion;
 mod settings;
 mod theme;
@@ -63,6 +64,7 @@ fn main() -> Result<()> {
         token,
         drafter: Arc::new(ClaudeCodeBackend::new(claude_command)),
         system_reduced_motion: motion::system_prefers_reduced_motion(),
+        spell: editor::SpellChecker::load(),
     });
 
     let mut app = QGuiApplication::new();

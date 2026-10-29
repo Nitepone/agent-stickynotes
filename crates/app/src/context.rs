@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use stickynotes_core::BoardStore;
 
 use crate::drafting::DraftBackend;
+use crate::editor::SpellChecker;
 use crate::settings::{Config, Settings};
 
 pub struct AppContext {
@@ -20,6 +21,8 @@ pub struct AppContext {
     pub drafter: Arc<dyn DraftBackend>,
     /// What the desktop says about reduced motion, read once at startup.
     pub system_reduced_motion: bool,
+    /// Flags misspelled words in the task editor.
+    pub spell: SpellChecker,
 }
 
 impl AppContext {

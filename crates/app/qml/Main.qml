@@ -40,6 +40,7 @@ ApplicationWindow {
     Binding { target: Theme; property: "mode"; value: controller.themeMode }
     Binding { target: Theme; property: "primaryColor"; value: controller.primaryColor }
     Binding { target: Theme; property: "secondaryColor"; value: controller.secondaryColor }
+    Binding { target: Theme; property: "noteColor"; value: controller.noteColor }
 
     BoardController { id: controller }
 
@@ -48,6 +49,9 @@ ApplicationWindow {
     property bool editMode: false
     property bool refreshPending: false
     property bool preferencesOpen: false
+    // Misspelled words in the task editor, or null with spell check off.
+    readonly property var spellRanges: controller.spellCheck
+        ? (text) => JSON.parse(controller.misspelledRanges(text)) : null
 
     // Notes an agent changed glow until the user has been back for a while.
     GlowTracker {
@@ -110,7 +114,7 @@ ApplicationWindow {
     }
 
     // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]]
-    // where scene is board (default), edit, task, newtask, column, agent, project, prefs, theme-demo, theme-reset, interact, synthetic or generate
+    // where scene is board (default), edit, task, newtask, column, agent, project, prefs, editor, note-demo, theme-demo, theme-reset, interact, synthetic or generate
     // (generate starts a draft for the first task, using settings.json's claude_command).
     Timer {
         id: screenshotTimer
@@ -128,6 +132,15 @@ ApplicationWindow {
                 else if (scene === "agent") agentDialog.open()
                 else if (scene === "project") projectDialog.openProject(controller.projectJson())
                 else if (scene === "prefs") window.openPreferences()
+                else if (scene === "editor") {
+                    window.openPreferences()
+                    preferencesPage.currentIndex = 1
+                }
+                else if (scene === "note-demo") {
+                    // What the preferences control does, through the real controller.
+                    controller.chooseNoteColor(Theme.notePresets[4])
+                    window.openPreferences()
+                }
                 else if (scene === "interact") {
                     // The user does something: glowing notes start to fade.
                     controller.simulateActivity(true)
@@ -413,22 +426,22 @@ ApplicationWindow {
         }
     }
 
+    // No bar of its own: the title and icons sit on the window background.
     header: ToolBar {
+        implicitHeight: 60
+        background: Item {}
+
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 4
-
-            ToolButton { action: newAction; text: qsTr("New") }
-            ToolButton { action: openAction; text: qsTr("Open") }
-            ToolButton { action: saveAction; text: qsTr("Save") }
-            ToolSeparator {}
+            anchors.leftMargin: 16
+            anchors.rightMargin: 16
+            anchors.topMargin: 8
+            anchors.bottomMargin: 4
+            spacing: 8
 
             Label {
-                Layout.leftMargin: 8
                 text: window.board.title
-                font.pixelSize: 18
+                font.pixelSize: 24
                 font.bold: true
                 color: Theme.text
                 MouseArea {
@@ -443,47 +456,48 @@ ApplicationWindow {
                 color: Theme.warning
                 font.pixelSize: 12
             }
+            // Only there when there is something to save.
+            IconButton {
+                objectName: "saveButton"
+                visible: controller.dirty
+                glyph: "save"
+                tip: qsTr("Save the board")
+                onClicked: window.save(null)
+            }
 
             Item { Layout.fillWidth: true }
 
-            Button {
+            IconButton {
                 objectName: "preferencesButton"
-                text: qsTr("Preferences")
+                glyph: "gear"
+                tip: qsTr("Preferences")
                 onClicked: window.openPreferences()
             }
-            Button {
-                text: window.editMode ? qsTr("Done editing") : qsTr("Edit columns")
-                highlighted: window.editMode
-                onClicked: window.editMode = !window.editMode
+            IconButton {
+                objectName: "editColumnsButton"
+                glyph: "pencil"
+                tip: window.editMode ? qsTr("Done editing columns") : qsTr("Edit columns")
+                checkable: true
+                checked: window.editMode
+                // The window owns the mode; the button only asks for a change.
+                onClicked: {
+                    window.editMode = !window.editMode
+                    checked = Qt.binding(() => window.editMode)
+                }
             }
-
-            // Agent access indicator; click to toggle.
-            Rectangle {
-                Layout.leftMargin: 8
-                implicitWidth: agentLabel.implicitWidth + 24
-                implicitHeight: 28
-                radius: 14
-                color: controller.agentWrite ? Theme.agentReadWrite : Theme.agentReadOnly
-
-                Label {
-                    id: agentLabel
-                    anchors.centerIn: parent
-                    color: Theme.textOnStatus
-                    font.bold: true
-                    font.pixelSize: 12
-                    text: controller.agentWrite ? qsTr("Agent: read & write") : qsTr("Agent: read-only")
-                }
-                MouseArea {
-                    id: agentPill
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: controller.setAgentWriteEnabled(!controller.agentWrite)
-                }
-                ToolTip.visible: agentPill.containsMouse
-                ToolTip.text: qsTr("Click to %1 agent write access.\nMCP: %2/mcp")
-                              .arg(controller.agentWrite ? qsTr("disable") : qsTr("enable"))
-                              .arg(controller.endpoint)
+            // Agent access: green when agents may write, yellow when they may only read.
+            IconButton {
+                objectName: "agentButton"
+                Layout.leftMargin: 4
+                glyph: "robot"
+                badge: true
+                badgeColor: controller.agentWrite ? Theme.agentReadWrite : Theme.agentReadOnly
+                badgeGlyphColor: controller.agentWrite ? Theme.textOnAgentReadWrite : Theme.textOnAgentReadOnly
+                tip: qsTr("Agent: %1. Click to %2 write access.\nMCP: %3/mcp")
+                     .arg(controller.agentWrite ? qsTr("read & write") : qsTr("read-only"))
+                     .arg(controller.agentWrite ? qsTr("disable") : qsTr("enable"))
+                     .arg(controller.endpoint)
+                onClicked: controller.setAgentWriteEnabled(!controller.agentWrite)
             }
         }
     }
@@ -566,8 +580,25 @@ ApplicationWindow {
             onPrimaryColorChosen: (color) => controller.choosePrimaryColor(color)
             onSecondaryColorChosen: (color) => controller.chooseSecondaryColor(color)
             onResetColorsRequested: controller.resetThemeColors()
+            noteColor: controller.noteColor
+            onNoteColorChosen: (color) => controller.chooseNoteColor(color)
+            onResetNoteColorRequested: controller.resetNoteColor()
             motionSetting: controller.motionSetting
             onMotionSettingChosen: (setting) => controller.chooseMotionSetting(setting)
+        }
+
+        EditorSection {
+            spellCheck: controller.spellCheck
+            spellAvailable: controller.spellAvailable
+            onSpellCheckChosen: (enabled) => controller.chooseSpellCheck(enabled)
+            draftAgent: controller.draftAgent
+            onDraftAgentChosen: (agent) => controller.chooseDraftAgent(agent)
+            draftSystemPrompt: controller.draftSystemPrompt
+            onDraftSystemPromptChosen: (prompt) => controller.chooseDraftSystemPrompt(prompt)
+            draftModel: controller.draftModel
+            onDraftModelChosen: (model) => controller.chooseDraftModel(model)
+            draftEffort: controller.draftEffort
+            onDraftEffortChosen: (effort) => controller.chooseDraftEffort(effort)
         }
     }
 
@@ -597,6 +628,7 @@ ApplicationWindow {
 
     TaskDialog {
         id: taskDialog
+        spellRanges: window.spellRanges
         generating: controller.generating
         generatorName: controller.generatorName
         onGenerateRequested: (form) => controller.startGeneration(form)

@@ -35,6 +35,13 @@ pub mod qobject {
         #[qproperty(QString, theme_mode)]
         #[qproperty(QString, primary_color)]
         #[qproperty(QString, secondary_color)]
+        #[qproperty(QString, note_color)]
+        #[qproperty(bool, spell_check)]
+        #[qproperty(bool, spell_available)]
+        #[qproperty(QString, draft_agent)]
+        #[qproperty(QString, draft_system_prompt)]
+        #[qproperty(QString, draft_model)]
+        #[qproperty(QString, draft_effort)]
         #[qproperty(bool, generating)]
         #[qproperty(QString, generator_name)]
         #[qproperty(QString, screenshot_request)]
@@ -122,6 +129,31 @@ pub mod qobject {
         /// Back to the theme's default primary and secondary colors.
         #[qinvokable]
         fn reset_theme_colors(self: Pin<&mut BoardController>);
+        /// The sticky note color (`#rrggbb`); false if it is not a color.
+        #[qinvokable]
+        fn choose_note_color(self: Pin<&mut BoardController>, color: &QString) -> bool;
+        /// Back to the theme's yellow note.
+        #[qinvokable]
+        fn reset_note_color(self: Pin<&mut BoardController>);
+
+        /// Editor preferences. They are saved at once. The `choose_draft_*`
+        /// calls that take a fixed set of values return false and change
+        /// nothing for anything else.
+        #[qinvokable]
+        fn choose_spell_check(self: Pin<&mut BoardController>, enabled: bool);
+        #[qinvokable]
+        fn choose_draft_agent(self: Pin<&mut BoardController>, agent: &QString) -> bool;
+        #[qinvokable]
+        fn choose_draft_system_prompt(self: Pin<&mut BoardController>, prompt: &QString);
+        #[qinvokable]
+        fn choose_draft_model(self: Pin<&mut BoardController>, model: &QString) -> bool;
+        #[qinvokable]
+        fn choose_draft_effort(self: Pin<&mut BoardController>, effort: &QString) -> bool;
+        /// Misspelled words in `text`, as JSON `[[start, length], ...]` in
+        /// UTF-16 units. Empty while spell check is off.
+        #[qinvokable]
+        fn misspelled_ranges(self: &BoardController, text: &QString) -> QString;
+
         #[qinvokable]
         fn save_screenshot(self: &BoardController, path: &QString) -> bool;
 
@@ -158,9 +190,9 @@ use stickynotes_core::{Applied, Command, Origin, Result as CoreResult};
 use uuid::Uuid;
 
 use crate::context;
-use crate::drafting::CancelToken;
+use crate::drafting::{CancelToken, DraftOptions};
 use crate::viewmodel::{self, TaskForm};
-use crate::{motion, theme};
+use crate::{editor, motion, theme};
 
 #[derive(Default)]
 pub struct BoardControllerRust {
@@ -176,6 +208,13 @@ pub struct BoardControllerRust {
     theme_mode: QString,
     primary_color: QString,
     secondary_color: QString,
+    note_color: QString,
+    spell_check: bool,
+    spell_available: bool,
+    draft_agent: QString,
+    draft_system_prompt: QString,
+    draft_model: QString,
+    draft_effort: QString,
     generating: bool,
     generator_name: QString,
     /// Set while a generation runs, so it can be cancelled.
@@ -208,6 +247,23 @@ impl cxx_qt::Initialize for qobject::BoardController {
                 .set_primary_color(QString::from(color(&settings.primary_color).as_str()));
             self.as_mut()
                 .set_secondary_color(QString::from(color(&settings.secondary_color).as_str()));
+            self.as_mut()
+                .set_note_color(QString::from(color(&settings.note_color).as_str()));
+            // Stored editor choices that are no longer valid fall back to the default.
+            self.as_mut().set_spell_check(settings.spell_check);
+            self.as_mut().set_spell_available(ctx.spell.available());
+            self.as_mut()
+                .set_draft_agent(QString::from(editor::normalize_agent(
+                    &settings.draft_agent,
+                )));
+            self.as_mut()
+                .set_draft_system_prompt(QString::from(settings.draft_system_prompt.as_str()));
+            self.as_mut().set_draft_model(QString::from(
+                editor::model(&settings.draft_model).unwrap_or_default(),
+            ));
+            self.as_mut().set_draft_effort(QString::from(
+                editor::effort(&settings.draft_effort).unwrap_or_default(),
+            ));
         }
         if let Ok(request) = std::env::var("STICKYNOTES_SCREENSHOT") {
             self.as_mut()
@@ -403,6 +459,69 @@ impl qobject::BoardController {
         true
     }
 
+    fn choose_note_color(mut self: Pin<&mut Self>, color: &QString) -> bool {
+        let Some(color) = theme::normalize_color(&String::from(color)) else {
+            return false;
+        };
+        self.as_mut().set_note_color(QString::from(color.as_str()));
+        context::get().update_settings(|s| s.note_color = color);
+        true
+    }
+
+    fn reset_note_color(mut self: Pin<&mut Self>) {
+        self.as_mut().set_note_color(QString::default());
+        context::get().update_settings(|s| s.note_color.clear());
+    }
+
+    fn choose_spell_check(mut self: Pin<&mut Self>, enabled: bool) {
+        self.as_mut().set_spell_check(enabled);
+        context::get().update_settings(|s| s.spell_check = enabled);
+    }
+
+    fn choose_draft_agent(mut self: Pin<&mut Self>, agent: &QString) -> bool {
+        let text = String::from(agent);
+        let agent = editor::normalize_agent(&text);
+        if !text.trim().eq_ignore_ascii_case(agent) {
+            return false;
+        }
+        self.as_mut().set_draft_agent(QString::from(agent));
+        context::get().update_settings(|s| s.draft_agent = agent.into());
+        true
+    }
+
+    fn choose_draft_system_prompt(mut self: Pin<&mut Self>, prompt: &QString) {
+        let prompt = String::from(prompt);
+        self.as_mut()
+            .set_draft_system_prompt(QString::from(prompt.as_str()));
+        context::get().update_settings(|s| s.draft_system_prompt = prompt);
+    }
+
+    fn choose_draft_model(mut self: Pin<&mut Self>, model: &QString) -> bool {
+        let Some(model) = editor::model(&String::from(model)) else {
+            return false;
+        };
+        self.as_mut().set_draft_model(QString::from(model));
+        context::get().update_settings(|s| s.draft_model = model.into());
+        true
+    }
+
+    fn choose_draft_effort(mut self: Pin<&mut Self>, effort: &QString) -> bool {
+        let Some(effort) = editor::effort(&String::from(effort)) else {
+            return false;
+        };
+        self.as_mut().set_draft_effort(QString::from(effort));
+        context::get().update_settings(|s| s.draft_effort = effort.into());
+        true
+    }
+
+    fn misspelled_ranges(&self, text: &QString) -> QString {
+        if !*self.spell_check() {
+            return QString::from("[]");
+        }
+        let ranges = context::get().spell.misspelled(&String::from(text));
+        to_qstring(serde_json::to_string(&ranges).expect("ranges serialize"))
+    }
+
     fn choose_motion_setting(mut self: Pin<&mut Self>, setting: &QString) -> bool {
         let text = String::from(setting);
         let setting = motion::normalize_setting(&text);
@@ -475,7 +594,17 @@ impl qobject::BoardController {
                     board.project.code_guidance.clone(),
                 )
             });
-            form.draft_request(&document_prompt, &code_guidance)
+            let settings = ctx.settings.lock().unwrap();
+            let options = DraftOptions {
+                system_prompt: settings.draft_system_prompt.trim().to_string(),
+                model: editor::model(&settings.draft_model)
+                    .unwrap_or_default()
+                    .into(),
+                effort: editor::effort(&settings.draft_effort)
+                    .unwrap_or_default()
+                    .into(),
+            };
+            form.draft_request(&document_prompt, &code_guidance, options)
         });
         let request = match request {
             Ok(request) => request,
