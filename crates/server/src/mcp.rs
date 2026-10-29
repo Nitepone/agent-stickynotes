@@ -10,6 +10,7 @@ use rmcp::model::{
 use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, schemars, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
+use stickynotes_core::agent_guide;
 
 use crate::service::{
     AgentService, CriterionInput, NewTask, ReferenceInput, ServiceResult, TaskUpdate,
@@ -17,23 +18,6 @@ use crate::service::{
 
 const BOARD_URI: &str = "stickynotes://board";
 const BOARD_MD_URI: &str = "stickynotes://board.md";
-
-const INSTRUCTIONS: &str = "\
-This server exposes the user's kanban board (agent-stickynotes).
-
-Workflow rules:
-- Columns are an ordered pipeline, left to right. Each column's description is the bar a task \
-must meet to enter that column.
-- You move tasks only with task_advance, one column at a time, left to right. Before advancing, \
-read the task with task_get and check that it meets next_column.description. Only the human moves \
-tasks backwards or skips columns.
-- New tasks always start in the first column.
-- Keep a task's description short (about 200 characters, sticky-note sized); put detail in \
-extended_description, requirements and acceptance_criteria.
-- Tick acceptance criteria with criterion_set as you complete them.
-- The human may disable write access at any time; write tools then fail and you should tell the user.
-- Write tools accept expected_revision. If it no longer matches, the board changed: re-read and retry.
-Columns cannot be created, edited, reordered or deleted by agents.";
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct TaskListArgs {
@@ -132,6 +116,13 @@ fn json<T: Serialize>(result: ServiceResult<T>) -> ToolResult {
 
 #[tool_router]
 impl BoardMcp {
+    #[tool(
+        description = "Get the project's instructions from the user: document_prompt (how to write documents) and code_guidance (how to write code). Call this first and follow it."
+    )]
+    fn project_get(&self) -> ToolResult {
+        json(Ok(self.service.project()))
+    }
+
     #[tool(
         description = "Get the whole board: ordered columns (with their entry-criteria descriptions), task summaries, the current revision, and whether agent write access is enabled."
     )]
@@ -239,7 +230,7 @@ impl ServerHandler for BoardMcp {
             "stickynotes",
             env!("CARGO_PKG_VERSION"),
         ))
-        .with_instructions(INSTRUCTIONS)
+        .with_instructions(agent_guide::mcp_instructions())
     }
 
     async fn list_resources(

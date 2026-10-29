@@ -76,6 +76,16 @@ pub mod qobject {
         fn delete_column(self: &BoardController, id: &QString, force: bool) -> QString;
         #[qinvokable]
         fn rename_board(self: &BoardController, title: &QString) -> QString;
+        #[qinvokable]
+        fn project_json(self: &BoardController) -> QString;
+        #[qinvokable]
+        fn update_project(
+            self: &BoardController,
+            document_prompt: &QString,
+            code_guidance: &QString,
+        ) -> QString;
+        #[qinvokable]
+        fn export_skill(self: &BoardController, url: &QUrl) -> QString;
 
         #[qinvokable]
         fn set_agent_write_enabled(self: &BoardController, enabled: bool);
@@ -259,6 +269,25 @@ impl qobject::BoardController {
         apply(Command::RenameBoard {
             title: title.into(),
         })
+    }
+
+    fn project_json(&self) -> QString {
+        to_qstring(
+            context::get()
+                .store
+                .read(|board, _| viewmodel::project_json(board)),
+        )
+    }
+
+    fn update_project(&self, document_prompt: &QString, code_guidance: &QString) -> QString {
+        apply(Command::UpdateProject {
+            document_prompt: Some(document_prompt.into()),
+            code_guidance: Some(code_guidance.into()),
+        })
+    }
+
+    fn export_skill(&self, url: &QUrl) -> QString {
+        file_op(url, |path| context::get().store.export_skill(&path))
     }
 
     fn set_agent_write_enabled(&self, enabled: bool) {

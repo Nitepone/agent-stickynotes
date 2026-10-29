@@ -9,10 +9,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::command::{Applied, Command, Origin};
 use crate::error::{Error, Result};
-use crate::export_md;
 use crate::model::Board;
 use crate::ops;
 use crate::persist::{self, FileStamp};
+use crate::{agent_guide, export_md};
 
 /// Emitted after any change to the board or session state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -181,6 +181,22 @@ impl BoardStore {
         persist::write_atomic(path, self.to_markdown().as_bytes())
     }
 
+    /// A Claude Code skill describing the board and the project's instructions.
+    pub fn to_skill_markdown(&self) -> String {
+        agent_guide::skill_markdown(&self.lock().board)
+    }
+
+    /// Write the skill file, creating its folder if needed.
+    pub fn export_skill(&self, path: &Path) -> Result<()> {
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir).map_err(|source| Error::Io {
+                path: dir.to_path_buf(),
+                source,
+            })?;
+        }
+        persist::write_atomic(path, self.to_skill_markdown().as_bytes())
+    }
+
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap()
     }
@@ -287,5 +303,25 @@ mod tests {
         std::fs::write(&path, "{ \"changed\": true, \"padding\": 1 }").unwrap();
         assert!(matches!(store.save(false), Err(Error::ModifiedOnDisk(_))));
         store.save(true).unwrap();
+    }
+
+    #[test]
+    fn export_skill_creates_folders_and_reflects_project_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(".claude/skills/stickynotes/SKILL.md");
+        let store = BoardStore::new(false);
+        store
+            .apply(
+                Origin::User,
+                Command::UpdateProject {
+                    document_prompt: Some("Be brief.".into()),
+                    code_guidance: None,
+                },
+                None,
+            )
+            .unwrap();
+        store.export_skill(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("name: stickynotes-board") && text.contains("Be brief."));
     }
 }

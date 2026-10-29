@@ -25,8 +25,30 @@ pub struct Board {
     /// Vec order is the stage order, left to right.
     #[serde(default)]
     pub columns: Vec<Column>,
+    /// Project-level instructions for agents. Only the user edits these.
+    #[serde(default, skip_serializing_if = "ProjectSettings::is_empty")]
+    pub project: ProjectSettings,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// Instructions that apply to the whole board, shown to agents.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProjectSettings {
+    /// How agents should write documents (specs, reports, release notes).
+    #[serde(default)]
+    pub document_prompt: String,
+    /// How code for this project should be written.
+    #[serde(default)]
+    pub code_guidance: String,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl ProjectSettings {
+    pub fn is_empty(&self) -> bool {
+        self.document_prompt.is_empty() && self.code_guidance.is_empty() && self.extra.is_empty()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -183,6 +205,7 @@ impl Board {
             id: Uuid::new_v4(),
             title: "Untitled board".into(),
             columns,
+            project: ProjectSettings::default(),
             extra: Map::new(),
         }
     }

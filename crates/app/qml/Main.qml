@@ -49,7 +49,7 @@ ApplicationWindow {
     }
 
     // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]]
-    // where scene is board (default), edit, task, newtask, column or agent.
+    // where scene is board (default), edit, task, newtask, column, agent or project.
     Timer {
         id: screenshotTimer
         interval: Number(controller.screenshotRequest.split(":")[2] || 400)
@@ -64,6 +64,7 @@ ApplicationWindow {
                 else if (scene === "newtask") taskDialog.openNew(window.board.columns[0])
                 else if (scene === "column") columnDialog.openColumn(window.board.columns[0])
                 else if (scene === "agent") agentDialog.open()
+                else if (scene === "project") projectDialog.openProject(controller.projectJson())
                 start()
                 return
             }
@@ -168,6 +169,20 @@ ApplicationWindow {
     }
 
     FileDialog {
+        id: skillDialog
+        title: qsTr("Export Claude Code skill (save as SKILL.md, e.g. in .claude/skills/stickynotes/)")
+        fileMode: FileDialog.SaveFile
+        defaultSuffix: "md"
+        nameFilters: [qsTr("Skill file (SKILL.md)"), qsTr("Markdown (*.md)")]
+        onAccepted: {
+            const r = window.result(controller.exportSkill(selectedFile))
+            if (r.ok)
+                messageDialog.inform(qsTr("Skill exported"),
+                                     qsTr("Claude Code loads skills from .claude/skills/<name>/SKILL.md in a project, or ~/.claude/skills/<name>/SKILL.md for all projects. Export again after changing the project settings."))
+        }
+    }
+
+    FileDialog {
         id: exportDialog
         title: qsTr("Export board to Markdown")
         fileMode: FileDialog.SaveFile
@@ -259,6 +274,10 @@ ApplicationWindow {
                 text: qsTr("&Rename Board…")
                 onTriggered: renameDialog.openWith(window.board.title)
             }
+            Action {
+                text: qsTr("&Project Settings…")
+                onTriggered: projectDialog.openProject(controller.projectJson())
+            }
         }
         Menu {
             title: qsTr("&Agent")
@@ -267,6 +286,10 @@ ApplicationWindow {
             Action {
                 text: qsTr("&Connect Claude Code…")
                 onTriggered: agentDialog.open()
+            }
+            Action {
+                text: qsTr("Export Claude Code &Skill…")
+                onTriggered: skillDialog.open()
             }
         }
     }
@@ -471,6 +494,17 @@ ApplicationWindow {
     }
 
     ConfirmDialog { id: messageDialog }
+
+    ProjectDialog {
+        id: projectDialog
+        onSaveRequested: (documentPrompt, codeGuidance) => {
+            const r = window.result(controller.updateProject(documentPrompt, codeGuidance), true)
+            if (r.ok)
+                close()
+            else
+                errorText = r.message
+        }
+    }
 
     Dialog {
         id: unsavedDialog

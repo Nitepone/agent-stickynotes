@@ -1,0 +1,63 @@
+import QtQuick
+import QtQuick.Controls
+import QtTest
+import StickyNotes
+
+Item {
+    id: scene
+    width: 900
+    height: 800
+
+    ProjectDialog { id: dialog }
+    SignalSpy { id: saveSpy; target: dialog; signalName: "saveRequested" }
+
+    TestCase {
+        name: "ProjectDialog"
+        when: windowShown
+
+        function find(name) {
+            let found = null
+            const roots = [dialog.contentItem, dialog.footer]
+            for (const root of roots)
+                (function walk(item) {
+                    for (const child of item.children) {
+                        if (child.objectName === name) found = child
+                        walk(child)
+                    }
+                })(root)
+            return found
+        }
+
+        function init() { saveSpy.clear() }
+        function cleanup() { dialog.close() }
+
+        function test_loads_current_settings() {
+            dialog.openProject(JSON.stringify({
+                title: "T", documentPrompt: "Be brief.", codeGuidance: "Use Rust." }))
+            tryCompare(dialog, "visible", true)
+            compare(find("documentField").text, "Be brief.")
+            compare(find("codeField").text, "Use Rust.")
+        }
+
+        function test_save_emits_both_texts() {
+            dialog.openProject(JSON.stringify({ title: "T", documentPrompt: "", codeGuidance: "" }))
+            tryCompare(dialog, "visible", true)
+            find("documentField").text = "New doc prompt"
+            find("codeField").text = "New code guidance\nsecond line"
+            mouseClick(find("saveProject"))
+            compare(saveSpy.count, 1)
+            compare(saveSpy.signalArguments[0][0], "New doc prompt")
+            compare(saveSpy.signalArguments[0][1], "New code guidance\nsecond line")
+        }
+
+        function test_cancel_discards_edits() {
+            dialog.openProject(JSON.stringify({ title: "T", documentPrompt: "keep", codeGuidance: "" }))
+            tryCompare(dialog, "visible", true)
+            find("documentField").text = "edited"
+            dialog.close()
+            dialog.openProject(JSON.stringify({ title: "T", documentPrompt: "keep", codeGuidance: "" }))
+            compare(find("documentField").text, "keep")
+            compare(saveSpy.count, 0)
+        }
+    }
+}

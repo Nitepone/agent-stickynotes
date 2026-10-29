@@ -43,6 +43,16 @@ pub struct BoardView {
     pub columns: Vec<ColumnView>,
 }
 
+/// The user's project-level instructions for agents (read-only for agents).
+#[derive(Debug, Serialize)]
+pub struct ProjectView {
+    pub title: String,
+    /// How to write documents (specs, reports, release notes) for this project.
+    pub document_prompt: String,
+    /// How code for this project should be written.
+    pub code_guidance: String,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ColumnView {
     pub id: Uuid,
@@ -180,6 +190,14 @@ impl AgentService {
                 })
                 .collect(),
         }
+    }
+
+    pub fn project(&self) -> ProjectView {
+        self.store.read(|board, _| ProjectView {
+            title: board.title.clone(),
+            document_prompt: board.project.document_prompt.clone(),
+            code_guidance: board.project.code_guidance.clone(),
+        })
     }
 
     pub fn markdown(&self) -> String {

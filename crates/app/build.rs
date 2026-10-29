@@ -11,6 +11,7 @@ fn main() {
         QmlFile::from("qml/TaskDialog.qml"),
         QmlFile::from("qml/ColumnDialog.qml"),
         QmlFile::from("qml/ConfirmDialog.qml"),
+        QmlFile::from("qml/ProjectDialog.qml"),
         QmlFile::from("qml/SectionLabel.qml"),
         QmlFile::from("qml/FormTextArea.qml"),
         QmlFile::from("qml/WrappingField.qml"),

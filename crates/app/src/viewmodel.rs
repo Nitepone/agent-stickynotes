@@ -141,6 +141,16 @@ pub fn task_json(board: &Board, id: Uuid) -> String {
     serde_json::to_string(&vm).expect("view model serializes")
 }
 
+/// Project settings for `ProjectDialog.qml`.
+pub fn project_json(board: &Board) -> String {
+    json!({
+        "title": board.title,
+        "documentPrompt": board.project.document_prompt,
+        "codeGuidance": board.project.code_guidance,
+    })
+    .to_string()
+}
+
 /// The relations a user can pick from: `[{value, label}]`.
 pub fn relation_options_json() -> String {
     let options: Vec<_> = Relation::ALL
@@ -397,5 +407,16 @@ mod tests {
             v[1],
             json!({"value": "blocked_by", "label": "is blocked by"})
         );
+    }
+
+    #[test]
+    fn project_json_carries_both_instructions() {
+        let mut board = Board::new_default();
+        board.project.document_prompt = "Be brief.".into();
+        board.project.code_guidance = "Use Rust.".into();
+        let v: serde_json::Value = serde_json::from_str(&project_json(&board)).unwrap();
+        assert_eq!(v["documentPrompt"], "Be brief.");
+        assert_eq!(v["codeGuidance"], "Use Rust.");
+        assert_eq!(v["title"], "Untitled board");
     }
 }

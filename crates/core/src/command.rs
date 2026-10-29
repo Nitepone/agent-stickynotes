@@ -104,6 +104,11 @@ pub enum Command {
     RenameBoard {
         title: String,
     },
+    /// `None` fields are left untouched.
+    UpdateProject {
+        document_prompt: Option<String>,
+        code_guidance: Option<String>,
+    },
 }
 
 /// What a successfully applied command produced.

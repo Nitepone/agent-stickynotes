@@ -108,6 +108,18 @@ pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applie
             board.title = required(&title, "board title")?;
             Ok(Applied::Board)
         }
+        Command::UpdateProject {
+            document_prompt,
+            code_guidance,
+        } => {
+            if let Some(p) = document_prompt {
+                board.project.document_prompt = p.trim().to_string();
+            }
+            if let Some(g) = code_guidance {
+                board.project.code_guidance = g.trim().to_string();
+            }
+            Ok(Applied::Board)
+        }
     }
 }
 
@@ -136,6 +148,7 @@ fn check_agent_rules(board: &Board, cmd: &Command) -> Result<()> {
         | Command::MoveColumn { .. }
         | Command::DeleteColumn { .. }
         | Command::RenameBoard { .. } => deny("agents cannot modify columns or the board"),
+        Command::UpdateProject { .. } => deny("only the user can edit project settings"),
         Command::UpdateTask { .. }
         | Command::AdvanceTask { .. }
         | Command::DeleteTask { .. }
@@ -602,6 +615,10 @@ mod tests {
             Command::MoveColumn { id, position: 2 },
             Command::DeleteColumn { id, force: true },
             Command::RenameBoard { title: "x".into() },
+            Command::UpdateProject {
+                document_prompt: Some("x".into()),
+                code_guidance: None,
+            },
         ];
         let before = b.clone();
         for cmd in cmds {
@@ -964,5 +981,42 @@ mod tests {
                 .unwrap()
                 .contains("references")
         );
+    }
+
+    #[test]
+    fn project_settings_update_and_trim() {
+        let mut b = Board::new_default();
+        execute(
+            &mut b,
+            Origin::User,
+            Command::UpdateProject {
+                document_prompt: Some("  Write in plain English.  ".into()),
+                code_guidance: None,
+            },
+        )
+        .unwrap();
+        execute(
+            &mut b,
+            Origin::User,
+            Command::UpdateProject {
+                document_prompt: None,
+                code_guidance: Some("Prefer small functions.\n".into()),
+            },
+        )
+        .unwrap();
+        assert_eq!(b.project.document_prompt, "Write in plain English.");
+        assert_eq!(b.project.code_guidance, "Prefer small functions.");
+    }
+
+    #[test]
+    fn project_settings_round_trip_and_stay_out_of_empty_boards() {
+        let mut b = Board::new_default();
+        assert!(!serde_json::to_string(&b).unwrap().contains("project"));
+        b.project.code_guidance = "Use Rust 2024.".into();
+        b.project
+            .extra
+            .insert("future".into(), serde_json::json!(1));
+        let back: Board = serde_json::from_str(&serde_json::to_string(&b).unwrap()).unwrap();
+        assert_eq!(back, b);
     }
 }

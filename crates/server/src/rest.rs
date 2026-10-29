@@ -14,6 +14,7 @@ use crate::service::{AgentService, NewTask, ServiceError, TaskUpdate};
 pub fn router(service: AgentService) -> Router {
     Router::new()
         .route("/board", get(board))
+        .route("/project", get(project))
         .route("/export/markdown", get(markdown))
         .route("/tasks", get(list_tasks).post(create_task))
         .route(
@@ -29,6 +30,10 @@ type ApiResult = Result<Response, ServiceError>;
 
 async fn board(State(s): State<AgentService>) -> Json<crate::service::BoardView> {
     Json(s.board())
+}
+
+async fn project(State(s): State<AgentService>) -> Json<crate::service::ProjectView> {
+    Json(s.project())
 }
 
 async fn markdown(State(s): State<AgentService>) -> impl IntoResponse {

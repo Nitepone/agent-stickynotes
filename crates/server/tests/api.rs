@@ -8,7 +8,7 @@ use rmcp::model::{CallToolRequestParams, ReadResourceRequestParams};
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use serde_json::{Value, json};
-use stickynotes_core::BoardStore;
+use stickynotes_core::{BoardStore, Command, Origin, agent_guide};
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt as _;
 
@@ -212,6 +212,42 @@ async fn references_are_mirrored() {
 }
 
 #[tokio::test]
+async fn project_settings_are_readable_but_not_writable_by_agents() {
+    let api = Api::new(true);
+    let (status, p) = api.call("GET", "/project", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(p["document_prompt"], "");
+
+    api.store
+        .apply(
+            Origin::User,
+            Command::UpdateProject {
+                document_prompt: Some("Write in plain English.".into()),
+                code_guidance: Some("Prefer small functions.".into()),
+            },
+            None,
+        )
+        .unwrap();
+    let (_, p) = api.call("GET", "/project", None).await;
+    assert_eq!(p["document_prompt"], "Write in plain English.");
+    assert_eq!(p["code_guidance"], "Prefer small functions.");
+
+    // There is no way to write it over the API.
+    let (status, _) = api
+        .call("PUT", "/project", Some(json!({"document_prompt": "x"})))
+        .await;
+    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+    let (status, _) = api
+        .call("PATCH", "/project", Some(json!({"document_prompt": "x"})))
+        .await;
+    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(
+        api.store.snapshot().board.project.document_prompt,
+        "Write in plain English."
+    );
+}
+
+#[tokio::test]
 async fn validation_errors() {
     let api = Api::new(true);
     let (status, _) = api
@@ -248,19 +284,32 @@ async fn mcp_end_to_end() {
     let tools = client.list_all_tools().await.unwrap();
     let mut names: Vec<_> = tools.iter().map(|t| t.name.to_string()).collect();
     names.sort();
-    assert_eq!(
-        names,
-        [
-            "board_get",
-            "criterion_set",
-            "task_advance",
-            "task_create",
-            "task_delete",
-            "task_get",
-            "task_list",
-            "task_update"
-        ]
-    );
+    // The tool list in the instructions and skill must match what is served.
+    let mut documented: Vec<_> = agent_guide::TOOLS
+        .iter()
+        .map(|(n, _)| n.to_string())
+        .collect();
+    documented.sort();
+    assert_eq!(names, documented);
+    assert!(names.contains(&"project_get".to_string()));
+
+    store
+        .apply(
+            Origin::User,
+            Command::UpdateProject {
+                document_prompt: Some("Be brief.".into()),
+                code_guidance: None,
+            },
+            None,
+        )
+        .unwrap();
+    let result = client
+        .call_tool(CallToolRequestParams::new("project_get"))
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true));
+    let project: Value = serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+    assert_eq!(project["document_prompt"], "Be brief.");
 
     let args = json!({"description": "From MCP"})
         .as_object()

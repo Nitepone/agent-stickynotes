@@ -27,6 +27,7 @@ error that tells the agent to ask you.
 
 | Tool | Purpose |
 |---|---|
+| `project_get` | The project's instructions from **Board ▸ Project Settings…**: how to write documents and code. Agents are told to call it first |
 | `board_get` | Columns in order (with their entry criteria), task summaries, revision, write flag |
 | `task_list` | Task summaries, optionally for one column (id or title) |
 | `task_get` | Full task plus `next_column` (where `task_advance` would move it, with its criteria) |
@@ -45,13 +46,26 @@ mismatch means the board changed and the agent should re-read it.
 Agent edits appear in the window immediately and count as unsaved changes.
 Save the board to keep them.
 
+## Project instructions and the Claude Code skill
+
+**Board ▸ Project Settings…** stores two texts in the board file: a document
+generation prompt and code-authoring guidance. Agents read them with
+`project_get`; they cannot change them.
+
+**Agent ▸ Export Claude Code Skill…** writes a `SKILL.md` that explains the
+board workflow and includes those instructions as they are right now. Save it as
+`.claude/skills/stickynotes/SKILL.md` in a project (or
+`~/.claude/skills/stickynotes/SKILL.md` for every project). Export again after
+you change the settings; `project_get` always returns the current text.
+
 ## REST API
 
 The same operations are available at `http://127.0.0.1:7317/api/v1` with the
 same bearer token:
 
 ```
-GET    /board                      GET  /export/markdown
+GET    /board                      GET  /project  (read-only)
+GET    /export/markdown
 GET    /tasks[?column=<id|title>]  POST /tasks
 GET    /tasks/{id}                 PATCH /tasks/{id}      DELETE /tasks/{id}
 POST   /tasks/{id}/advance         PUT  /tasks/{id}/criteria/{cid}  {"done": true}
