@@ -17,6 +17,8 @@ pub struct Settings {
     pub port: u16,
     /// Board reopened on launch when no file is given on the command line.
     pub last_file: Option<PathBuf>,
+    /// Executable used to draft requirements and criteria (Claude Code).
+    pub claude_command: String,
 }
 
 impl Default for Settings {
@@ -25,6 +27,7 @@ impl Default for Settings {
             agent_write: false,
             port: DEFAULT_PORT,
             last_file: None,
+            claude_command: "claude".into(),
         }
     }
 }

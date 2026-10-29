@@ -24,6 +24,8 @@ pub mod qobject {
         #[qproperty(bool, has_path)]
         #[qproperty(bool, agent_write)]
         #[qproperty(QString, endpoint)]
+        #[qproperty(bool, generating)]
+        #[qproperty(QString, generator_name)]
         #[qproperty(QString, screenshot_request)]
         type BoardController = super::BoardControllerRust;
 
@@ -93,6 +95,17 @@ pub mod qobject {
         fn claude_setup_command(self: &BoardController) -> QString;
         #[qinvokable]
         fn save_screenshot(self: &BoardController, path: &QString) -> bool;
+
+        /// Draft requirements and criteria for the task form (JSON) in the
+        /// background; the outcome arrives through `generation_finished`.
+        #[qinvokable]
+        fn start_generation(self: Pin<&mut BoardController>, form: &QString);
+        #[qinvokable]
+        fn cancel_generation(self: &BoardController);
+
+        /// JSON: `{ok: true, requirements, criteria}` or `{ok: false, code, message}`.
+        #[qsignal]
+        fn generation_finished(self: Pin<&mut BoardController>, result: QString);
     }
 
     impl cxx_qt::Threading for BoardController {}
@@ -102,12 +115,13 @@ pub mod qobject {
 use std::path::PathBuf;
 use std::pin::Pin;
 
-use cxx_qt::Threading;
+use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QString, QUrl};
 use stickynotes_core::{Applied, Command, Origin, Result as CoreResult};
 use uuid::Uuid;
 
 use crate::context;
+use crate::drafting::CancelToken;
 use crate::viewmodel::{self, TaskForm};
 
 #[derive(Default)]
@@ -118,6 +132,10 @@ pub struct BoardControllerRust {
     has_path: bool,
     agent_write: bool,
     endpoint: QString,
+    generating: bool,
+    generator_name: QString,
+    /// Set while a generation runs, so it can be cancelled.
+    generation: Option<CancelToken>,
     /// Dev aid: `STICKYNOTES_SCREENSHOT=out.png[:scene]` renders the window
     /// to a PNG and quits (see Main.qml).
     screenshot_request: QString,
@@ -128,6 +146,8 @@ impl cxx_qt::Initialize for qobject::BoardController {
         let ctx = context::get();
         self.as_mut()
             .set_endpoint(QString::from(ctx.endpoint.as_str()));
+        self.as_mut()
+            .set_generator_name(QString::from(ctx.drafter.name()));
         if let Ok(request) = std::env::var("STICKYNOTES_SCREENSHOT") {
             self.as_mut()
                 .set_screenshot_request(QString::from(request.as_str()));
@@ -302,6 +322,54 @@ impl qobject::BoardController {
 
     fn save_screenshot(&self, path: &QString) -> bool {
         qobject::save_window_screenshot(path)
+    }
+
+    fn start_generation(mut self: Pin<&mut Self>, form: &QString) {
+        // A run in progress keeps its state; only report the refusal.
+        if *self.generating() {
+            let busy = viewmodel::error_json("A draft is already being generated.");
+            return self.generation_finished(to_qstring(busy));
+        }
+        let ctx = context::get();
+        let request = TaskForm::parse(&String::from(form)).and_then(|form| {
+            let (document_prompt, code_guidance) = ctx.store.read(|board, _| {
+                (
+                    board.project.document_prompt.clone(),
+                    board.project.code_guidance.clone(),
+                )
+            });
+            form.draft_request(&document_prompt, &code_guidance)
+        });
+        let request = match request {
+            Ok(request) => request,
+            Err(message) => return self.finish_generation(viewmodel::error_json(&message)),
+        };
+
+        let token = CancelToken::new();
+        self.as_mut().rust_mut().generation = Some(token.clone());
+        self.as_mut().set_generating(true);
+
+        let backend = ctx.drafter.clone();
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = backend.generate(&request, &token);
+            let json = viewmodel::draft_result_json(result, &request, backend.name());
+            // Fails only if the controller was destroyed; nothing to report to then.
+            let _ = thread.queue(move |obj| obj.finish_generation(json));
+        });
+    }
+
+    fn cancel_generation(&self) {
+        if let Some(token) = &self.generation {
+            token.cancel();
+        }
+    }
+
+    /// Back on the Qt thread: record that the run is over and tell the view.
+    fn finish_generation(mut self: Pin<&mut Self>, result_json: String) {
+        self.as_mut().rust_mut().generation = None;
+        self.as_mut().set_generating(false);
+        self.generation_finished(to_qstring(result_json));
     }
 }
 

@@ -49,7 +49,8 @@ ApplicationWindow {
     }
 
     // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]]
-    // where scene is board (default), edit, task, newtask, column, agent or project.
+    // where scene is board (default), edit, task, newtask, column, agent, project or generate
+    // (generate starts a draft for the first task, using settings.json's claude_command).
     Timer {
         id: screenshotTimer
         interval: Number(controller.screenshotRequest.split(":")[2] || 400)
@@ -65,6 +66,10 @@ ApplicationWindow {
                 else if (scene === "column") columnDialog.openColumn(window.board.columns[0])
                 else if (scene === "agent") agentDialog.open()
                 else if (scene === "project") projectDialog.openProject(controller.projectJson())
+                else if (scene === "generate" && first) {
+                    boardView.taskClicked(first.tasks[0].id)
+                    controller.startGeneration(taskDialog.formJson())
+                }
                 start()
                 return
             }
@@ -77,6 +82,15 @@ ApplicationWindow {
     Connections {
         target: controller
         function onBoardJsonChanged() { window.refresh() }
+        function onGenerationFinished(resultJson) {
+            const r = JSON.parse(resultJson)
+            if (!taskDialog.visible)
+                return
+            if (r.ok)
+                taskDialog.applyDraft(r.requirements, r.criteria)
+            else if (r.code !== "cancelled")
+                taskDialog.showGenerationError(r.message)
+        }
     }
 
     // Parse a controller result; report failures unless the caller handles them.
@@ -450,6 +464,10 @@ ApplicationWindow {
 
     TaskDialog {
         id: taskDialog
+        generating: controller.generating
+        generatorName: controller.generatorName
+        onGenerateRequested: (form) => controller.startGeneration(form)
+        onCancelGenerationRequested: controller.cancelGeneration()
         linkCandidates: window.linkCandidates
         relationOptions: JSON.parse(controller.relationOptions())
         onOpenTaskRequested: (taskId) => {

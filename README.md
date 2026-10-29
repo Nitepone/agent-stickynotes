@@ -36,11 +36,23 @@ with default columns is created.
 | Edit a task | Click the sticky note |
 | Move a task | Drag the note to a position in any column |
 | Delete a task | Drag it onto the trash can (bottom right), or **Delete** in its dialog |
+| Draft requirements and criteria | In a task's dialog, **Draft requirements & criteria**. Claude Code proposes new items from the descriptions; review them, then **Save**. Needs `claude` on your PATH. |
 | Link tasks | In a task's dialog, **References**: pick a relation and a task, **Add**, then **Save**. The other task shows the matching reverse link. |
 | Give agents project instructions | **Board ▸ Project Settings…** (document prompt, code guidance); **Agent ▸ Export Claude Code Skill…** writes them into a `SKILL.md` |
 | Edit a column | Click the column title |
 | Reorder / add / delete columns | **Edit columns** (toolbar) or **Board ▸ Edit Columns** |
 | Save / open / new | **File** menu or toolbar. You are warned before unsaved changes are lost. |
+
+### Drafting with Claude Code
+
+The draft button runs `claude -p` as a subprocess, with no tools, MCP servers or
+session history, and sends it a system prompt plus the task as JSON (the
+project's document and code guidance are included as context). Nothing is
+saved until you click **Save**, existing items are kept, and a draft can be
+cancelled. If `claude` is not on your PATH, set `"claude_command"` in
+`~/.config/agent-stickynotes/settings.json`. The backend sits behind the
+`DraftBackend` trait (`crates/app/src/drafting.rs`), so an Ollama-style endpoint
+or local model can be added without touching the UI.
 
 ## Connecting Claude Code
 
@@ -53,6 +65,7 @@ open **Agent ▸ Connect Claude Code…**, copy the command, and run it once.
 cargo test --workspace          # core, API and MCP tests
 ./scripts/qml-tests.sh          # QML view tests (headless, real mouse drags)
 cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p stickynotes real_claude -- --ignored   # optional: one real Claude Code call
 ```
 
 Headless screenshots for UI checks:

@@ -2006,6 +2006,8 @@ dependencies = [
  "serde_json",
  "stickynotes-core",
  "stickynotes-server",
+ "tempfile",
+ "thiserror 2.0.21",
  "tokio",
  "uuid",
 ]

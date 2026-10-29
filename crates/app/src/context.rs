@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use stickynotes_core::BoardStore;
 
+use crate::drafting::DraftBackend;
 use crate::settings::{Config, Settings};
 
 pub struct AppContext {
@@ -14,6 +15,9 @@ pub struct AppContext {
     /// Base URL of the agent server, e.g. `http://127.0.0.1:7317`.
     pub endpoint: String,
     pub token: String,
+    /// Drafts requirements and criteria. Swap the implementation to change
+    /// the LLM that is used.
+    pub drafter: Arc<dyn DraftBackend>,
 }
 
 impl AppContext {

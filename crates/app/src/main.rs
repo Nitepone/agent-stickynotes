@@ -1,9 +1,11 @@
 mod context;
 mod controller;
+mod drafting;
 mod settings;
 mod viewmodel;
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -11,6 +13,7 @@ use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QUrl};
 use stickynotes_core::BoardStore;
 
 use crate::context::AppContext;
+use crate::drafting::claude_code::ClaudeCodeBackend;
 use crate::settings::Config;
 
 /// A local kanban board for humans and AI agents.
@@ -32,6 +35,7 @@ fn main() -> Result<()> {
     let config = Config::new()?;
     let settings = config.load_settings();
     let token = config.token()?;
+    let claude_command = settings.claude_command.clone();
     let store = BoardStore::new(settings.agent_write);
     open_initial_board(&store, cli.file, settings.last_file.clone());
 
@@ -55,6 +59,7 @@ fn main() -> Result<()> {
         settings: settings.into(),
         endpoint,
         token,
+        drafter: Arc::new(ClaudeCodeBackend::new(claude_command)),
     });
 
     let mut app = QGuiApplication::new();

@@ -24,6 +24,8 @@ Item {
         ]
     }
     SignalSpy { id: openSpy; target: dialog; signalName: "openTaskRequested" }
+    SignalSpy { id: generateSpy; target: dialog; signalName: "generateRequested" }
+    SignalSpy { id: cancelSpy; target: dialog; signalName: "cancelGenerationRequested" }
 
     TestCase {
         name: "TaskDialog"
@@ -44,7 +46,13 @@ Item {
             waitForRendering(dialog.contentItem)
         }
 
-        function init() { openSpy.clear() }
+        function init() {
+            openSpy.clear()
+            generateSpy.clear()
+            cancelSpy.clear()
+            dialog.generating = false
+            dialog.generatorName = "Claude Code"
+        }
         function cleanup() { dialog.close() }
 
         function fields(name) {
@@ -204,6 +212,98 @@ Item {
             verify(!dialog.isEdited())
             mouseClick(fields("removeReference")[0])
             verify(dialog.isEdited())
+        }
+
+        // ---- drafting with an LLM ----
+
+        function noteText() { return fields("generationNote")[0].text }
+
+        function test_generate_is_disabled_without_a_description() {
+            open([], [])
+            const [button] = fields("generateButton")
+            verify(button.enabled)
+            const description = (function find(item) {
+                for (const child of item.children) {
+                    if (child.hasOwnProperty("placeholderText") && child.placeholderText.indexOf("sticky-note") >= 0)
+                        return child
+                    const r = find(child)
+                    if (r) return r
+                }
+                return null
+            })(dialog.contentItem)
+            description.text = "   "
+            verify(!button.enabled, "needs a description")
+        }
+
+        function test_generate_sends_the_current_form() {
+            open(["Use HTTPS"], [{ id: "k1", text: "Can sign in", done: true }])
+            mouseClick(fields("generateButton")[0])
+            compare(generateSpy.count, 1)
+            const sent = JSON.parse(generateSpy.signalArguments[0][0])
+            compare(sent.description, "d")
+            compare(sent.requirements, ["Use HTTPS"])
+            compare(sent.criteria[0].text, "Can sign in")
+        }
+
+        function test_progress_and_cancel_are_shown_while_generating() {
+            open([], [])
+            verify(fields("generateButton")[0].visible)
+            verify(!fields("cancelGeneration")[0].visible)
+            dialog.generating = true
+            verify(!fields("generateButton")[0].visible)
+            verify(fields("generatingIndicator")[0].running)
+            verify(fields("generatingLabel")[0].text.indexOf("Claude Code") >= 0)
+            mouseClick(fields("cancelGeneration")[0])
+            compare(cancelSpy.count, 1)
+        }
+
+        function test_closing_while_generating_cancels() {
+            open([], [])
+            dialog.generating = true
+            dialog.close()
+            compare(cancelSpy.count, 1)
+        }
+
+        function test_closing_when_idle_does_not_cancel() {
+            open([], [])
+            dialog.close()
+            compare(cancelSpy.count, 0)
+        }
+
+        function test_draft_is_added_alongside_existing_items_and_not_saved() {
+            open(["Use HTTPS"], [{ id: "k1", text: "Can sign in", done: true }])
+            dialog.applyDraft(["Hash passwords"], ["Wrong password is rejected", "Account locks after 5 tries"])
+            const f = form()
+            compare(f.requirements, ["Use HTTPS", "Hash passwords"])
+            compare(f.criteria.length, 3)
+            compare(f.criteria[0].id, "k1")
+            compare(f.criteria[0].done, true, "existing criteria are untouched")
+            compare(f.criteria[1], { id: "", text: "Wrong password is rejected", done: false })
+            verify(dialog.isEdited(), "drafted items are unsaved edits")
+            compare(noteText(), "Added 1 requirement and 2 acceptance criteria below. Review and edit them, then Save.")
+        }
+
+        function test_an_empty_draft_says_so() {
+            open([], [])
+            dialog.applyDraft([], [])
+            compare(fields("requirementField").length, 0)
+            verify(noteText().indexOf("Nothing new") === 0)
+            verify(!dialog.isEdited())
+        }
+
+        function test_errors_are_shown_and_cleared_by_the_next_attempt() {
+            open([], [])
+            dialog.showGenerationError("Claude Code was not found.")
+            compare(noteText(), "Claude Code was not found.")
+            mouseClick(fields("generateButton")[0])
+            compare(fields("generationNote")[0].visible, false)
+        }
+
+        function test_drafted_items_can_be_edited_like_any_other() {
+            open([], [])
+            dialog.applyDraft(["Hash passwords"], [])
+            fields("requirementField")[0].text = "Hash passwords with argon2"
+            compare(form().requirements, ["Hash passwords with argon2"])
         }
     }
 }

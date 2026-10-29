@@ -10,6 +10,8 @@ use stickynotes_core::{
 };
 use uuid::Uuid;
 
+use crate::drafting::{Draft, DraftError, DraftRequest};
+
 /// Most lines of description shown on a card before `[...]`.
 const CARD_MAX_LINES: usize = 6;
 
@@ -203,6 +205,33 @@ pub struct CriterionForm {
 }
 
 impl TaskForm {
+    /// What to ask a drafting backend about this (possibly unsaved) task.
+    pub fn draft_request(
+        &self,
+        document_prompt: &str,
+        code_guidance: &str,
+    ) -> Result<DraftRequest, String> {
+        if self.description.trim().is_empty() {
+            return Err("Write a description first; the draft is based on it.".into());
+        }
+        let texts = |items: Vec<&str>| {
+            items
+                .into_iter()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect()
+        };
+        Ok(DraftRequest {
+            description: self.description.trim().to_string(),
+            extended_description: self.extended_description.trim().to_string(),
+            requirements: texts(self.requirements.iter().map(String::as_str).collect()),
+            acceptance_criteria: texts(self.criteria.iter().map(|c| c.text.as_str()).collect()),
+            document_prompt: document_prompt.to_string(),
+            code_guidance: code_guidance.to_string(),
+        })
+    }
+
     pub fn parse(json: &str) -> Result<Self, String> {
         serde_json::from_str(json).map_err(|e| format!("malformed task form: {e}"))
     }
@@ -257,6 +286,28 @@ pub fn result_json(result: Result<Option<Applied>, Error>) -> String {
             json!({ "ok": true, "id": id })
         }
         Err(e) => json!({ "ok": false, "code": error_code(&e), "message": e.to_string() }),
+    };
+    value.to_string()
+}
+
+/// Outcome of a drafting run, for `TaskDialog.qml`. On success only items the
+/// task does not already have are included.
+pub fn draft_result_json(
+    result: Result<Draft, DraftError>,
+    request: &DraftRequest,
+    backend: &str,
+) -> String {
+    let value = match result {
+        Ok(draft) => {
+            let draft = draft.without_existing(request);
+            json!({
+                "ok": true,
+                "backend": backend,
+                "requirements": draft.requirements,
+                "criteria": draft.acceptance_criteria,
+            })
+        }
+        Err(e) => json!({ "ok": false, "code": e.code(), "message": e.to_string() }),
     };
     value.to_string()
 }
@@ -418,5 +469,55 @@ mod tests {
         assert_eq!(v["documentPrompt"], "Be brief.");
         assert_eq!(v["codeGuidance"], "Use Rust.");
         assert_eq!(v["title"], "Untitled board");
+    }
+
+    #[test]
+    fn draft_request_comes_from_the_form_and_needs_a_description() {
+        let form = TaskForm::parse(
+            r#"{"description":" Add login ","extendedDescription":"Email","requirements":["Use HTTPS",""],
+                "criteria":[{"id":"","text":"Can sign in"},{"id":"","text":" "}]}"#,
+        )
+        .unwrap();
+        let req = form.draft_request("Plain.", "Rust.").unwrap();
+        assert_eq!(req.description, "Add login");
+        assert_eq!(req.extended_description, "Email");
+        assert_eq!(req.requirements, ["Use HTTPS"]);
+        assert_eq!(req.acceptance_criteria, ["Can sign in"]);
+        assert_eq!(
+            (req.document_prompt.as_str(), req.code_guidance.as_str()),
+            ("Plain.", "Rust.")
+        );
+
+        let blank = TaskForm::parse(r#"{"description":"  "}"#).unwrap();
+        assert!(blank.draft_request("", "").is_err());
+    }
+
+    #[test]
+    fn draft_result_json_keeps_only_new_items_or_reports_the_error() {
+        let request = DraftRequest {
+            description: "d".into(),
+            requirements: vec!["Use HTTPS".into()],
+            ..Default::default()
+        };
+        let draft = Draft {
+            requirements: vec!["use https".into(), "Hash passwords".into()],
+            acceptance_criteria: vec!["Can sign in".into()],
+        };
+        let v: serde_json::Value =
+            serde_json::from_str(&draft_result_json(Ok(draft), &request, "Claude Code")).unwrap();
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["requirements"], json!(["Hash passwords"]));
+        assert_eq!(v["criteria"], json!(["Can sign in"]));
+        assert_eq!(v["backend"], "Claude Code");
+
+        let v: serde_json::Value = serde_json::from_str(&draft_result_json(
+            Err(DraftError::Unavailable("not installed".into())),
+            &request,
+            "Claude Code",
+        ))
+        .unwrap();
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["code"], "unavailable");
+        assert_eq!(v["message"], "not installed");
     }
 }

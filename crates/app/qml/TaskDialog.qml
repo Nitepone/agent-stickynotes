@@ -22,6 +22,14 @@ Dialog {
     property var relationOptions: []
     property string loadedForm: ""
 
+    // Drafting requirements and criteria with an LLM. The owner runs it and
+    // reports back through applyDraft() / showGenerationError().
+    property bool generating: false
+    property string generatorName: ""
+    property string generationNote: ""
+    property bool generationNoteIsError: false
+    property int generationSeconds: 0
+
     // Link targets: all tasks except this one.
     readonly property var linkTargets: linkCandidates.filter(c => c.id !== taskId)
 
@@ -37,6 +45,37 @@ Dialog {
     signal deleteRequested(string taskId)
     signal reloadRequested(string taskId)
     signal openTaskRequested(string taskId)
+    signal generateRequested(string formJson)
+    signal cancelGenerationRequested()
+
+    onGeneratingChanged: if (generating) generationSeconds = 0
+    // Closing the dialog abandons any draft in progress.
+    onClosed: if (generating) cancelGenerationRequested()
+
+    function plural(n, one, many) {
+        return n === 1 ? one : many
+    }
+
+    // Append drafted items. Existing ones are kept; nothing is saved here.
+    function applyDraft(requirements, criteria) {
+        for (const r of requirements)
+            requirementsModel.append({ text: r })
+        for (const c of criteria)
+            criteriaModel.append({ cid: "", text: c, done: false })
+        generationNoteIsError = false
+        if (requirements.length + criteria.length === 0) {
+            generationNote = qsTr("Nothing new to add: the task already covers what was found.")
+            return
+        }
+        generationNote = qsTr("Added %1 and %2 below. Review and edit them, then Save.")
+            .arg(requirements.length + " " + plural(requirements.length, qsTr("requirement"), qsTr("requirements")))
+            .arg(criteria.length + " " + plural(criteria.length, qsTr("acceptance criterion"), qsTr("acceptance criteria")))
+    }
+
+    function showGenerationError(message) {
+        generationNoteIsError = true
+        generationNote = message
+    }
 
     // True if the form differs from what was loaded.
     function isEdited() {
@@ -77,6 +116,7 @@ Dialog {
         changedExternally = false
         deletedExternally = false
         errorText = ""
+        generationNote = ""
         descriptionField.text = ""
         extendedField.text = ""
         requirementsModel.clear()
@@ -214,6 +254,62 @@ Dialog {
                 Layout.fillWidth: true
                 Layout.minimumHeight: 110
                 placeholderText: qsTr("Optional details, context, links…")
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                spacing: 8
+
+                Button {
+                    objectName: "generateButton"
+                    visible: !dialog.generating
+                    text: qsTr("Draft requirements && criteria")
+                    enabled: descriptionField.text.trim().length > 0
+                    onClicked: {
+                        dialog.generationNote = ""
+                        dialog.generateRequested(dialog.formJson())
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 600
+                    ToolTip.text: qsTr("Ask %1 to propose requirements and acceptance criteria from the descriptions. Nothing is saved until you click Save.")
+                                  .arg(dialog.generatorName)
+                }
+                BusyIndicator {
+                    objectName: "generatingIndicator"
+                    visible: dialog.generating
+                    running: dialog.generating
+                    implicitWidth: 28
+                    implicitHeight: 28
+                }
+                Label {
+                    objectName: "generatingLabel"
+                    visible: dialog.generating
+                    text: qsTr("Asking %1\u2026 %2 s").arg(dialog.generatorName).arg(dialog.generationSeconds)
+                    color: Theme.subtleText
+                }
+                Button {
+                    objectName: "cancelGeneration"
+                    visible: dialog.generating
+                    text: qsTr("Cancel")
+                    onClicked: dialog.cancelGenerationRequested()
+                }
+                Item { Layout.fillWidth: true }
+
+                Timer {
+                    interval: 1000
+                    repeat: true
+                    running: dialog.generating
+                    onTriggered: dialog.generationSeconds++
+                }
+            }
+            Label {
+                objectName: "generationNote"
+                Layout.fillWidth: true
+                visible: dialog.generationNote !== ""
+                text: dialog.generationNote
+                wrapMode: Text.Wrap
+                color: dialog.generationNoteIsError ? Theme.danger : Theme.progressDone
             }
 
             SectionLabel { text: qsTr("Requirements") }
