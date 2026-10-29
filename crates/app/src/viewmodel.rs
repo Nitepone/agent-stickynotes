@@ -35,6 +35,7 @@ struct ColumnVm<'a> {
 #[serde(rename_all = "camelCase")]
 struct CardVm {
     id: Uuid,
+    number: u64,
     card_text: String,
     done: usize,
     total: usize,
@@ -44,6 +45,7 @@ struct CardVm {
 #[serde(rename_all = "camelCase")]
 struct TaskVm<'a> {
     id: Uuid,
+    number: u64,
     column_id: Uuid,
     description: &'a str,
     extended_description: &'a str,
@@ -93,6 +95,7 @@ fn card(task: &Task) -> CardVm {
     let p = task.progress();
     CardVm {
         id: task.id,
+        number: task.number,
         card_text: card_text(
             &task.description,
             SUGGESTED_DESCRIPTION_CHARS,
@@ -111,6 +114,7 @@ pub fn task_json(board: &Board, id: Uuid) -> String {
     let t = &board.columns[ci].tasks[ti];
     let vm = TaskVm {
         id: t.id,
+        number: t.number,
         column_id: board.columns[ci].id,
         description: &t.description,
         extended_description: &t.extended_description,
@@ -355,6 +359,7 @@ mod tests {
             serde_json::from_str(&store.read(|b, _| board_json(b))).unwrap();
         let card = &json["columns"][0]["tasks"][0];
         assert!(card["cardText"].as_str().unwrap().ends_with("[...]"));
+        assert_eq!(card["number"], 1);
         assert_eq!(card["done"], 1);
         assert_eq!(card["total"], 2);
     }

@@ -248,6 +248,55 @@ async fn project_settings_are_readable_but_not_writable_by_agents() {
 }
 
 #[tokio::test]
+async fn tasks_are_numbered_and_addressable_by_number() {
+    let api = Api::new(true);
+    let mut created = Vec::new();
+    for d in ["first", "second"] {
+        let (_, t) = api
+            .call("POST", "/tasks", Some(json!({"description": d})))
+            .await;
+        created.push(t);
+    }
+    assert_eq!(created[0]["number"], 1);
+    assert_eq!(created[1]["number"], 2);
+
+    // "#2", "2" and the id all find the same task.
+    for reference in ["%232", "2", created[1]["id"].as_str().unwrap()] {
+        let (status, t) = api.call("GET", &format!("/tasks/{reference}"), None).await;
+        assert_eq!(status, StatusCode::OK, "{reference}");
+        assert_eq!(t["description"], "second");
+    }
+    let (status, err) = api.call("GET", "/tasks/%2399", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(err["message"].as_str().unwrap().contains("#99"));
+    let (status, err) = api.call("GET", "/tasks/banana", None).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(err["message"].as_str().unwrap().contains("#12"));
+
+    // Numbers work in writes and references, and show up in summaries.
+    let (status, t) = api
+        .call(
+            "PATCH",
+            "/tasks/%231",
+            Some(json!({"references": [{"task_id": "#2", "relation": "blocks"}]})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(t["references"][0]["number"], 2);
+    let (status, _) = api.call("POST", "/tasks/%232/advance", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, list) = api.call("GET", "/tasks", None).await;
+    assert_eq!(list[0]["number"], 1);
+
+    // Deleting #2 retires its number.
+    api.call("DELETE", "/tasks/%232", None).await;
+    let (_, t) = api
+        .call("POST", "/tasks", Some(json!({"description": "third"})))
+        .await;
+    assert_eq!(t["number"], 3);
+}
+
+#[tokio::test]
 async fn validation_errors() {
     let api = Api::new(true);
     let (status, _) = api

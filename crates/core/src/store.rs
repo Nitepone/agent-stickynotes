@@ -140,12 +140,15 @@ impl BoardStore {
     }
 
     pub fn open(&self, path: &Path) -> Result<()> {
-        let (board, stamp) = persist::load(path)?;
+        let (mut board, stamp) = persist::load(path)?;
+        // Boards from before task numbers get numbered here; leave them
+        // marked unsaved so the numbers are written out and stay stable.
+        let backfilled = board.normalize();
         self.mutate(Origin::User, |s| {
             s.board = board;
             s.path = Some(path.to_path_buf());
             s.stamp = stamp;
-            s.dirty = false;
+            s.dirty = backfilled;
             Ok(())
         })
     }
@@ -323,5 +326,54 @@ mod tests {
         store.export_skill(&path).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("name: stickynotes-board") && text.contains("Be brief."));
+    }
+
+    #[test]
+    fn opening_an_old_board_numbers_it_and_marks_it_unsaved() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("old.json");
+        // A saved board whose tasks have no numbers, as before numbering existed.
+        let store = BoardStore::new(false);
+        store.apply(Origin::User, create(), None).unwrap();
+        store.apply(Origin::User, create(), None).unwrap();
+        let mut value = serde_json::to_value(store.snapshot().board).unwrap();
+        value.as_object_mut().unwrap().remove("next_number");
+        for column in value["columns"].as_array_mut().unwrap() {
+            for task in column["tasks"].as_array_mut().unwrap() {
+                task.as_object_mut().unwrap().remove("number");
+            }
+        }
+        std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+
+        let opened = BoardStore::new(false);
+        opened.open(&path).unwrap();
+        let snap = opened.snapshot();
+        let numbers: Vec<_> = snap.board.tasks().map(|(_, t)| t.number).collect();
+        assert_eq!(numbers, [1, 2]);
+        assert!(snap.dirty, "backfilled numbers still need saving");
+
+        // Saved, they stay put across a reload, and new tasks continue after them.
+        opened.save(false).unwrap();
+        let reopened = BoardStore::new(false);
+        reopened.open(&path).unwrap();
+        let snap = reopened.snapshot();
+        assert!(!snap.dirty);
+        let numbers: Vec<_> = snap.board.tasks().map(|(_, t)| t.number).collect();
+        assert_eq!(numbers, [1, 2]);
+        reopened.apply(Origin::User, create(), None).unwrap();
+        assert!(reopened.snapshot().board.find_by_number(3).is_some());
+    }
+
+    #[test]
+    fn a_numbered_board_opens_clean() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("b.json");
+        let store = BoardStore::new(false);
+        store.apply(Origin::User, create(), None).unwrap();
+        store.save_as(&path).unwrap();
+        let other = BoardStore::new(false);
+        other.open(&path).unwrap();
+        assert!(!other.snapshot().dirty);
+        assert_eq!(other.snapshot().board, store.snapshot().board);
     }
 }

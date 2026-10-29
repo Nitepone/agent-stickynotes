@@ -42,6 +42,8 @@ must meet to enter that column.
 - You move tasks only with task_advance, one column at a time, left to right. Before advancing, \
 read the task with task_get and check that it meets next_column.description. Only the human moves \
 tasks backwards or skips columns.
+- Every task has a short permanent number shown as #12. The user may refer to tasks that way, \
+and every tool accepts a number such as #12 wherever it takes a task id.
 - New tasks always start in the first column.
 - Keep a task's description short (about 200 characters, sticky-note sized); put detail in \
 extended_description, requirements and acceptance_criteria.

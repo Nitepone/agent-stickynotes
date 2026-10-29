@@ -9,6 +9,8 @@ QtObject {
     readonly property color subtleText: "#6b7280"
     readonly property color note: "#fff1a6"
     readonly property color noteText: "#3d3a24"
+    // Gray, so the number reads as a label rather than content.
+    readonly property color noteNumber: "#8a8670"
     readonly property color noteShadow: "#33000000"
     readonly property color progress: "#3b82f6"
     readonly property color progressDone: "#16a34a"

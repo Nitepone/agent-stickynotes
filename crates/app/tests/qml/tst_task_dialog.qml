@@ -33,7 +33,7 @@ Item {
 
         function taskJson(requirements, criteria, references) {
             return JSON.stringify({
-                id: "t1", columnId: "c0", description: "d", extendedDescription: "",
+                id: "t1", number: 7, columnId: "c0", description: "d", extendedDescription: "",
                 requirements: requirements,
                 criteria: criteria,
                 references: references || [],
@@ -304,6 +304,25 @@ Item {
             dialog.applyDraft(["Hash passwords"], [])
             fields("requirementField")[0].text = "Hash passwords with argon2"
             compare(form().requirements, ["Hash passwords with argon2"])
+        }
+
+        // ---- task number ----
+
+        function test_the_task_number_is_shown_and_read_only() {
+            open([], [])
+            const [label] = fields("taskNumber")
+            compare(label.text, "#7")
+            verify(label.visible)
+            // A plain label: nothing to type into, and not part of the form.
+            verify(!label.hasOwnProperty("readOnly") && !label.hasOwnProperty("cursorPosition"))
+            verify(!("number" in form()), "the number is never submitted")
+            verify(!("taskNumber" in form()))
+        }
+
+        function test_a_new_task_has_no_number_yet() {
+            dialog.openNew({ id: "c0", title: "Backlog" })
+            waitForRendering(dialog.contentItem)
+            verify(!fields("taskNumber")[0].visible)
         }
     }
 }

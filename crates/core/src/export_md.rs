@@ -20,7 +20,12 @@ pub fn to_markdown(board: &Board) -> String {
         }
 
         for task in &column.tasks {
-            let _ = write!(out, "\n### {}\n", single_line(&task.description));
+            let _ = write!(
+                out,
+                "\n### #{} {}\n",
+                task.number,
+                single_line(&task.description)
+            );
             if !task.extended_description.is_empty() {
                 let _ = write!(out, "\n{}\n", task.extended_description);
             }
@@ -52,8 +57,9 @@ pub fn to_markdown(board: &Board) -> String {
                 for (relation, other) in references {
                     let _ = writeln!(
                         out,
-                        "- {} \"{}\"",
+                        "- {} #{} \"{}\"",
                         relation.label(),
+                        other.number,
                         single_line(&other.description)
                     );
                 }
@@ -149,9 +155,9 @@ mod tests {
         .unwrap();
         let md = to_markdown(&board);
         assert!(
-            md.contains("**References**\n\n- blocks \"Write the docs\""),
+            md.contains("**References**\n\n- blocks #2 \"Write the docs\""),
             "{md}"
         );
-        assert!(md.contains("- is blocked by \"Build the API\""), "{md}");
+        assert!(md.contains("- is blocked by #1 \"Build the API\""), "{md}");
     }
 }

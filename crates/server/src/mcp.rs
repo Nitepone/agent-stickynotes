@@ -27,7 +27,7 @@ pub struct TaskListArgs {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct TaskIdArgs {
-    /// Task id.
+    /// Task id, or its number such as #12.
     pub id: String,
     /// Fail if the board revision differs (optional).
     pub expected_revision: Option<u64>,
@@ -59,6 +59,7 @@ pub struct CriterionArg {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct TaskUpdateArgs {
+    /// Task id, or its number such as #12.
     pub id: String,
     /// New short description (about 200 characters suggested).
     pub description: Option<String>,
@@ -76,7 +77,7 @@ pub struct TaskUpdateArgs {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct ReferenceArg {
-    /// Id of the other task.
+    /// Id (or number such as #12) of the other task.
     pub task_id: String,
     /// What this task does to the other: blocks, blocked_by, relates_to,
     /// duplicates or duplicated_by.
@@ -85,6 +86,7 @@ pub struct ReferenceArg {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct CriterionSetArgs {
+    /// Task id, or its number such as #12.
     pub task_id: String,
     pub criterion_id: String,
     pub done: bool,

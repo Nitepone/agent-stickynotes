@@ -8,7 +8,7 @@ import StickyNotes
 Item {
     id: root
 
-    required property var task          // { id, cardText, done, total }
+    required property var task          // { id, number, cardText, done, total }
     required property Item dragLayer
     property bool dragEnabled: true
     readonly property bool isTaskCard: true
@@ -69,15 +69,25 @@ Item {
                 font.pixelSize: 14
             }
 
+            // Footer: the task number at the bottom left, progress (if the
+            // task has criteria) to its right.
             RowLayout {
                 Layout.fillWidth: true
-                visible: root.task.total > 0
                 spacing: 8
 
-                readonly property bool complete: root.task.done === root.task.total
+                readonly property bool hasProgress: root.task.total > 0
+                readonly property bool complete: hasProgress && root.task.done === root.task.total
+
+                Label {
+                    objectName: "cardNumber"
+                    text: "#" + root.task.number
+                    font.pixelSize: 11
+                    color: Theme.noteNumber
+                }
 
                 Rectangle {
                     Layout.fillWidth: true
+                    visible: parent.hasProgress
                     implicitHeight: 6
                     radius: 3
                     color: "#1f000000"
@@ -90,8 +100,11 @@ Item {
                     }
                 }
 
+                Item { Layout.fillWidth: true; visible: !parent.hasProgress }
+
                 Label {
-                    text: "✓ " + root.task.done + "/" + root.task.total
+                    visible: parent.hasProgress
+                    text: "\u2713 " + root.task.done + "/" + root.task.total
                     font.pixelSize: 12
                     font.bold: true
                     color: parent.complete ? Theme.progressDone : Theme.subtleText

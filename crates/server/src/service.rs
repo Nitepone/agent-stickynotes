@@ -65,6 +65,8 @@ pub struct ColumnView {
 #[derive(Debug, Serialize)]
 pub struct TaskSummary {
     pub id: Uuid,
+    /// Short permanent number; refer to the task as "#<number>".
+    pub number: u64,
     pub column: String,
     pub description: String,
     pub progress: Progress,
@@ -80,6 +82,8 @@ pub struct ColumnRef {
 #[derive(Debug, Serialize)]
 pub struct TaskView {
     pub id: Uuid,
+    /// Short permanent number; refer to the task as "#<number>".
+    pub number: u64,
     pub description: String,
     pub extended_description: String,
     pub requirements: Vec<String>,
@@ -98,6 +102,7 @@ pub struct TaskView {
 pub struct ReferenceView {
     /// The other task.
     pub task_id: Uuid,
+    pub number: u64,
     /// What this task does to the other one: blocks, blocked_by, relates_to,
     /// duplicates or duplicated_by.
     pub relation: &'static str,
@@ -200,6 +205,27 @@ impl AgentService {
         })
     }
 
+    /// A task named by its id or by its number ("#12" or "12").
+    fn resolve_task(&self, reference: &str) -> ServiceResult<Uuid> {
+        let reference = reference.trim();
+        if let Some(number) = parse_number(reference) {
+            return self
+                .store
+                .read(|board, _| board.find_by_number(number).map(|t| t.id))
+                .ok_or_else(|| {
+                    ServiceError::Core(Error::NotFound {
+                        kind: "task",
+                        id: format!("#{number}"),
+                    })
+                });
+        }
+        parse_id(reference, "task").map_err(|_| {
+            ServiceError::BadRequest(format!(
+                "'{reference}' is not a task id or number; use an id or a number like #12"
+            ))
+        })
+    }
+
     pub fn markdown(&self) -> String {
         self.store.to_markdown()
     }
@@ -217,7 +243,7 @@ impl AgentService {
     }
 
     pub fn task(&self, id: &str) -> ServiceResult<TaskView> {
-        let id = parse_id(id, "task")?;
+        let id = self.resolve_task(id)?;
         self.store
             .read(|board, revision| task_view(board, id, revision))
     }
@@ -252,14 +278,14 @@ impl AgentService {
         update: TaskUpdate,
         expected: Option<u64>,
     ) -> ServiceResult<TaskView> {
-        let id = parse_id(id, "task")?;
+        let id = self.resolve_task(id)?;
         let references = update
             .references
             .map(|refs| {
                 refs.into_iter()
                     .map(|r| {
                         Ok(ReferenceDraft {
-                            task: parse_id(&r.task_id, "task")?,
+                            task: self.resolve_task(&r.task_id)?,
                             relation: parse_relation(&r.relation)?,
                         })
                     })
@@ -285,7 +311,7 @@ impl AgentService {
     }
 
     pub fn advance_task(&self, id: &str, expected: Option<u64>) -> ServiceResult<TaskView> {
-        let id = parse_id(id, "task")?;
+        let id = self.resolve_task(id)?;
         self.apply_to_task(Command::AdvanceTask { id }, expected)
     }
 
@@ -297,7 +323,7 @@ impl AgentService {
         expected: Option<u64>,
     ) -> ServiceResult<TaskView> {
         let cmd = Command::SetCriterion {
-            task: parse_id(task, "task")?,
+            task: self.resolve_task(task)?,
             criterion: parse_id(criterion, "criterion")?,
             done,
         };
@@ -305,7 +331,7 @@ impl AgentService {
     }
 
     pub fn delete_task(&self, id: &str, expected: Option<u64>) -> ServiceResult<Deleted> {
-        let id = parse_id(id, "task")?;
+        let id = self.resolve_task(id)?;
         let (_, revision) =
             self.store
                 .apply(Origin::Agent, Command::DeleteTask { id }, expected)?;
@@ -328,6 +354,7 @@ impl AgentService {
 fn summary(column: &Column, task: &Task) -> TaskSummary {
     TaskSummary {
         id: task.id,
+        number: task.number,
         column: column.title.clone(),
         description: task.description.clone(),
         progress: task.progress(),
@@ -359,6 +386,7 @@ fn task_view(board: &Board, id: TaskId, revision: u64) -> ServiceResult<TaskView
     let t = &column.tasks[ti];
     Ok(TaskView {
         id: t.id,
+        number: t.number,
         description: t.description.clone(),
         extended_description: t.extended_description.clone(),
         requirements: t.requirements.clone(),
@@ -371,6 +399,7 @@ fn task_view(board: &Board, id: TaskId, revision: u64) -> ServiceResult<TaskView
                 let (oc, ot) = board.locate_task(r.task)?;
                 Some(ReferenceView {
                     task_id: r.task,
+                    number: board.columns[oc].tasks[ot].number,
                     relation: r.relation.as_str(),
                     description: board.columns[oc].tasks[ot].description.clone(),
                     column: board.columns[oc].title.clone(),
@@ -435,4 +464,9 @@ fn parse_relation(s: &str) -> ServiceResult<Relation> {
             Relation::ALL.map(Relation::as_str).join(", ")
         ))
     })
+}
+
+/// "#12" or "12" (but not an id) as a task number.
+fn parse_number(s: &str) -> Option<u64> {
+    s.strip_prefix('#').unwrap_or(s).trim().parse().ok()
 }

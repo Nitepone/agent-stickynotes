@@ -13,12 +13,12 @@ Item {
         title: "Test",
         columns: [
             { id: "c0", title: "Backlog", description: "Unscoped", tasks: [
-                { id: "t0", cardText: "first", done: 0, total: 0 },
-                { id: "t1", cardText: "second", done: 1, total: 2 },
+                { id: "t0", number: 1, cardText: "first", done: 0, total: 0 },
+                { id: "t1", number: 2, cardText: "second", done: 1, total: 2 },
             ] },
             { id: "c1", title: "Doing", description: "", tasks: [] },
             { id: "c2", title: "Done", description: "", tasks: [
-                { id: "t2", cardText: "third", done: 2, total: 2 },
+                { id: "t2", number: 12, cardText: "third", done: 2, total: 2 },
             ] },
         ],
     })
@@ -140,6 +140,45 @@ Item {
             const col = item("column-c1")
             dragTo(item("card-t0"), col, col.width / 2, 150)
             compare(movedSpy.count, 0)
+        }
+
+        function numberLabel(cardName) {
+            return findChild(item(cardName), "cardNumber")
+        }
+
+        function test_cards_show_their_number_at_the_bottom_left() {
+            const numbers = { "card-t0": "#1", "card-t1": "#2", "card-t2": "#12" }
+            for (const name in numbers) {
+                const card = item(name)
+                const label = numberLabel(name)
+                compare(label.text, numbers[name])
+                // Bottom left: left edge of the note content, in the lower half.
+                const p = label.mapToItem(card, 0, 0)
+                verify(p.x < card.width / 4, name + " number should be on the left")
+                verify(p.y > card.height / 2, name + " number should be in the lower half")
+            }
+        }
+
+        function test_number_is_gray_and_does_not_collide_with_the_text_or_progress() {
+            for (const name of ["card-t0", "card-t1"]) {
+                const card = item(name)
+                const label = numberLabel(name)
+                compare(label.color.toString(), Theme.noteNumber.toString())
+                verify(label.contentWidth <= label.width, "number is not truncated")
+                const nb = label.mapToItem(card, 0, 0)
+                // Nothing else in the footer row overlaps the number horizontally.
+                for (const child of label.parent.children) {
+                    if (child === label || !child.visible) continue
+                    const cb = child.mapToItem(card, 0, 0)
+                    verify(cb.x >= nb.x + label.width - 1, "footer item overlaps the number")
+                }
+            }
+        }
+
+        function test_clicking_the_number_still_opens_the_task() {
+            mouseClick(numberLabel("card-t1"))
+            compare(clickedSpy.count, 1)
+            compare(clickedSpy.signalArguments[0][0], "t1")
         }
     }
 }

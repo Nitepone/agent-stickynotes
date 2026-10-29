@@ -37,6 +37,8 @@ error that tells the agent to ask you.
 | `task_delete` | Delete a task |
 | `criterion_set` | Tick or untick an acceptance criterion |
 
+Every task has a permanent number shown as `#12`. Every tool (and the REST paths) accepts `#12` or `12` wherever a task id is expected, and task views include `number`, so you can say "look at #12" and the agent can find it. Numbers are never reused after a task is deleted.
+
 Resources: `stickynotes://board` (JSON) and `stickynotes://board.md` (Markdown).
 
 Agents cannot move tasks backwards, skip columns, or change columns at all;

@@ -34,6 +34,7 @@ with default columns is created.
 |---|---|
 | Add a task | **+** at the bottom of a column |
 | Edit a task | Click the sticky note |
+| Refer to a task | Every task has a permanent number (`#12`) at the bottom left of the note and in its dialog. Numbers are never reused. Tell an agent "look at #12"; every agent tool accepts `#12` in place of an id. |
 | Move a task | Drag the note to a position in any column |
 | Delete a task | Drag it onto the trash can (bottom right), or **Delete** in its dialog |
 | Draft requirements and criteria | In a task's dialog, **Draft requirements & criteria**. Claude Code proposes new items from the descriptions; review them, then **Save**. Needs `claude` on your PATH. |

@@ -172,6 +172,7 @@ fn create_task(
     let now = Utc::now();
     let task = Task {
         id: Uuid::new_v4(),
+        number: board.take_number(),
         description: required(&draft.description, "task description")?,
         extended_description: draft.extended_description.trim().to_string(),
         requirements: clean_lines(draft.requirements),
@@ -1018,5 +1019,72 @@ mod tests {
             .insert("future".into(), serde_json::json!(1));
         let back: Board = serde_json::from_str(&serde_json::to_string(&b).unwrap()).unwrap();
         assert_eq!(back, b);
+    }
+
+    // ---- task numbers ----
+
+    fn number_of(b: &Board, id: TaskId) -> u64 {
+        b.task(id).unwrap().number
+    }
+
+    #[test]
+    fn new_tasks_get_increasing_numbers_starting_at_one() {
+        let mut b = Board::new_default();
+        let ids: Vec<_> = ["a", "b", "c"]
+            .iter()
+            .map(|d| add_task(&mut b, d))
+            .collect();
+        let numbers: Vec<_> = ids.iter().map(|&id| number_of(&b, id)).collect();
+        assert_eq!(numbers, [1, 2, 3]);
+    }
+
+    #[test]
+    fn numbers_never_change_and_survive_deleting_other_tasks() {
+        let mut b = Board::new_default();
+        let (a, c, d) = (
+            add_task(&mut b, "a"),
+            add_task(&mut b, "c"),
+            add_task(&mut b, "d"),
+        );
+        execute(&mut b, Origin::User, Command::DeleteTask { id: c }).unwrap();
+        assert_eq!((number_of(&b, a), number_of(&b, d)), (1, 3));
+
+        // Moving and editing leave the number alone.
+        execute(&mut b, Origin::Agent, Command::AdvanceTask { id: a }).unwrap();
+        set_refs(&mut b, Origin::User, a, &[(d, Relation::Blocks)]).unwrap();
+        assert_eq!(number_of(&b, a), 1);
+    }
+
+    #[test]
+    fn a_deleted_tasks_number_is_never_reused_even_the_highest() {
+        let mut b = Board::new_default();
+        let a = add_task(&mut b, "a");
+        let last = add_task(&mut b, "last");
+        assert_eq!(number_of(&b, last), 2);
+        execute(&mut b, Origin::User, Command::DeleteTask { id: last }).unwrap();
+        let next = add_task(&mut b, "next");
+        assert_eq!(number_of(&b, next), 3, "2 stays retired");
+        assert_eq!(number_of(&b, a), 1);
+    }
+
+    #[test]
+    fn deleting_a_column_retires_its_numbers_too() {
+        let mut b = Board::new_default();
+        let id = add_task(&mut b, "a");
+        let column = b.locate_task(id).unwrap().0;
+        let column_id = b.columns[column].id;
+        execute(
+            &mut b,
+            Origin::User,
+            Command::DeleteColumn {
+                id: column_id,
+                force: true,
+            },
+        )
+        .unwrap();
+        let mut again = b.clone();
+        again.columns.push(Column::new("Back", ""));
+        let new_id = add_task(&mut again, "b");
+        assert_eq!(number_of(&again, new_id), 2);
     }
 }

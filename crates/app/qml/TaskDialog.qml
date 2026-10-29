@@ -9,6 +9,7 @@ Dialog {
     id: dialog
 
     property string taskId: ""          // empty when creating
+    property int taskNumber: 0          // read-only; assigned when the task is created
     property string columnId: ""
     property string columnTitle: ""
     property string loadedUpdatedAt: ""
@@ -111,6 +112,7 @@ Dialog {
 
     function clearForm() {
         taskId = ""
+        taskNumber = 0
         columnId = ""
         loadedUpdatedAt = ""
         changedExternally = false
@@ -126,6 +128,7 @@ Dialog {
 
     function load(task) {
         taskId = task.id
+        taskNumber = task.number
         columnId = task.columnId
         loadedUpdatedAt = task.updatedAt
         changedExternally = false
@@ -231,6 +234,19 @@ Dialog {
                         onClicked: dialog.reloadRequested(dialog.taskId)
                     }
                 }
+            }
+
+            // The task's permanent number, for referring to it in conversation.
+            Label {
+                objectName: "taskNumber"
+                visible: !dialog.creating
+                text: "#" + dialog.taskNumber
+                color: Theme.noteNumber
+                font.pixelSize: 13
+                font.bold: true
+                ToolTip.visible: numberHover.hovered
+                ToolTip.text: qsTr("Task number: use it to refer to this task, for example when talking to an agent.")
+                HoverHandler { id: numberHover }
             }
 
             SectionLabel { text: qsTr("Description *") }
