@@ -86,8 +86,46 @@ pub struct Task {
     /// Links to other tasks. Every link has a mirror on the other task.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub references: Vec<Reference>,
+    /// Set when the most recent change to this task was made by an agent, so
+    /// the UI can draw attention to it. A change by the user clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_change: Option<AgentChange>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// What an agent did to a task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ChangeKind {
+    /// The agent created the task.
+    Created,
+    /// The agent moved it to another column.
+    Moved,
+    /// The agent ticked or unticked an acceptance criterion.
+    Progress,
+    /// The agent changed its text, requirements, criteria or links.
+    Edited,
+}
+
+impl ChangeKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ChangeKind::Created => "created",
+            ChangeKind::Moved => "moved",
+            ChangeKind::Progress => "progress",
+            ChangeKind::Edited => "edited",
+        }
+    }
+}
+
+/// The latest change an agent made to a task.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AgentChange {
+    pub at: DateTime<Utc>,
+    pub kind: ChangeKind,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -395,6 +433,7 @@ mod tests {
             requirements: Vec::new(),
             acceptance_criteria: Vec::new(),
             references: Vec::new(),
+            agent_change: None,
             created_at: at,
             updated_at: at,
             extra: Map::new(),

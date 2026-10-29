@@ -15,7 +15,7 @@ pub mod store;
 pub use command::{Applied, Command, CriterionDraft, Origin, ReferenceDraft, TaskDraft, TaskPatch};
 pub use error::{Error, Result};
 pub use model::{
-    Board, Column, ColumnId, Criterion, Progress, ProjectSettings, Reference, Relation, Task,
-    TaskId, card_text,
+    AgentChange, Board, ChangeKind, Column, ColumnId, Criterion, Progress, ProjectSettings,
+    Reference, Relation, Task, TaskId, card_text,
 };
 pub use store::{BoardStore, Change, Snapshot};

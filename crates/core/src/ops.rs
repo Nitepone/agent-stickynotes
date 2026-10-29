@@ -1,6 +1,8 @@
 //! Pure command execution against a [`Board`]. No locking, no I/O.
 
-use chrono::Utc;
+use std::collections::HashMap;
+
+use chrono::{DateTime, Utc};
 use serde_json::Map;
 use uuid::Uuid;
 
@@ -8,14 +10,72 @@ use crate::command::{
     Applied, Command, CriterionDraft, Origin, ReferenceDraft, TaskDraft, TaskPatch,
 };
 use crate::error::{Error, Result};
-use crate::model::{Board, Column, ColumnId, Criterion, Reference, Task, TaskId};
+use crate::model::{
+    AgentChange, Board, ChangeKind, Column, ColumnId, Criterion, Reference, Task, TaskId,
+};
 
 /// Validate and apply `cmd` to `board`. On error the board is unchanged.
 pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applied> {
     if origin == Origin::Agent {
         check_agent_rules(board, &cmd)?;
     }
+    let kind = change_kind(&cmd);
+    let before = update_stamps(board);
+    let applied = run(board, cmd)?;
+    track_changes(board, origin, kind, &applied, &before);
+    Ok(applied)
+}
 
+/// How a command changes the task it targets, for the agent-change marker.
+fn change_kind(cmd: &Command) -> ChangeKind {
+    match cmd {
+        Command::CreateTask { .. } => ChangeKind::Created,
+        Command::MoveTask { .. } | Command::AdvanceTask { .. } => ChangeKind::Moved,
+        Command::SetCriterion { .. } => ChangeKind::Progress,
+        _ => ChangeKind::Edited,
+    }
+}
+
+fn update_stamps(board: &Board) -> HashMap<TaskId, DateTime<Utc>> {
+    board.tasks().map(|(_, t)| (t.id, t.updated_at)).collect()
+}
+
+/// Mark every task the command touched: by an agent, so the UI can highlight
+/// it; by the user, which clears the mark (they have seen it). Tasks changed
+/// only as a side effect (the other end of a link) count as edited.
+fn track_changes(
+    board: &mut Board,
+    origin: Origin,
+    kind: ChangeKind,
+    applied: &Applied,
+    before: &HashMap<TaskId, DateTime<Utc>>,
+) {
+    let target = match applied {
+        Applied::Task(id) => Some(*id),
+        _ => None,
+    };
+    for column in &mut board.columns {
+        for task in &mut column.tasks {
+            if before.get(&task.id) == Some(&task.updated_at) {
+                continue;
+            }
+            task.agent_change = match origin {
+                Origin::Agent => Some(AgentChange {
+                    at: task.updated_at,
+                    kind: if target == Some(task.id) {
+                        kind
+                    } else {
+                        ChangeKind::Edited
+                    },
+                    extra: Map::new(),
+                }),
+                Origin::User => None,
+            };
+        }
+    }
+}
+
+fn run(board: &mut Board, cmd: Command) -> Result<Applied> {
     match cmd {
         Command::CreateTask {
             column,
@@ -178,6 +238,7 @@ fn create_task(
         requirements: clean_lines(draft.requirements),
         acceptance_criteria: merge_criteria(&[], draft.acceptance_criteria),
         references: Vec::new(),
+        agent_change: None,
         created_at: now,
         updated_at: now,
         extra: Map::new(),
@@ -1086,5 +1147,214 @@ mod tests {
         again.columns.push(Column::new("Back", ""));
         let new_id = add_task(&mut again, "b");
         assert_eq!(number_of(&again, new_id), 2);
+    }
+
+    // ---- agent change markers ----
+
+    fn change_of(b: &Board, id: TaskId) -> Option<ChangeKind> {
+        b.task(id).unwrap().agent_change.as_ref().map(|c| c.kind)
+    }
+
+    fn criteria_task(b: &mut Board, origin: Origin) -> (TaskId, Uuid) {
+        let Applied::Task(id) = execute(
+            b,
+            origin,
+            Command::CreateTask {
+                column: None,
+                position: None,
+                draft: TaskDraft {
+                    description: "with criteria".into(),
+                    acceptance_criteria: vec![CriterionDraft {
+                        text: "c".into(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap() else {
+            unreachable!()
+        };
+        (id, b.task(id).unwrap().acceptance_criteria[0].id)
+    }
+
+    #[test]
+    fn a_task_created_by_an_agent_is_marked_created() {
+        let mut b = Board::new_default();
+        let (id, _) = criteria_task(&mut b, Origin::Agent);
+        assert_eq!(change_of(&b, id), Some(ChangeKind::Created));
+        let change = b.task(id).unwrap().agent_change.as_ref().unwrap();
+        assert_eq!(change.at, b.task(id).unwrap().updated_at);
+    }
+
+    #[test]
+    fn a_task_created_by_the_user_is_not_marked() {
+        let mut b = Board::new_default();
+        let id = add_task(&mut b, "mine");
+        assert_eq!(change_of(&b, id), None);
+    }
+
+    #[test]
+    fn each_kind_of_agent_change_is_recorded() {
+        let mut b = Board::new_default();
+        let (id, criterion) = criteria_task(&mut b, Origin::User);
+
+        execute(
+            &mut b,
+            Origin::Agent,
+            Command::SetCriterion {
+                task: id,
+                criterion,
+                done: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(change_of(&b, id), Some(ChangeKind::Progress));
+
+        execute(&mut b, Origin::Agent, Command::AdvanceTask { id }).unwrap();
+        assert_eq!(change_of(&b, id), Some(ChangeKind::Moved));
+
+        execute(
+            &mut b,
+            Origin::Agent,
+            Command::UpdateTask {
+                id,
+                patch: TaskPatch {
+                    extended_description: Some("more".into()),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        assert_eq!(change_of(&b, id), Some(ChangeKind::Edited));
+    }
+
+    #[test]
+    fn the_other_end_of_a_link_counts_as_edited() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        set_refs(&mut b, Origin::Agent, a, &[(c, Relation::Blocks)]).unwrap();
+        assert_eq!(change_of(&b, a), Some(ChangeKind::Edited));
+        assert_eq!(
+            change_of(&b, c),
+            Some(ChangeKind::Edited),
+            "its link changed too"
+        );
+    }
+
+    #[test]
+    fn an_agent_deleting_a_task_marks_the_tasks_that_linked_to_it() {
+        let mut b = Board::new_default();
+        let (a, c, d) = (
+            add_task(&mut b, "a"),
+            add_task(&mut b, "c"),
+            add_task(&mut b, "d"),
+        );
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::Blocks)]).unwrap();
+        execute(&mut b, Origin::Agent, Command::DeleteTask { id: c }).unwrap();
+        assert_eq!(change_of(&b, a), Some(ChangeKind::Edited));
+        assert_eq!(change_of(&b, d), None, "unrelated tasks are not marked");
+    }
+
+    #[test]
+    fn a_change_by_the_user_clears_the_marker() {
+        let mut b = Board::new_default();
+        let (id, _) = criteria_task(&mut b, Origin::Agent);
+        assert!(change_of(&b, id).is_some());
+        let to = col(&b, 2);
+        execute(
+            &mut b,
+            Origin::User,
+            Command::MoveTask {
+                id,
+                to_column: to,
+                position: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            change_of(&b, id),
+            None,
+            "moving it yourself means you have seen it"
+        );
+
+        execute(&mut b, Origin::Agent, Command::AdvanceTask { id }).unwrap();
+        assert!(change_of(&b, id).is_some());
+        execute(
+            &mut b,
+            Origin::User,
+            Command::UpdateTask {
+                id,
+                patch: TaskPatch {
+                    description: Some("edited by me".into()),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        assert_eq!(change_of(&b, id), None);
+    }
+
+    #[test]
+    fn untouched_tasks_keep_their_marker() {
+        let mut b = Board::new_default();
+        let (marked, _) = criteria_task(&mut b, Origin::Agent);
+        let other = add_task(&mut b, "other");
+        let to = col(&b, 3);
+        execute(
+            &mut b,
+            Origin::User,
+            Command::MoveTask {
+                id: other,
+                to_column: to,
+                position: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(change_of(&b, marked), Some(ChangeKind::Created));
+    }
+
+    #[test]
+    fn a_change_that_changes_nothing_does_not_mark() {
+        let mut b = Board::new_default();
+        let (id, criterion) = criteria_task(&mut b, Origin::User);
+        // The criterion is already not done: unticking it is a no-op.
+        execute(
+            &mut b,
+            Origin::Agent,
+            Command::SetCriterion {
+                task: id,
+                criterion,
+                done: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(change_of(&b, id), None);
+    }
+
+    #[test]
+    fn a_failed_agent_command_marks_nothing() {
+        let mut b = Board::new_default();
+        let id = add_task(&mut b, "a");
+        let ghost = Uuid::new_v4();
+        assert!(set_refs(&mut b, Origin::Agent, id, &[(ghost, Relation::Blocks)]).is_err());
+        assert_eq!(change_of(&b, id), None);
+    }
+
+    #[test]
+    fn markers_round_trip_and_old_boards_load_without_them() {
+        let mut b = Board::new_default();
+        let (id, _) = criteria_task(&mut b, Origin::Agent);
+        let json = serde_json::to_string(&b).unwrap();
+        assert!(json.contains("\"agent_change\"") && json.contains("\"created\""));
+        let back: Board = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, b);
+        assert_eq!(change_of(&back, id), Some(ChangeKind::Created));
+
+        let plain = serde_json::to_string(&Board::new_default()).unwrap();
+        assert!(
+            !plain.contains("agent_change"),
+            "absent when there is nothing to mark"
+        );
     }
 }
