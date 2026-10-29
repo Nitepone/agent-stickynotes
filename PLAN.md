@@ -456,6 +456,12 @@ Each milestone ends with `cargo fmt --check`, `cargo clippy -D warnings`, and
 - Agent edits show up in the UI live. An open task dialog shows a "changed while editing" banner with Reload.
 - On save, the app detects if the file changed on disk and offers to overwrite. The last board is reopened on launch.
 
+**Added after the first prototype** (each tracked as a ticket on the board itself):
+- Long requirements and criteria wrap and grow in the task dialog.
+- Task references with mirrored back-links (blocks, is blocked by, relates to, duplicates, is duplicated by), also available to agents through `task_update`.
+- Project settings (document prompt, code guidance) that agents read with `project_get` and cannot edit, plus **Agent ▸ Export Claude Code Skill…**.
+- **Draft requirements & criteria** in the task dialog, using Claude Code as a cancellable subprocess behind a `DraftBackend` trait.
+
 **Deviations from the plan above:**
 - A board is always open (startup creates a default one), so the API never returns `503`.
 - The REST API has no column endpoints, since agents cannot modify columns.
