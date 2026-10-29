@@ -1,0 +1,291 @@
+//! The single source of truth shared by the UI and the agent API.
+//!
+//! `BoardStore` owns the open board plus session state (file path, dirty
+//! flag, revision, agent write access). Every mutation goes through
+//! [`BoardStore::apply`]; listeners are notified after each change.
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use crate::command::{Applied, Command, Origin};
+use crate::error::{Error, Result};
+use crate::export_md;
+use crate::model::Board;
+use crate::ops;
+use crate::persist::{self, FileStamp};
+
+/// Emitted after any change to the board or session state.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Change {
+    pub revision: u64,
+    pub origin: Origin,
+}
+
+/// A consistent copy of the store's state.
+#[derive(Debug, Clone)]
+pub struct Snapshot {
+    pub board: Board,
+    pub revision: u64,
+    pub dirty: bool,
+    pub path: Option<PathBuf>,
+    pub agent_write: bool,
+}
+
+type Listener = Box<dyn Fn(Change) + Send + Sync>;
+
+struct State {
+    board: Board,
+    path: Option<PathBuf>,
+    stamp: Option<FileStamp>,
+    dirty: bool,
+    revision: u64,
+    agent_write: bool,
+}
+
+pub struct BoardStore {
+    state: Mutex<State>,
+    listeners: Mutex<Vec<Listener>>,
+}
+
+impl BoardStore {
+    pub fn new(agent_write: bool) -> Arc<Self> {
+        Arc::new(BoardStore {
+            state: Mutex::new(State {
+                board: Board::new_default(),
+                path: None,
+                stamp: None,
+                dirty: false,
+                revision: 1,
+                agent_write,
+            }),
+            listeners: Mutex::new(Vec::new()),
+        })
+    }
+
+    /// Register a callback run (on the mutating thread) after every change.
+    pub fn subscribe(&self, listener: impl Fn(Change) + Send + Sync + 'static) {
+        self.listeners.lock().unwrap().push(Box::new(listener));
+    }
+
+    pub fn snapshot(&self) -> Snapshot {
+        let s = self.lock();
+        Snapshot {
+            board: s.board.clone(),
+            revision: s.revision,
+            dirty: s.dirty,
+            path: s.path.clone(),
+            agent_write: s.agent_write,
+        }
+    }
+
+    /// Run `f` against the current board without cloning it. The store is
+    /// locked while `f` runs, so `f` must not call back into the store.
+    pub fn read<R>(&self, f: impl FnOnce(&Board, u64) -> R) -> R {
+        let s = self.lock();
+        f(&s.board, s.revision)
+    }
+
+    pub fn revision(&self) -> u64 {
+        self.lock().revision
+    }
+
+    pub fn agent_write(&self) -> bool {
+        self.lock().agent_write
+    }
+
+    pub fn set_agent_write(&self, enabled: bool) {
+        self.mutate(Origin::User, |s| {
+            s.agent_write = enabled;
+            Ok(())
+        })
+        .expect("infallible");
+    }
+
+    /// Apply a command. If `expected_revision` is given and the board has
+    /// changed since, nothing is applied and `RevisionConflict` is returned.
+    pub fn apply(
+        &self,
+        origin: Origin,
+        cmd: Command,
+        expected_revision: Option<u64>,
+    ) -> Result<(Applied, u64)> {
+        self.mutate(origin, |s| {
+            if origin == Origin::Agent && !s.agent_write {
+                return Err(Error::AgentWriteDisabled);
+            }
+            if let Some(expected) = expected_revision
+                && expected != s.revision
+            {
+                return Err(Error::RevisionConflict {
+                    expected,
+                    actual: s.revision,
+                });
+            }
+            let applied = ops::execute(&mut s.board, origin, cmd)?;
+            s.dirty = true;
+            Ok((applied, s.revision + 1))
+        })
+    }
+
+    /// Replace the board with a fresh default board.
+    pub fn new_board(&self) {
+        self.mutate(Origin::User, |s| {
+            s.board = Board::new_default();
+            s.path = None;
+            s.stamp = None;
+            s.dirty = false;
+            Ok(())
+        })
+        .expect("infallible");
+    }
+
+    pub fn open(&self, path: &Path) -> Result<()> {
+        let (board, stamp) = persist::load(path)?;
+        self.mutate(Origin::User, |s| {
+            s.board = board;
+            s.path = Some(path.to_path_buf());
+            s.stamp = stamp;
+            s.dirty = false;
+            Ok(())
+        })
+    }
+
+    /// Save to the current path. Unless `force`, refuses to overwrite a file
+    /// that changed on disk since it was loaded or last saved.
+    pub fn save(&self, force: bool) -> Result<()> {
+        self.mutate(Origin::User, |s| {
+            let path = s.path.clone().ok_or(Error::NoPath)?;
+            if !force && s.stamp.is_some() && FileStamp::of(&path) != s.stamp {
+                return Err(Error::ModifiedOnDisk(path));
+            }
+            s.stamp = persist::save(&path, &s.board)?;
+            s.dirty = false;
+            Ok(())
+        })
+    }
+
+    pub fn save_as(&self, path: &Path) -> Result<()> {
+        self.mutate(Origin::User, |s| {
+            s.stamp = persist::save(path, &s.board)?;
+            s.path = Some(path.to_path_buf());
+            s.dirty = false;
+            Ok(())
+        })
+    }
+
+    pub fn to_markdown(&self) -> String {
+        export_md::to_markdown(&self.lock().board)
+    }
+
+    pub fn export_markdown(&self, path: &Path) -> Result<()> {
+        persist::write_atomic(path, self.to_markdown().as_bytes())
+    }
+
+    fn lock(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap()
+    }
+
+    /// Run `f` under the lock; on success bump the revision and notify
+    /// listeners (after releasing the lock, so listeners may read the store).
+    fn mutate<R>(&self, origin: Origin, f: impl FnOnce(&mut State) -> Result<R>) -> Result<R> {
+        let (result, change) = {
+            let mut s = self.lock();
+            let result = f(&mut s)?;
+            s.revision += 1;
+            (
+                result,
+                Change {
+                    revision: s.revision,
+                    origin,
+                },
+            )
+        };
+        for listener in self.listeners.lock().unwrap().iter() {
+            listener(change);
+        }
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    use super::*;
+    use crate::command::TaskDraft;
+
+    fn create() -> Command {
+        Command::CreateTask {
+            column: None,
+            position: None,
+            draft: TaskDraft {
+                description: "t".into(),
+                ..Default::default()
+            },
+        }
+    }
+
+    #[test]
+    fn agent_writes_are_gated() {
+        let store = BoardStore::new(false);
+        let rev = store.revision();
+        assert!(matches!(
+            store.apply(Origin::Agent, create(), None),
+            Err(Error::AgentWriteDisabled)
+        ));
+        assert_eq!(store.revision(), rev);
+        store.apply(Origin::User, create(), None).unwrap();
+        store.set_agent_write(true);
+        store.apply(Origin::Agent, create(), None).unwrap();
+    }
+
+    #[test]
+    fn revision_conflicts_are_detected() {
+        let store = BoardStore::new(true);
+        let rev = store.revision();
+        let (_, new_rev) = store.apply(Origin::Agent, create(), Some(rev)).unwrap();
+        assert_eq!(new_rev, rev + 1);
+        assert!(matches!(
+            store.apply(Origin::Agent, create(), Some(rev)),
+            Err(Error::RevisionConflict { .. })
+        ));
+    }
+
+    #[test]
+    fn listeners_see_changes() {
+        let store = BoardStore::new(true);
+        let seen = Arc::new(AtomicU64::new(0));
+        let s = seen.clone();
+        store.subscribe(move |c| s.store(c.revision, Ordering::SeqCst));
+        store.apply(Origin::User, create(), None).unwrap();
+        assert_eq!(seen.load(Ordering::SeqCst), store.revision());
+    }
+
+    #[test]
+    fn save_open_and_dirty_tracking() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("b.json");
+        let store = BoardStore::new(false);
+        assert!(matches!(store.save(false), Err(Error::NoPath)));
+
+        store.apply(Origin::User, create(), None).unwrap();
+        assert!(store.snapshot().dirty);
+        store.save_as(&path).unwrap();
+        assert!(!store.snapshot().dirty);
+
+        let other = BoardStore::new(false);
+        other.open(&path).unwrap();
+        assert_eq!(other.snapshot().board, store.snapshot().board);
+    }
+
+    #[test]
+    fn save_detects_outside_modification() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("b.json");
+        let store = BoardStore::new(false);
+        store.save_as(&path).unwrap();
+        std::fs::write(&path, "{ \"changed\": true, \"padding\": 1 }").unwrap();
+        assert!(matches!(store.save(false), Err(Error::ModifiedOnDisk(_))));
+        store.save(true).unwrap();
+    }
+}

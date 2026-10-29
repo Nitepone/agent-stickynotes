@@ -1,0 +1,278 @@
+//! Conversion between core types and the JSON shapes the QML views use.
+//! Kept free of Qt so it can be unit tested.
+
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+use stickynotes_core::model::SUGGESTED_DESCRIPTION_CHARS;
+use stickynotes_core::{
+    Applied, Board, CriterionDraft, Error, Snapshot, Task, TaskDraft, TaskPatch, card_text,
+};
+use uuid::Uuid;
+
+/// Most lines of description shown on a card before `[...]`.
+const CARD_MAX_LINES: usize = 6;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BoardVm<'a> {
+    title: &'a str,
+    columns: Vec<ColumnVm<'a>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ColumnVm<'a> {
+    id: Uuid,
+    title: &'a str,
+    description: &'a str,
+    tasks: Vec<CardVm>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CardVm {
+    id: Uuid,
+    card_text: String,
+    done: usize,
+    total: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskVm<'a> {
+    id: Uuid,
+    column_id: Uuid,
+    description: &'a str,
+    extended_description: &'a str,
+    requirements: &'a [String],
+    criteria: Vec<CriterionVm<'a>>,
+    updated_at: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CriterionVm<'a> {
+    id: Uuid,
+    text: &'a str,
+    done: bool,
+}
+
+/// The board as rendered by `BoardView.qml`.
+pub fn board_json(board: &Board) -> String {
+    let vm = BoardVm {
+        title: &board.title,
+        columns: board
+            .columns
+            .iter()
+            .map(|c| ColumnVm {
+                id: c.id,
+                title: &c.title,
+                description: &c.description,
+                tasks: c.tasks.iter().map(card).collect(),
+            })
+            .collect(),
+    };
+    serde_json::to_string(&vm).expect("view model serializes")
+}
+
+fn card(task: &Task) -> CardVm {
+    let p = task.progress();
+    CardVm {
+        id: task.id,
+        card_text: card_text(
+            &task.description,
+            SUGGESTED_DESCRIPTION_CHARS,
+            CARD_MAX_LINES,
+        ),
+        done: p.done,
+        total: p.total,
+    }
+}
+
+/// Full task for `TaskDialog.qml`, or `""` if it no longer exists.
+pub fn task_json(board: &Board, id: Uuid) -> String {
+    let Some((ci, ti)) = board.locate_task(id) else {
+        return String::new();
+    };
+    let t = &board.columns[ci].tasks[ti];
+    let vm = TaskVm {
+        id: t.id,
+        column_id: board.columns[ci].id,
+        description: &t.description,
+        extended_description: &t.extended_description,
+        requirements: &t.requirements,
+        criteria: t
+            .acceptance_criteria
+            .iter()
+            .map(|c| CriterionVm {
+                id: c.id,
+                text: &c.text,
+                done: c.done,
+            })
+            .collect(),
+        updated_at: t.updated_at.to_rfc3339(),
+    };
+    serde_json::to_string(&vm).expect("view model serializes")
+}
+
+/// Shown in the window title, e.g. `Sprint 4 — sprint4.json •`.
+pub fn window_title(s: &Snapshot) -> String {
+    let file = s.path.as_ref().and_then(|p| p.file_name()).map_or_else(
+        || "unsaved".to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    let dirty = if s.dirty { " •" } else { "" };
+    format!("{} — {file}{dirty}", s.board.title)
+}
+
+/// What `TaskDialog.qml` submits.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskForm {
+    description: String,
+    #[serde(default)]
+    extended_description: String,
+    #[serde(default)]
+    requirements: Vec<String>,
+    #[serde(default)]
+    criteria: Vec<CriterionForm>,
+}
+
+#[derive(Deserialize)]
+pub struct CriterionForm {
+    /// Empty or missing for criteria added in the dialog.
+    #[serde(default)]
+    id: String,
+    text: String,
+    #[serde(default)]
+    done: bool,
+}
+
+impl TaskForm {
+    pub fn parse(json: &str) -> Result<Self, String> {
+        serde_json::from_str(json).map_err(|e| format!("malformed task form: {e}"))
+    }
+
+    pub fn into_draft(self) -> TaskDraft {
+        TaskDraft {
+            description: self.description,
+            extended_description: self.extended_description,
+            requirements: self.requirements,
+            acceptance_criteria: criterion_drafts(self.criteria),
+        }
+    }
+
+    pub fn into_patch(self) -> TaskPatch {
+        TaskPatch {
+            description: Some(self.description),
+            extended_description: Some(self.extended_description),
+            requirements: Some(self.requirements),
+            acceptance_criteria: Some(criterion_drafts(self.criteria)),
+        }
+    }
+}
+
+fn criterion_drafts(criteria: Vec<CriterionForm>) -> Vec<CriterionDraft> {
+    criteria
+        .into_iter()
+        .map(|c| CriterionDraft {
+            id: Uuid::parse_str(&c.id).ok(),
+            text: c.text,
+            done: c.done,
+        })
+        .collect()
+}
+
+/// Result object returned by controller invokables: `{ok, id?}` or
+/// `{ok: false, code, message}`.
+pub fn result_json(result: Result<Option<Applied>, Error>) -> String {
+    let value = match result {
+        Ok(applied) => {
+            let id = match applied {
+                Some(Applied::Task(id) | Applied::Column(id)) => Some(id.to_string()),
+                _ => None,
+            };
+            json!({ "ok": true, "id": id })
+        }
+        Err(e) => json!({ "ok": false, "code": error_code(&e), "message": e.to_string() }),
+    };
+    value.to_string()
+}
+
+pub fn error_json(message: &str) -> String {
+    json!({ "ok": false, "code": "error", "message": message }).to_string()
+}
+
+fn error_code(e: &Error) -> &'static str {
+    match e {
+        Error::ColumnNotEmpty(_) => "column_not_empty",
+        Error::ModifiedOnDisk(_) => "modified_on_disk",
+        Error::NoPath => "no_path",
+        Error::Validation(_) => "validation",
+        Error::NotFound { .. } => "not_found",
+        _ => "error",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use stickynotes_core::{BoardStore, Command, Origin};
+
+    #[test]
+    fn board_json_has_card_text_and_progress() {
+        let store = BoardStore::new(false);
+        let form = TaskForm::parse(&format!(
+            r#"{{"description":"{}","criteria":[{{"text":"a","done":true}},{{"text":"b"}}]}}"#,
+            "word ".repeat(60)
+        ))
+        .unwrap();
+        store
+            .apply(
+                Origin::User,
+                Command::CreateTask {
+                    column: None,
+                    position: None,
+                    draft: form.into_draft(),
+                },
+                None,
+            )
+            .unwrap();
+        let json: serde_json::Value =
+            serde_json::from_str(&store.read(|b, _| board_json(b))).unwrap();
+        let card = &json["columns"][0]["tasks"][0];
+        assert!(card["cardText"].as_str().unwrap().ends_with("[...]"));
+        assert_eq!(card["done"], 1);
+        assert_eq!(card["total"], 2);
+    }
+
+    #[test]
+    fn form_keeps_existing_criterion_ids() {
+        let id = Uuid::new_v4();
+        let form = TaskForm::parse(&format!(
+            r#"{{"description":"d","criteria":[{{"id":"{id}","text":"x"}},{{"id":"","text":"y"}}]}}"#
+        ))
+        .unwrap();
+        let patch = form.into_patch();
+        let criteria = patch.acceptance_criteria.unwrap();
+        assert_eq!(criteria[0].id, Some(id));
+        assert_eq!(criteria[1].id, None);
+    }
+
+    #[test]
+    fn result_json_reports_codes() {
+        let v: serde_json::Value =
+            serde_json::from_str(&result_json(Err(Error::ColumnNotEmpty("x".into())))).unwrap();
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["code"], "column_not_empty");
+    }
+
+    #[test]
+    fn window_title_marks_dirty() {
+        let mut s = BoardStore::new(false).snapshot();
+        assert_eq!(window_title(&s), "Untitled board — unsaved");
+        s.dirty = true;
+        s.path = Some("/tmp/x.json".into());
+        assert_eq!(window_title(&s), "Untitled board — x.json •");
+    }
+}
