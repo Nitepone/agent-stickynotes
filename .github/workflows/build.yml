@@ -1,0 +1,173 @@
+name: Build
+
+# Builds a Linux AppImage, a Windows zip (exe + Qt runtime) and a macOS dmg.
+# Each platform is an independent job, so one failing does not stop the others.
+# A version tag (v*) additionally publishes all three on a GitHub release.
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Keep in step with ARG RUST_VERSION in the Dockerfile.
+  RUST_VERSION: "1.93.0"
+  QT_VERSION: "6.8.2"
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux-appimage:
+    name: Linux AppImage
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        run: echo "version=$(scripts/version.sh)" >> "$GITHUB_OUTPUT"
+
+      # The toolchain lives in the Dockerfile; its layers are cached in the
+      # GitHub Actions cache so the image is rebuilt only when it changes.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the build container
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: agent-stickynotes-build:ci
+          build-args: RUST_VERSION=${{ env.RUST_VERSION }}
+          cache-from: type=gha,scope=build-container
+          cache-to: type=gha,scope=build-container,mode=max
+
+      # Cargo's registry and the target directory are mounted into the
+      # container (see scripts/build-linux-container.sh) and cached here.
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/container-cache/cargo/registry
+            target/container-cache/cargo/git
+            target/container-cache/target
+          key: linux-cargo-${{ hashFiles('Cargo.lock', 'Dockerfile') }}
+          restore-keys: linux-cargo-
+
+      - name: Build the AppImage
+        env:
+          IMAGE: agent-stickynotes-build:ci
+          SKIP_IMAGE_BUILD: "1"
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/build-linux-container.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stickynotes-${{ steps.version.outputs.version }}-linux-x86_64
+          path: target/container-cache/target/dist/*.AppImage
+          if-no-files-found: error
+
+  windows-exe:
+    name: Windows exe
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        run: echo "version=$(scripts/version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          cache: true
+
+      - name: Build and package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/package-windows.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stickynotes-${{ steps.version.outputs.version }}-windows-x86_64
+          path: target/dist/*.zip
+          if-no-files-found: error
+
+  macos-dmg:
+    name: macOS dmg
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        run: echo "version=$(scripts/version.sh)" >> "$GITHUB_OUTPUT"
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install "$RUST_VERSION" --profile minimal
+          rustup default "$RUST_VERSION"
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: mac
+          target: desktop
+          arch: clang_64
+          cache: true
+
+      - name: Build and package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/package-macos.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stickynotes-${{ steps.version.outputs.version }}-macos-arm64
+          path: target/dist/*.dmg
+          if-no-files-found: error
+
+  # Only on a version tag, and only when all three platforms built.
+  release:
+    name: GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-appimage, windows-exe, macos-dmg]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: release
+        run: sha256sum -- * > SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

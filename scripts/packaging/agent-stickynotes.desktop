@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Agent Sticky Notes
+GenericName=Kanban board
+Comment=Local kanban board for humans and AI agents
+Exec=stickynotes
+Icon=agent-stickynotes
+Terminal=false
+Categories=Office;ProjectManagement;

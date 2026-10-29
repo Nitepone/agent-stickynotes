@@ -1,0 +1,4 @@
+# The build context is only needed to build the image, which copies nothing
+# from the repository. Keep it tiny.
+*
+!Dockerfile
