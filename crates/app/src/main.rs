@@ -2,6 +2,7 @@ mod context;
 mod controller;
 mod drafting;
 mod settings;
+mod theme;
 mod viewmodel;
 
 use std::path::PathBuf;

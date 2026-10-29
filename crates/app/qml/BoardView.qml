@@ -109,14 +109,14 @@ Item {
                 height: 96
                 radius: Theme.radius
                 color: addColumnMouse.containsMouse ? Theme.columnEditBackground : "transparent"
-                border.color: Theme.subtleText
+                border.color: Theme.secondary
                 border.width: 2
 
                 Label {
                     anchors.centerIn: parent
                     text: qsTr("+  Add column")
                     font.pixelSize: 15
-                    color: Theme.subtleText
+                    color: Theme.link
                 }
                 MouseArea {
                     id: addColumnMouse

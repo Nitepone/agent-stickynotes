@@ -18,6 +18,29 @@ ApplicationWindow {
     title: controller.windowTitle + " — Sticky Notes"
     color: Theme.background
 
+    // Standard controls (buttons, menus, text fields, dialogs) take their
+    // colors from the palette, so they follow the theme too.
+    palette {
+        window: Theme.surface
+        windowText: Theme.text
+        base: Theme.fieldBackground
+        alternateBase: Theme.controlBackground
+        text: Theme.text
+        button: Theme.controlBackground
+        buttonText: Theme.text
+        highlight: Theme.primary
+        highlightedText: Theme.textOnPrimary
+        placeholderText: Theme.subtleText
+        toolTipBase: Theme.surface
+        toolTipText: Theme.text
+        link: Theme.link
+    }
+
+    // The user's theme settings, from the controller.
+    Binding { target: Theme; property: "mode"; value: controller.themeMode }
+    Binding { target: Theme; property: "primaryColor"; value: controller.primaryColor }
+    Binding { target: Theme; property: "secondaryColor"; value: controller.secondaryColor }
+
     BoardController { id: controller }
 
     property var board: ({ title: "", columns: [] })
@@ -358,7 +381,7 @@ ApplicationWindow {
                 Label {
                     id: agentLabel
                     anchors.centerIn: parent
-                    color: "white"
+                    color: Theme.textOnStatus
                     font.bold: true
                     font.pixelSize: 12
                     text: controller.agentWrite ? qsTr("Agent: read & write") : qsTr("Agent: read-only")

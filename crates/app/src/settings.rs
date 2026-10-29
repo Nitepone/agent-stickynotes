@@ -19,6 +19,11 @@ pub struct Settings {
     pub last_file: Option<PathBuf>,
     /// Executable used to draft requirements and criteria (Claude Code).
     pub claude_command: String,
+    /// `"light"` or `"dark"`.
+    pub theme_mode: String,
+    /// Custom accent colors as `#rrggbb`; empty means the theme's default.
+    pub primary_color: String,
+    pub secondary_color: String,
 }
 
 impl Default for Settings {
@@ -28,6 +33,9 @@ impl Default for Settings {
             port: DEFAULT_PORT,
             last_file: None,
             claude_command: "claude".into(),
+            theme_mode: crate::theme::LIGHT.into(),
+            primary_color: String::new(),
+            secondary_color: String::new(),
         }
     }
 }
@@ -97,4 +105,60 @@ fn write_private(path: &Path, contents: &str) -> Result<()> {
 #[cfg(not(unix))]
 fn write_private(path: &Path, contents: &str) -> Result<()> {
     fs::write(path, contents).with_context(|| format!("writing {}", path.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config_in(dir: &Path) -> Config {
+        Config {
+            dir: dir.to_path_buf(),
+        }
+    }
+
+    #[test]
+    fn first_launch_uses_the_default_theme() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = config_in(dir.path()).load_settings();
+        assert_eq!(settings.theme_mode, "light");
+        assert_eq!(settings.primary_color, "");
+        assert_eq!(settings.secondary_color, "");
+    }
+
+    #[test]
+    fn settings_files_from_before_themes_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("settings.json"),
+            r#"{"agent_write": true, "port": 7317}"#,
+        )
+        .unwrap();
+        let settings = config_in(dir.path()).load_settings();
+        assert!(settings.agent_write);
+        assert_eq!(settings.theme_mode, "light");
+    }
+
+    #[test]
+    fn theme_choices_survive_a_restart() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_in(dir.path());
+        let mut settings = config.load_settings();
+        settings.theme_mode = "dark".into();
+        settings.primary_color = "#ff8800".into();
+        settings.secondary_color = "#00aa99".into();
+        config.save_settings(&settings).unwrap();
+
+        let restored = config_in(dir.path()).load_settings();
+        assert_eq!(restored.theme_mode, "dark");
+        assert_eq!(restored.primary_color, "#ff8800");
+        assert_eq!(restored.secondary_color, "#00aa99");
+    }
+
+    #[test]
+    fn a_corrupt_settings_file_falls_back_to_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("settings.json"), "{ not json").unwrap();
+        assert_eq!(config_in(dir.path()).load_settings().theme_mode, "light");
+    }
 }

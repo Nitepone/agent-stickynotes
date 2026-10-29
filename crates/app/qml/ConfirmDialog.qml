@@ -60,7 +60,7 @@ Dialog {
             text: dialog.confirmText
             visible: dialog.destructive
             palette.button: Theme.danger
-            palette.buttonText: "white"
+            palette.buttonText: Theme.textOnDanger
             DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
         }
     }

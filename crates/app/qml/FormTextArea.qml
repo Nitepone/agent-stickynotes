@@ -11,8 +11,8 @@ TextArea {
     topPadding: 6
     bottomPadding: 6
     background: Rectangle {
-        color: "white"
+        color: Theme.fieldBackground
         radius: 3
-        border.color: area.activeFocus ? Theme.dropIndicator : "#b8bec8"
+        border.color: area.activeFocus ? Theme.primary : Theme.fieldBorder
     }
 }

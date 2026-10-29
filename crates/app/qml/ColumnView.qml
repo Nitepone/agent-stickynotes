@@ -86,7 +86,7 @@ Item {
                     visible: root.editMode
                     text: "☰"
                     font.pixelSize: 16
-                    color: Theme.subtleText
+                    color: Theme.link
 
                     MouseArea {
                         id: grip
@@ -192,8 +192,8 @@ Item {
                 font.pixelSize: 20
                 background: Rectangle {
                     radius: 6
-                    color: addButton.down ? "#bcc4d1" : addButton.hovered ? "#cdd3dd" : "transparent"
-                    border.color: "#b8bec8"
+                    color: addButton.down ? Theme.controlDown : addButton.hovered ? Theme.controlHover : "transparent"
+                    border.color: Theme.fieldBorder
                 }
                 onClicked: root.addTaskClicked()
                 ToolTip.visible: hovered

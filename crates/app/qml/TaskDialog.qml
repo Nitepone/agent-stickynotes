@@ -214,7 +214,7 @@ Dialog {
                 visible: dialog.changedExternally || dialog.deletedExternally
                 implicitHeight: bannerRow.implicitHeight + 16
                 radius: 6
-                color: "#fef3c7"
+                color: Theme.bannerBackground
                 border.color: Theme.warning
 
                 RowLayout {
@@ -241,7 +241,7 @@ Dialog {
                 objectName: "taskNumber"
                 visible: !dialog.creating
                 text: "#" + dialog.taskNumber
-                color: Theme.noteNumber
+                color: Theme.subtleText
                 font.pixelSize: 13
                 font.bold: true
                 ToolTip.visible: numberHover.hovered
@@ -325,7 +325,7 @@ Dialog {
                 visible: dialog.generationNote !== ""
                 text: dialog.generationNote
                 wrapMode: Text.Wrap
-                color: dialog.generationNoteIsError ? Theme.danger : Theme.progressDone
+                color: dialog.generationNoteIsError ? Theme.danger : Theme.success
             }
 
             SectionLabel { text: qsTr("Requirements") }
@@ -438,7 +438,7 @@ Dialog {
                         contentItem: Label {
                             text: parent.text
                             elide: Text.ElideRight
-                            color: Theme.dropIndicator
+                            color: Theme.link
                             font.underline: parent.hovered
                         }
                         ToolTip.visible: hovered

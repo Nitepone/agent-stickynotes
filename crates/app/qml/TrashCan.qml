@@ -14,14 +14,14 @@ Rectangle {
     implicitWidth: 48
     implicitHeight: 48
     radius: width / 2
-    color: hot ? Theme.danger : "white"
+    color: hot ? Theme.danger : Theme.fieldBackground
     border.color: Theme.danger
     border.width: 2
     opacity: hot || dragInProgress ? 1.0 : 0.55
     scale: hot ? 1.15 : 1.0
     Behavior on scale { NumberAnimation { duration: 120 } }
 
-    readonly property color ink: hot ? "white" : Theme.danger
+    readonly property color ink: hot ? Theme.textOnDanger : Theme.danger
 
     // Simple trash-can glyph.
     Item {

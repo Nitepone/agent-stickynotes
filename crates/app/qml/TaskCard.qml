@@ -53,7 +53,7 @@ Item {
             anchors.fill: parent
             radius: 4
             color: Theme.note
-            border.color: mouse.containsMouse ? "#c9b85a" : "transparent"
+            border.color: mouse.containsMouse ? Theme.noteHoverBorder : "transparent"
         }
 
         ColumnLayout {
@@ -90,13 +90,13 @@ Item {
                     visible: parent.hasProgress
                     implicitHeight: 6
                     radius: 3
-                    color: "#1f000000"
+                    color: Theme.progressTrack
 
                     Rectangle {
                         width: parent.width * root.task.done / Math.max(1, root.task.total)
                         height: parent.height
                         radius: 3
-                        color: parent.parent.complete ? Theme.progressDone : Theme.progress
+                        color: parent.parent.complete ? Theme.progressDone : Theme.primary
                     }
                 }
 
@@ -107,7 +107,7 @@ Item {
                     text: "\u2713 " + root.task.done + "/" + root.task.total
                     font.pixelSize: 12
                     font.bold: true
-                    color: parent.complete ? Theme.progressDone : Theme.subtleText
+                    color: parent.complete ? Theme.noteDoneText : Theme.noteSubtleText
                 }
             }
         }

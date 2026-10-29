@@ -24,6 +24,9 @@ pub mod qobject {
         #[qproperty(bool, has_path)]
         #[qproperty(bool, agent_write)]
         #[qproperty(QString, endpoint)]
+        #[qproperty(QString, theme_mode)]
+        #[qproperty(QString, primary_color)]
+        #[qproperty(QString, secondary_color)]
         #[qproperty(bool, generating)]
         #[qproperty(QString, generator_name)]
         #[qproperty(QString, screenshot_request)]
@@ -93,6 +96,17 @@ pub mod qobject {
         fn set_agent_write_enabled(self: &BoardController, enabled: bool);
         #[qinvokable]
         fn claude_setup_command(self: &BoardController) -> QString;
+
+        /// Theme choices. They apply immediately and are saved. These return false if the value is not valid and was ignored.
+        #[qinvokable]
+        fn choose_theme_mode(self: Pin<&mut BoardController>, mode: &QString) -> bool;
+        #[qinvokable]
+        fn choose_primary_color(self: Pin<&mut BoardController>, color: &QString) -> bool;
+        #[qinvokable]
+        fn choose_secondary_color(self: Pin<&mut BoardController>, color: &QString) -> bool;
+        /// Back to the theme's default primary and secondary colors.
+        #[qinvokable]
+        fn reset_theme_colors(self: Pin<&mut BoardController>);
         #[qinvokable]
         fn save_screenshot(self: &BoardController, path: &QString) -> bool;
 
@@ -122,6 +136,7 @@ use uuid::Uuid;
 
 use crate::context;
 use crate::drafting::CancelToken;
+use crate::theme;
 use crate::viewmodel::{self, TaskForm};
 
 #[derive(Default)]
@@ -132,6 +147,9 @@ pub struct BoardControllerRust {
     has_path: bool,
     agent_write: bool,
     endpoint: QString,
+    theme_mode: QString,
+    primary_color: QString,
+    secondary_color: QString,
     generating: bool,
     generator_name: QString,
     /// Set while a generation runs, so it can be cancelled.
@@ -148,6 +166,17 @@ impl cxx_qt::Initialize for qobject::BoardController {
             .set_endpoint(QString::from(ctx.endpoint.as_str()));
         self.as_mut()
             .set_generator_name(QString::from(ctx.drafter.name()));
+        {
+            let settings = ctx.settings.lock().unwrap().clone();
+            self.as_mut()
+                .set_theme_mode(QString::from(theme::normalize_mode(&settings.theme_mode)));
+            // Stored colors that are no longer valid fall back to the default.
+            let color = |c: &str| theme::normalize_color(c).unwrap_or_default();
+            self.as_mut()
+                .set_primary_color(QString::from(color(&settings.primary_color).as_str()));
+            self.as_mut()
+                .set_secondary_color(QString::from(color(&settings.secondary_color).as_str()));
+        }
         if let Ok(request) = std::env::var("STICKYNOTES_SCREENSHOT") {
             self.as_mut()
                 .set_screenshot_request(QString::from(request.as_str()));
@@ -308,6 +337,47 @@ impl qobject::BoardController {
 
     fn export_skill(&self, url: &QUrl) -> QString {
         file_op(url, |path| context::get().store.export_skill(&path))
+    }
+
+    fn choose_theme_mode(mut self: Pin<&mut Self>, mode: &QString) -> bool {
+        let text = String::from(mode);
+        let mode = theme::normalize_mode(&text);
+        // Only "light" and "dark" are modes; unknown text is not silently "light".
+        if !text.trim().eq_ignore_ascii_case(mode) {
+            return false;
+        }
+        self.as_mut().set_theme_mode(QString::from(mode));
+        context::get().update_settings(|s| s.theme_mode = mode.into());
+        true
+    }
+
+    fn choose_primary_color(mut self: Pin<&mut Self>, color: &QString) -> bool {
+        let Some(color) = theme::normalize_color(&String::from(color)) else {
+            return false;
+        };
+        self.as_mut()
+            .set_primary_color(QString::from(color.as_str()));
+        context::get().update_settings(|s| s.primary_color = color);
+        true
+    }
+
+    fn choose_secondary_color(mut self: Pin<&mut Self>, color: &QString) -> bool {
+        let Some(color) = theme::normalize_color(&String::from(color)) else {
+            return false;
+        };
+        self.as_mut()
+            .set_secondary_color(QString::from(color.as_str()));
+        context::get().update_settings(|s| s.secondary_color = color);
+        true
+    }
+
+    fn reset_theme_colors(mut self: Pin<&mut Self>) {
+        self.as_mut().set_primary_color(QString::default());
+        self.as_mut().set_secondary_color(QString::default());
+        context::get().update_settings(|s| {
+            s.primary_color.clear();
+            s.secondary_color.clear();
+        });
     }
 
     fn set_agent_write_enabled(&self, enabled: bool) {
