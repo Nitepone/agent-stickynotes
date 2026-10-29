@@ -461,6 +461,9 @@ Each milestone ends with `cargo fmt --check`, `cargo clippy -D warnings`, and
 - Task references with mirrored back-links (blocks, is blocked by, relates to, duplicates, is duplicated by), also available to agents through `task_update`.
 - Project settings (document prompt, code guidance) that agents read with `project_get` and cannot edit, plus **Agent ▸ Export Claude Code Skill…**.
 - **Draft requirements & criteria** in the task dialog, using Claude Code as a cancellable subprocess behind a `DraftBackend` trait.
+- Permanent task numbers (`#12`), never reused, accepted by every agent tool in place of an id.
+- Light/dark themes with custom primary and secondary colors, all from `Theme.qml` tokens (a test keeps hard-coded colors out of the views), and a preferences page whose sidebar is built from its child sections.
+- Notes an agent changed glow until the user is back (the core records the agent change; an application event filter in C++ detects user input), with a reduced-motion setting.
 
 **Deviations from the plan above:**
 - A board is always open (startup creates a default one), so the API never returns `503`.
