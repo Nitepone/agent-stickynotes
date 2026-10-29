@@ -69,6 +69,17 @@ QtObject {
     readonly property color progressTrack: "#26000000"
     readonly property color progressDone: "#16a34a"
 
+    // ---- Notes an agent changed -------------------------------------------
+    // The glow is green for now; this is the one place to change it (or to
+    // derive it from a theme later).
+
+    readonly property color glow: "#22c55e"
+    readonly property color glowCore: "#bbf7d0"        // the bright head of the moving highlight
+    readonly property color sheen: "#66ffffff"         // the band that sweeps across an edited note
+    readonly property int glowRotationMs: 3000         // one trip around the note
+    readonly property int glowSheenMs: 2400            // one sweep across the note
+    readonly property int glowFadeMs: 20000            // fade after the user is back
+
     // ---- Status ----------------------------------------------------------
 
     readonly property color warning: dark ? "#fbbf24" : "#a84a08"

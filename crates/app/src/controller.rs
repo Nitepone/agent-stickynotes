@@ -12,6 +12,11 @@ pub mod qobject {
         type QUrl = cxx_qt_lib::QUrl;
         include!("stickynotes/cpp/screenshot.h");
         fn save_window_screenshot(path: &QString) -> bool;
+        include!("stickynotes/cpp/activity.h");
+        fn install_activity_filter();
+        fn last_activity_ms() -> i64;
+        fn simulate_user_activity();
+        fn simulate_synthetic_activity();
     }
 
     #[auto_cxx_name]
@@ -24,6 +29,9 @@ pub mod qobject {
         #[qproperty(bool, has_path)]
         #[qproperty(bool, agent_write)]
         #[qproperty(QString, endpoint)]
+        #[qproperty(bool, reduce_motion)]
+        #[qproperty(QString, motion_setting)]
+        #[qproperty(i64, last_interaction_ms)]
         #[qproperty(QString, theme_mode)]
         #[qproperty(QString, primary_color)]
         #[qproperty(QString, secondary_color)]
@@ -97,6 +105,13 @@ pub mod qobject {
         #[qinvokable]
         fn claude_setup_command(self: &BoardController) -> QString;
 
+        /// "system", "on" or "off". Returns false for anything else.
+        #[qinvokable]
+        fn choose_motion_setting(self: Pin<&mut BoardController>, setting: &QString) -> bool;
+        /// Remember when the user last used the app (ms since the epoch).
+        #[qinvokable]
+        fn record_interaction(self: Pin<&mut BoardController>, ms: i64);
+
         /// Theme choices. They apply immediately and are saved. These return false if the value is not valid and was ignored.
         #[qinvokable]
         fn choose_theme_mode(self: Pin<&mut BoardController>, mode: &QString) -> bool;
@@ -109,6 +124,14 @@ pub mod qobject {
         fn reset_theme_colors(self: Pin<&mut BoardController>);
         #[qinvokable]
         fn save_screenshot(self: &BoardController, path: &QString) -> bool;
+
+        /// When the user last gave the app input (ms since the epoch; 0 if
+        /// never). Polled by the window to drive the glow of changed notes.
+        #[qinvokable]
+        fn last_input_ms(self: &BoardController) -> i64;
+        /// Dev aid: deliver a mouse move as the system would.
+        #[qinvokable]
+        fn simulate_activity(self: &BoardController, counted: bool);
 
         /// Draft requirements and criteria for the task form (JSON) in the
         /// background; the outcome arrives through `generation_finished`.
@@ -136,8 +159,8 @@ use uuid::Uuid;
 
 use crate::context;
 use crate::drafting::CancelToken;
-use crate::theme;
 use crate::viewmodel::{self, TaskForm};
+use crate::{motion, theme};
 
 #[derive(Default)]
 pub struct BoardControllerRust {
@@ -147,6 +170,9 @@ pub struct BoardControllerRust {
     has_path: bool,
     agent_write: bool,
     endpoint: QString,
+    reduce_motion: bool,
+    motion_setting: QString,
+    last_interaction_ms: i64,
     theme_mode: QString,
     primary_color: QString,
     secondary_color: QString,
@@ -168,6 +194,12 @@ impl cxx_qt::Initialize for qobject::BoardController {
             .set_generator_name(QString::from(ctx.drafter.name()));
         {
             let settings = ctx.settings.lock().unwrap().clone();
+            let motion = motion::normalize_setting(&settings.reduce_motion);
+            self.as_mut().set_motion_setting(QString::from(motion));
+            self.as_mut()
+                .set_reduce_motion(motion::effective(motion, ctx.system_reduced_motion));
+            self.as_mut()
+                .set_last_interaction_ms(settings.last_interaction_ms);
             self.as_mut()
                 .set_theme_mode(QString::from(theme::normalize_mode(&settings.theme_mode)));
             // Stored colors that are no longer valid fall back to the default.
@@ -371,6 +403,29 @@ impl qobject::BoardController {
         true
     }
 
+    fn choose_motion_setting(mut self: Pin<&mut Self>, setting: &QString) -> bool {
+        let text = String::from(setting);
+        let setting = motion::normalize_setting(&text);
+        if !text.trim().eq_ignore_ascii_case(setting) {
+            return false;
+        }
+        let ctx = context::get();
+        self.as_mut().set_motion_setting(QString::from(setting));
+        self.as_mut()
+            .set_reduce_motion(motion::effective(setting, ctx.system_reduced_motion));
+        ctx.update_settings(|s| s.reduce_motion = setting.into());
+        true
+    }
+
+    fn record_interaction(mut self: Pin<&mut Self>, ms: i64) {
+        // Only ever moves forward, so a late or repeated call cannot make
+        // notes the user already saw glow again.
+        if ms > *self.last_interaction_ms() {
+            self.as_mut().set_last_interaction_ms(ms);
+            context::get().update_settings(|s| s.last_interaction_ms = ms);
+        }
+    }
+
     fn reset_theme_colors(mut self: Pin<&mut Self>) {
         self.as_mut().set_primary_color(QString::default());
         self.as_mut().set_secondary_color(QString::default());
@@ -392,6 +447,18 @@ impl qobject::BoardController {
 
     fn save_screenshot(&self, path: &QString) -> bool {
         qobject::save_window_screenshot(path)
+    }
+
+    fn last_input_ms(&self) -> i64 {
+        qobject::last_activity_ms()
+    }
+
+    fn simulate_activity(&self, counted: bool) {
+        if counted {
+            qobject::simulate_user_activity();
+        } else {
+            qobject::simulate_synthetic_activity();
+        }
     }
 
     fn start_generation(mut self: Pin<&mut Self>, form: &QString) {

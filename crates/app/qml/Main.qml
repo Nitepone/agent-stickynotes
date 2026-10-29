@@ -48,6 +48,42 @@ ApplicationWindow {
     property bool editMode: false
     property bool refreshPending: false
     property bool preferencesOpen: false
+
+    // Notes an agent changed glow until the user has been back for a while.
+    GlowTracker {
+        id: glow
+        savedInteraction: controller.lastInteractionMs
+    }
+    property double lastNotified: 0
+    property double lastPersisted: 0
+
+    // The user did something at `when` (ms since the epoch).
+    function userInteracted(when) {
+        glow.interact(when)
+        if (when - lastPersisted > 5000) {
+            lastPersisted = when
+            controller.recordInteraction(when)
+        }
+    }
+    // Coming back to the window counts. (Not while a dev screenshot run drives
+    // the app: there the window is activated at launch, which would hide the
+    // difference between input and no input.)
+    onActiveChanged: if (active && controller.screenshotRequest === "") userInteracted(Date.now())
+
+    // Input is observed by an event filter in C++ (it cannot be hidden by,
+    // or take events from, any view); we poll what it saw.
+    Timer {
+        interval: 250
+        repeat: true
+        running: true
+        onTriggered: {
+            const when = controller.lastInputMs()
+            if (when > window.lastNotified) {
+                window.lastNotified = when
+                window.userInteracted(when)
+            }
+        }
+    }
     property bool closeConfirmed: false
     readonly property bool dragging: dragLayer.children.length > 0
 
@@ -61,6 +97,7 @@ ApplicationWindow {
         refreshPending = false
         board = JSON.parse(controller.boardJson)
         linkCandidates = buildLinkCandidates(board)
+        glow.sync(board)
         if (taskDialog.visible && taskDialog.taskId !== "")
             taskDialog.boardChanged(controller.taskJson(taskDialog.taskId))
     }
@@ -73,7 +110,7 @@ ApplicationWindow {
     }
 
     // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]]
-    // where scene is board (default), edit, task, newtask, column, agent, project, prefs, theme-demo, theme-reset or generate
+    // where scene is board (default), edit, task, newtask, column, agent, project, prefs, theme-demo, theme-reset, interact, synthetic or generate
     // (generate starts a draft for the first task, using settings.json's claude_command).
     Timer {
         id: screenshotTimer
@@ -91,6 +128,13 @@ ApplicationWindow {
                 else if (scene === "agent") agentDialog.open()
                 else if (scene === "project") projectDialog.openProject(controller.projectJson())
                 else if (scene === "prefs") window.openPreferences()
+                else if (scene === "interact") {
+                    // The user does something: glowing notes start to fade.
+                    controller.simulateActivity(true)
+                } else if (scene === "synthetic") {
+                    // Not the user (e.g. Qt re-sending hover after a re-layout): no fade.
+                    controller.simulateActivity(false)
+                }
                 else if (scene === "theme-reset") {
                     controller.resetThemeColors()
                     window.openPreferences()
@@ -108,6 +152,13 @@ ApplicationWindow {
                 }
                 start()
                 return
+            }
+            if (scene === "interact" || scene === "synthetic" || scene === "board") {
+                const ids = []
+                for (const c of window.board.columns)
+                    for (const t of c.tasks)
+                        if (t.agentChange) ids.push("#" + t.number + "=" + glow.intensity(t.id).toFixed(3))
+                console.log("GLOW", ids.join(" "))
             }
             if (!controller.saveScreenshot(path))
                 console.warn("screenshot failed:", path)
@@ -251,6 +302,7 @@ ApplicationWindow {
     }
 
     onClosing: (close) => {
+        controller.recordInteraction(Date.now())
         if (controller.dirty && !closeConfirmed) {
             close.accepted = false
             guardUnsaved(() => {
@@ -442,6 +494,8 @@ ApplicationWindow {
         id: boardView
         anchors.fill: parent
         enabled: !window.preferencesOpen
+        glowTracker: glow
+        reducedMotion: controller.reduceMotion
         board: window.board
         dragLayer: dragLayer
         editMode: window.editMode
@@ -512,6 +566,8 @@ ApplicationWindow {
             onPrimaryColorChosen: (color) => controller.choosePrimaryColor(color)
             onSecondaryColorChosen: (color) => controller.chooseSecondaryColor(color)
             onResetColorsRequested: controller.resetThemeColors()
+            motionSetting: controller.motionSetting
+            onMotionSettingChosen: (setting) => controller.chooseMotionSetting(setting)
         }
     }
 

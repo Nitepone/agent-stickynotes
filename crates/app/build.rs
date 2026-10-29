@@ -15,6 +15,8 @@ fn main() {
         QmlFile::from("qml/PreferencesSection.qml"),
         QmlFile::from("qml/PreferencesPage.qml"),
         QmlFile::from("qml/ColorChoice.qml"),
+        QmlFile::from("qml/GlowTracker.qml"),
+        QmlFile::from("qml/GlowEdge.qml"),
         QmlFile::from("qml/PersonalizationSection.qml"),
         QmlFile::from("qml/SectionLabel.qml"),
         QmlFile::from("qml/FormTextArea.qml"),

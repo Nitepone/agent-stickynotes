@@ -23,12 +23,15 @@ Item {
         ],
     })
 
+    GlowTracker { id: tracker }
+
     BoardView {
         id: boardView
         width: parent.width
         height: parent.height - 80
         board: scene.board
         dragLayer: dragLayer
+        glowTracker: tracker
     }
 
     // Inside the default offscreen window, over empty board space.
@@ -52,6 +55,10 @@ Item {
         when: windowShown
 
         function init() {
+            tracker.ticker.running = false
+            tracker.records = ({})
+            tracker.lastInteraction = 0
+            boardView.reducedMotion = false
             boardView.editMode = false
             for (const spy of [movedSpy, columnMovedSpy, clickedSpy, titleSpy, addSpy, trashSpy])
                 spy.clear()
@@ -179,6 +186,53 @@ Item {
             mouseClick(numberLabel("card-t1"))
             compare(clickedSpy.count, 1)
             compare(clickedSpy.signalArguments[0][0], "t1")
+        }
+
+        // ---- glow on notes an agent changed ----
+
+        function glowEdgeOf(cardName) {
+            return findChild(item(cardName), "glowEdge")
+        }
+
+        function agentChanged(id, kind) {
+            return { columns: [{ tasks: [{ id: id, agentChange: { at: 5000, kind: kind } }] }] }
+        }
+
+        function test_only_notes_the_tracker_flags_glow() {
+            tracker.sync(agentChanged("t1", "moved"), 6000)
+            verify(glowEdgeOf("card-t1").visible, "flagged note glows")
+            verify(!glowEdgeOf("card-t0").visible, "others do not")
+            verify(!glowEdgeOf("card-t2").visible)
+        }
+
+        function test_the_glow_follows_the_tracker_and_fades() {
+            tracker.sync(agentChanged("t1", "edited"), 6000)
+            compare(glowEdgeOf("card-t1").intensity, 1)
+            verify(glowEdgeOf("card-t1").edited, "edited notes get the sheen")
+            tracker.interact(7000)
+            tracker.tick(17000)
+            verify(Math.abs(glowEdgeOf("card-t1").intensity - 0.5) < 0.001)
+            tracker.tick(27000)
+            verify(!glowEdgeOf("card-t1").visible)
+        }
+
+        function test_reduced_motion_reaches_the_cards() {
+            tracker.sync(agentChanged("t1", "edited"), 6000)
+            const edge = glowEdgeOf("card-t1")
+            verify(findChild(edge, "comet").visible)
+            boardView.reducedMotion = true
+            verify(!findChild(edge, "comet").visible)
+            verify(edge.visible, "the static glow stays")
+        }
+
+        function test_a_glowing_note_still_drags_and_clicks_normally() {
+            tracker.sync(agentChanged("t0", "edited"), 6000)
+            mouseClick(item("card-t0"))
+            compare(clickedSpy.count, 1)
+            const col = item("column-c1")
+            dragTo(item("card-t0"), col, col.width / 2, 150)
+            compare(movedSpy.count, 1)
+            compare(movedSpy.signalArguments[0][0], "t0")
         }
     }
 }

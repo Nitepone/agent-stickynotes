@@ -24,6 +24,12 @@ pub struct Settings {
     /// Custom accent colors as `#rrggbb`; empty means the theme's default.
     pub primary_color: String,
     pub secondary_color: String,
+    /// `"system"`, `"on"` or `"off"`: whether to replace animations with
+    /// static effects.
+    pub reduce_motion: String,
+    /// When the user last used the app (milliseconds since the Unix epoch).
+    /// Notes an agent changed after this glow until the user is back.
+    pub last_interaction_ms: i64,
 }
 
 impl Default for Settings {
@@ -36,6 +42,8 @@ impl Default for Settings {
             theme_mode: crate::theme::LIGHT.into(),
             primary_color: String::new(),
             secondary_color: String::new(),
+            reduce_motion: crate::motion::SYSTEM.into(),
+            last_interaction_ms: 0,
         }
     }
 }
@@ -153,6 +161,21 @@ mod tests {
         assert_eq!(restored.theme_mode, "dark");
         assert_eq!(restored.primary_color, "#ff8800");
         assert_eq!(restored.secondary_color, "#00aa99");
+    }
+
+    #[test]
+    fn motion_and_interaction_defaults_and_persistence() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_in(dir.path());
+        let mut settings = config.load_settings();
+        assert_eq!(settings.reduce_motion, "system");
+        assert_eq!(settings.last_interaction_ms, 0);
+        settings.reduce_motion = "on".into();
+        settings.last_interaction_ms = 1_761_800_000_123;
+        config.save_settings(&settings).unwrap();
+        let restored = config_in(dir.path()).load_settings();
+        assert_eq!(restored.reduce_motion, "on");
+        assert_eq!(restored.last_interaction_ms, 1_761_800_000_123);
     }
 
     #[test]

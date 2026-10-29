@@ -45,6 +45,8 @@ Agents cannot move tasks backwards, skip columns, or change columns at all;
 the core enforces this. All write tools accept `expected_revision`, and a
 mismatch means the board changed and the agent should re-read it.
 
+Notes you change through these tools glow in the window until the user is back, so changes are easy to spot; the user's own edits clear the glow.
+
 Agent edits appear in the window immediately and count as unsaved changes.
 Save the board to keep them.
 

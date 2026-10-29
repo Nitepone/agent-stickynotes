@@ -26,18 +26,21 @@ Item {
     SignalSpy { id: primarySpy; target: personalization; signalName: "primaryColorChosen" }
     SignalSpy { id: secondarySpy; target: personalization; signalName: "secondaryColorChosen" }
     SignalSpy { id: resetSpy; target: personalization; signalName: "resetColorsRequested" }
+    SignalSpy { id: motionSpy; target: personalization; signalName: "motionSettingChosen" }
 
     TestCase {
         name: "Preferences"
         when: windowShown
 
         function init() {
-            for (const spy of [backSpy, modeSpy, primarySpy, secondarySpy, resetSpy])
+            for (const spy of [backSpy, modeSpy, primarySpy, secondarySpy, resetSpy, motionSpy])
                 spy.clear()
             page.currentIndex = 0
             personalization.themeMode = "light"
             personalization.primaryColor = ""
             personalization.secondaryColor = ""
+            personalization.motionSetting = "system"
+            find("motionBox").currentIndex = 0
             Theme.mode = "light"
             Theme.primaryColor = ""
             Theme.secondaryColor = ""
@@ -229,6 +232,26 @@ Item {
             compare(resetSpy.count, 1)
             personalization.primaryColor = ""
             verify(!reset.enabled)
+        }
+
+        // ---- motion ------------------------------------------------------
+
+        function test_motion_selector_shows_the_current_setting() {
+            const box = find("motionBox")
+            compare(box.currentValue, "system")
+            personalization.motionSetting = "on"
+            compare(box.currentValue, "on")
+            personalization.motionSetting = "off"
+            compare(box.currentValue, "off")
+            compare(box.count, 3)
+        }
+
+        function test_choosing_a_motion_setting_emits_it() {
+            const box = find("motionBox")
+            box.currentIndex = 1
+            box.activated(1)
+            compare(motionSpy.count, 1)
+            compare(motionSpy.signalArguments[0][0], "on")
         }
     }
 }

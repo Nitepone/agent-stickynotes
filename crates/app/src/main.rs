@@ -1,6 +1,7 @@
 mod context;
 mod controller;
 mod drafting;
+mod motion;
 mod settings;
 mod theme;
 mod viewmodel;
@@ -61,9 +62,11 @@ fn main() -> Result<()> {
         endpoint,
         token,
         drafter: Arc::new(ClaudeCodeBackend::new(claude_command)),
+        system_reduced_motion: motion::system_prefers_reduced_motion(),
     });
 
     let mut app = QGuiApplication::new();
+    controller::qobject::install_activity_filter();
     let mut engine = QQmlApplicationEngine::new();
     if let Some(engine) = engine.as_mut() {
         engine.load(&QUrl::from("qrc:/qt/qml/StickyNotes/qml/Main.qml"));

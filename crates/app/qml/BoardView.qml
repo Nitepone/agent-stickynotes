@@ -10,6 +10,8 @@ Item {
     required property var board         // { title, columns }
     required property Item dragLayer
     property bool editMode: false
+    property var glowTracker: null
+    property bool reducedMotion: false
 
     signal taskClicked(string taskId)
     signal addTaskClicked(var column)
@@ -94,6 +96,8 @@ Item {
                     height: row.height
                     dragLayer: root.dragLayer
                     editMode: root.editMode
+                    glowTracker: root.glowTracker
+                    reducedMotion: root.reducedMotion
                     onTitleClicked: root.columnTitleClicked(modelData)
                     onAddTaskClicked: root.addTaskClicked(modelData)
                     onDeleteClicked: root.deleteColumnClicked(modelData)

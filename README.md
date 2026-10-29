@@ -40,6 +40,7 @@ with default columns is created.
 | Draft requirements and criteria | In a task's dialog, **Draft requirements & criteria**. Claude Code proposes new items from the descriptions; review them, then **Save**. Needs `claude` on your PATH. |
 | Link tasks | In a task's dialog, **References**: pick a relation and a task, **Add**, then **Save**. The other task shows the matching reverse link. |
 | Give agents project instructions | **Board ▸ Project Settings…** (document prompt, code guidance); **Agent ▸ Export Claude Code Skill…** writes them into a `SKILL.md` |
+| See what an agent changed | Notes an agent created, moved, edited or ticked criteria on **glow green** at the edges (a highlight circles the note; an edited note also gets a sheen). The glow stays until you are back, then fades over 20 seconds. Your own changes never glow. With reduced motion (Preferences ▸ Personalization ▸ Motion, or the desktop's setting) the glow is still. |
 | Change the look | **File ▸ Preferences…** (Ctrl+,) or the **Preferences** button: Personalization has Light/Dark and primary and secondary accent colors (presets, a hex code, or a picker), plus a reset. Changes apply immediately and are remembered. |
 | Edit a column | Click the column title |
 | Reorder / add / delete columns | **Edit columns** (toolbar) or **Board ▸ Edit Columns** |
@@ -72,7 +73,7 @@ cargo test -p stickynotes real_claude -- --ignored   # optional: one real Claude
 
 Headless screenshots for UI checks:
 `STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]] QT_QPA_PLATFORM=offscreen cargo run -- board.json`,
-where `scene` is `board`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`, `theme-demo`, `theme-reset` or `generate`.
+where `scene` is `board`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`, `theme-demo`, `theme-reset`, `interact`, `synthetic` or `generate`.
 
 ### Layout
 

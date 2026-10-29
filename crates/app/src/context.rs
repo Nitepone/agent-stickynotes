@@ -18,6 +18,8 @@ pub struct AppContext {
     /// Drafts requirements and criteria. Swap the implementation to change
     /// the LLM that is used.
     pub drafter: Arc<dyn DraftBackend>,
+    /// What the desktop says about reduced motion, read once at startup.
+    pub system_reduced_motion: bool,
 }
 
 impl AppContext {

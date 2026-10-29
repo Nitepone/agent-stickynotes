@@ -36,9 +36,17 @@ struct ColumnVm<'a> {
 struct CardVm {
     id: Uuid,
     number: u64,
+    /// Set when an agent made the latest change: `{at: ms since epoch, kind}`.
+    agent_change: Option<AgentChangeVm>,
     card_text: String,
     done: usize,
     total: usize,
+}
+
+#[derive(Serialize)]
+struct AgentChangeVm {
+    at: i64,
+    kind: &'static str,
 }
 
 #[derive(Serialize)]
@@ -96,6 +104,10 @@ fn card(task: &Task) -> CardVm {
     CardVm {
         id: task.id,
         number: task.number,
+        agent_change: task.agent_change.as_ref().map(|c| AgentChangeVm {
+            at: c.at.timestamp_millis(),
+            kind: c.kind.as_str(),
+        }),
         card_text: card_text(
             &task.description,
             SUGGESTED_DESCRIPTION_CHARS,
@@ -524,5 +536,37 @@ mod tests {
         assert_eq!(v["ok"], false);
         assert_eq!(v["code"], "unavailable");
         assert_eq!(v["message"], "not installed");
+    }
+
+    #[test]
+    fn cards_carry_the_agent_change_only_when_there_is_one() {
+        use stickynotes_core::{Command, Origin};
+        let store = BoardStore::new(true);
+        let create = |origin| {
+            store
+                .apply(
+                    origin,
+                    Command::CreateTask {
+                        column: None,
+                        position: None,
+                        draft: TaskForm::parse(r#"{"description":"t"}"#)
+                            .unwrap()
+                            .into_draft(),
+                    },
+                    None,
+                )
+                .unwrap();
+        };
+        create(Origin::User);
+        create(Origin::Agent);
+        let json: serde_json::Value =
+            serde_json::from_str(&store.read(|b, _| board_json(b))).unwrap();
+        let tasks = &json["columns"][0]["tasks"];
+        assert!(
+            tasks[0]["agentChange"].is_null(),
+            "the user's own task is not marked"
+        );
+        assert_eq!(tasks[1]["agentChange"]["kind"], "created");
+        assert!(tasks[1]["agentChange"]["at"].as_i64().unwrap() > 1_700_000_000_000);
     }
 }

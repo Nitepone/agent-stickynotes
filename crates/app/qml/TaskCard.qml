@@ -11,6 +11,11 @@ Item {
     required property var task          // { id, number, cardText, done, total }
     required property Item dragLayer
     property bool dragEnabled: true
+    // Set while an agent's change to this note has not been seen yet.
+    property real glow: 0               // 0 to 1
+    property bool glowEdited: false     // the agent edited its content
+    property bool reducedMotion: false
+    property bool glowActive: true      // false while scrolled out of view
     readonly property bool isTaskCard: true
     readonly property bool dragging: mouse.drag.active
 
@@ -54,6 +59,16 @@ Item {
             radius: 4
             color: Theme.note
             border.color: mouse.containsMouse ? Theme.noteHoverBorder : "transparent"
+        }
+
+        GlowEdge {
+            objectName: "glowEdge"
+            anchors.fill: parent
+            intensity: root.glow
+            edited: root.glowEdited
+            reducedMotion: root.reducedMotion
+            active: root.glowActive
+            cornerRadius: 4
         }
 
         ColumnLayout {

@@ -12,6 +12,9 @@ Item {
     required property var column        // { id, title, description, tasks }
     required property Item dragLayer
     property bool editMode: false
+    // Decides which notes glow (see GlowTracker); null means none do.
+    property var glowTracker: null
+    property bool reducedMotion: false
     readonly property bool isColumn: true
     readonly property bool dragging: grip.drag.active
 
@@ -166,6 +169,12 @@ Item {
                             width: cards.width
                             dragLayer: root.dragLayer
                             dragEnabled: !root.editMode
+                            glow: root.glowTracker ? root.glowTracker.intensity(modelData.id) : 0
+                            glowEdited: root.glowTracker ? root.glowTracker.edited(modelData.id) : false
+                            reducedMotion: root.reducedMotion
+                            // Only notes near the visible part of the column animate.
+                            glowActive: y + height > flick.contentY - 80
+                                        && y < flick.contentY + flick.height + 80
                             onClicked: root.taskClicked(modelData.id)
                         }
                     }

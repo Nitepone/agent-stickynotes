@@ -13,11 +13,13 @@ PreferencesSection {
     property string themeMode: "light"      // "light" or "dark"
     property string primaryColor: ""        // custom color, or "" for the default
     property string secondaryColor: ""
+    property string motionSetting: "system"     // "system", "on" or "off"
 
     signal themeModeChosen(string mode)
     signal primaryColorChosen(string color)
     signal secondaryColorChosen(string color)
     signal resetColorsRequested()
+    signal motionSettingChosen(string setting)
 
     ScrollView {
         id: scroll
@@ -123,6 +125,41 @@ PreferencesSection {
                 text: qsTr("Reset colors to default")
                 enabled: section.primaryColor !== "" || section.secondaryColor !== ""
                 onClicked: section.resetColorsRequested()
+            }
+
+            Label {
+                Layout.topMargin: 12
+                text: qsTr("Motion")
+                font.pixelSize: 22
+                font.bold: true
+                color: Theme.text
+            }
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Notes an agent changed glow, with a moving highlight and a sheen. With reduced motion they show a still glow instead.")
+                wrapMode: Text.Wrap
+                color: Theme.subtleText
+            }
+            ComboBox {
+                id: motionBox
+                objectName: "motionBox"
+                Layout.preferredWidth: 260
+                textRole: "label"
+                valueRole: "value"
+                model: [
+                    { value: "system", label: qsTr("Follow the system setting") },
+                    { value: "on", label: qsTr("Reduce motion") },
+                    { value: "off", label: qsTr("Allow motion") }
+                ]
+                onActivated: section.motionSettingChosen(currentValue)
+
+                // Shows the stored setting, and keeps doing so after the user
+                // has picked something (a plain binding would be dropped).
+                Binding {
+                    target: motionBox
+                    property: "currentIndex"
+                    value: Math.max(0, motionBox.indexOfValue(section.motionSetting))
+                }
             }
         }
     }
