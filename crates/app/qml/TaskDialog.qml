@@ -15,6 +15,15 @@ Dialog {
     property bool changedExternally: false
     property bool deletedExternally: false
     property string errorText: ""
+    // Every task on the board as { id, columnTitle, text, label }, supplied by
+    // the owner so the dialog can offer link targets.
+    property var linkCandidates: []
+    // [{ value, label }] of the relations a link can have.
+    property var relationOptions: []
+    property string loadedForm: ""
+
+    // Link targets: all tasks except this one.
+    readonly property var linkTargets: linkCandidates.filter(c => c.id !== taskId)
 
     readonly property bool creating: taskId === ""
     readonly property int criteriaDone: {
@@ -27,11 +36,18 @@ Dialog {
     signal saveRequested(string taskId, string columnId, string formJson)
     signal deleteRequested(string taskId)
     signal reloadRequested(string taskId)
+    signal openTaskRequested(string taskId)
+
+    // True if the form differs from what was loaded.
+    function isEdited() {
+        return formJson() !== loadedForm
+    }
 
     function openNew(column) {
         clearForm()
         columnId = column.id
         columnTitle = column.title
+        loadedForm = formJson()
         open()
         descriptionField.forceActiveFocus()
     }
@@ -65,6 +81,7 @@ Dialog {
         extendedField.text = ""
         requirementsModel.clear()
         criteriaModel.clear()
+        referencesModel.clear()
     }
 
     function load(task) {
@@ -80,6 +97,27 @@ Dialog {
         criteriaModel.clear()
         for (const c of task.criteria)
             criteriaModel.append({ cid: c.id, text: c.text, done: c.done })
+        referencesModel.clear()
+        for (const r of task.references)
+            referencesModel.append({
+                tid: r.taskId, relation: r.relation, relationLabel: r.relationLabel,
+                description: r.description, columnTitle: r.columnTitle })
+        targetBox.currentIndex = -1
+        loadedForm = formJson()
+    }
+
+    // Add a link (or change the relation of an existing link to that task).
+    function addReference(targetId, relation) {
+        const target = linkTargets.find(c => c.id === targetId)
+        const option = relationOptions.find(o => o.value === relation)
+        if (!target || !option)
+            return
+        for (let i = referencesModel.count - 1; i >= 0; i--)
+            if (referencesModel.get(i).tid === targetId)
+                referencesModel.remove(i)
+        referencesModel.append({
+            tid: targetId, relation: relation, relationLabel: option.label,
+            description: target.text, columnTitle: target.columnTitle })
     }
 
     function formJson() {
@@ -91,12 +129,21 @@ Dialog {
             const c = criteriaModel.get(i)
             criteria.push({ id: c.cid, text: c.text, done: c.done })
         }
-        return JSON.stringify({
+        const form = {
             description: descriptionField.text,
             extendedDescription: extendedField.text,
             requirements: requirements,
             criteria: criteria,
-        })
+        }
+        // A new task has no id yet, so it cannot be linked until it is saved.
+        if (!creating) {
+            form.references = []
+            for (let i = 0; i < referencesModel.count; i++) {
+                const r = referencesModel.get(i)
+                form.references.push({ task: r.tid, relation: r.relation })
+            }
+        }
+        return JSON.stringify(form)
     }
 
     title: creating ? qsTr("New task in %1").arg(columnTitle) : qsTr("Task in %1").arg(columnTitle)
@@ -108,6 +155,7 @@ Dialog {
 
     ListModel { id: requirementsModel }
     ListModel { id: criteriaModel }
+    ListModel { id: referencesModel }
 
     contentItem: ScrollView {
         id: scroll
@@ -241,6 +289,98 @@ Dialog {
                 text: qsTr("+ Add criterion")
                 flat: true
                 onClicked: criteriaModel.append({ cid: "", text: "", done: false })
+            }
+
+            SectionLabel { text: qsTr("References") }
+            Label {
+                Layout.fillWidth: true
+                visible: dialog.creating
+                text: qsTr("Save the task first, then reopen it to link it to other tasks.")
+                color: Theme.subtleText
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+            }
+            Repeater {
+                model: referencesModel
+                delegate: RowLayout {
+                    required property int index
+                    required property string tid
+                    required property string relationLabel
+                    required property string description
+                    required property string columnTitle
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Label {
+                        objectName: "referenceRelation"
+                        text: parent.relationLabel
+                        color: Theme.subtleText
+                        Layout.minimumWidth: 100
+                    }
+                    Button {
+                        objectName: "referenceLink"
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        flat: true
+                        text: parent.description
+                        contentItem: Label {
+                            text: parent.text
+                            elide: Text.ElideRight
+                            color: Theme.dropIndicator
+                            font.underline: parent.hovered
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Open this task")
+                        onClicked: dialog.openTaskRequested(parent.tid)
+                    }
+                    Label {
+                        text: parent.columnTitle
+                        color: Theme.subtleText
+                        font.pixelSize: 12
+                    }
+                    ToolButton {
+                        objectName: "removeReference"
+                        text: "\u2715"
+                        onClicked: referencesModel.remove(parent.index)
+                    }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                visible: !dialog.creating
+                spacing: 6
+
+                ComboBox {
+                    id: relationBox
+                    objectName: "relationBox"
+                    Layout.preferredWidth: 140
+                    model: dialog.relationOptions
+                    textRole: "label"
+                    valueRole: "value"
+                }
+                ComboBox {
+                    id: targetBox
+                    objectName: "targetBox"
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    model: dialog.linkTargets
+                    textRole: "label"
+                    valueRole: "id"
+                    displayText: currentIndex < 0 ? qsTr("Choose a task\u2026") : currentText
+                    currentIndex: -1
+                    // ComboBox selects the first entry whenever its model
+                    // changes; we want an explicit choice.
+                    onCountChanged: currentIndex = -1
+                }
+                Button {
+                    objectName: "addReference"
+                    text: qsTr("Add")
+                    enabled: targetBox.currentIndex >= 0 && relationBox.currentIndex >= 0
+                    onClicked: {
+                        dialog.addReference(targetBox.currentValue, relationBox.currentValue)
+                        targetBox.currentIndex = -1
+                    }
+                }
             }
 
             Label {

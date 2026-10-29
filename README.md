@@ -36,6 +36,7 @@ with default columns is created.
 | Edit a task | Click the sticky note |
 | Move a task | Drag the note to a position in any column |
 | Delete a task | Drag it onto the trash can (bottom right), or **Delete** in its dialog |
+| Link tasks | In a task's dialog, **References**: pick a relation and a task, **Add**, then **Save**. The other task shows the matching reverse link. |
 | Edit a column | Click the column title |
 | Reorder / add / delete columns | **Edit columns** (toolbar) or **Board ▸ Edit Columns** |
 | Save / open / new | **File** menu or toolbar. You are warned before unsaved changes are lost. |

@@ -21,6 +21,7 @@ ApplicationWindow {
     BoardController { id: controller }
 
     property var board: ({ title: "", columns: [] })
+    property var linkCandidates: []
     property bool editMode: false
     property bool refreshPending: false
     property bool closeConfirmed: false
@@ -35,6 +36,7 @@ ApplicationWindow {
         }
         refreshPending = false
         board = JSON.parse(controller.boardJson)
+        linkCandidates = buildLinkCandidates(board)
         if (taskDialog.visible && taskDialog.taskId !== "")
             taskDialog.boardChanged(controller.taskJson(taskDialog.taskId))
     }
@@ -82,6 +84,22 @@ ApplicationWindow {
         if (!r.ok && !quiet)
             messageDialog.inform(qsTr("Something went wrong"), r.message)
         return r
+    }
+
+    // Every task, for the "link to another task" picker.
+    function buildLinkCandidates(b) {
+        const result = []
+        for (const column of b.columns)
+            for (const task of column.tasks) {
+                const text = task.cardText.replace(/\s+/g, " ")
+                result.push({
+                    id: task.id,
+                    columnTitle: column.title,
+                    text: text,
+                    label: column.title + " \u2014 " + (text.length > 60 ? text.slice(0, 60) + "\u2026" : text),
+                })
+            }
+        return result
     }
 
     function columnTitle(columnId) {
@@ -409,6 +427,21 @@ ApplicationWindow {
 
     TaskDialog {
         id: taskDialog
+        linkCandidates: window.linkCandidates
+        relationOptions: JSON.parse(controller.relationOptions())
+        onOpenTaskRequested: (taskId) => {
+            const go = () => {
+                const json = controller.taskJson(taskId)
+                if (json !== "")
+                    openTask(json, window.columnTitle(JSON.parse(json).columnId))
+            }
+            if (isEdited())
+                messageDialog.ask(qsTr("Discard changes?"),
+                                  qsTr("You have unsaved edits in this task. Open the linked task and discard them?"),
+                                  qsTr("Discard and open"), true, go)
+            else
+                go()
+        }
         onSaveRequested: (taskId, columnId, form) => {
             const r = window.result(taskId === "" ? controller.createTask(columnId, form)
                                                   : controller.updateTask(taskId, form), true)

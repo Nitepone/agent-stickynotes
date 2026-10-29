@@ -42,6 +42,22 @@ pub fn to_markdown(board: &Board) -> String {
                     let _ = writeln!(out, "- [{mark}] {}", c.text);
                 }
             }
+            let references: Vec<_> = task
+                .references
+                .iter()
+                .filter_map(|r| board.task(r.task).map(|other| (r.relation, other)))
+                .collect();
+            if !references.is_empty() {
+                out.push_str("\n**References**\n\n");
+                for (relation, other) in references {
+                    let _ = writeln!(
+                        out,
+                        "- {} \"{}\"",
+                        relation.label(),
+                        single_line(&other.description)
+                    );
+                }
+            }
         }
     }
     out
@@ -55,7 +71,7 @@ fn single_line(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::command::{Command, CriterionDraft, Origin, TaskDraft};
+    use crate::command::{Applied, Command, CriterionDraft, Origin, TaskDraft};
     use crate::ops::execute;
 
     #[test]
@@ -89,5 +105,53 @@ mod tests {
         )
         .unwrap();
         insta::assert_snapshot!(to_markdown(&board));
+    }
+
+    #[test]
+    fn export_lists_references() {
+        use crate::command::{ReferenceDraft, TaskPatch};
+        use crate::model::Relation;
+
+        let mut board = Board::new_default();
+        let mut ids = Vec::new();
+        for d in ["Build the API", "Write the docs"] {
+            let Applied::Task(id) = execute(
+                &mut board,
+                Origin::User,
+                Command::CreateTask {
+                    column: None,
+                    position: None,
+                    draft: TaskDraft {
+                        description: d.into(),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap() else {
+                unreachable!()
+            };
+            ids.push(id);
+        }
+        execute(
+            &mut board,
+            Origin::User,
+            Command::UpdateTask {
+                id: ids[0],
+                patch: TaskPatch {
+                    references: Some(vec![ReferenceDraft {
+                        task: ids[1],
+                        relation: Relation::Blocks,
+                    }]),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        let md = to_markdown(&board);
+        assert!(
+            md.contains("**References**\n\n- blocks \"Write the docs\""),
+            "{md}"
+        );
+        assert!(md.contains("- is blocked by \"Build the API\""), "{md}");
     }
 }

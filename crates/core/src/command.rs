@@ -3,7 +3,7 @@
 
 use serde::Deserialize;
 
-use crate::model::{ColumnId, CriterionId, TaskId};
+use crate::model::{ColumnId, CriterionId, Relation, TaskId};
 
 /// Who issued a command. Agents are subject to extra rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +35,13 @@ pub struct CriterionDraft {
     pub done: bool,
 }
 
+/// A requested link from the task being edited to another task.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ReferenceDraft {
+    pub task: TaskId,
+    pub relation: Relation,
+}
+
 /// Partial task update; `None` fields are left untouched.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct TaskPatch {
@@ -42,6 +49,9 @@ pub struct TaskPatch {
     pub extended_description: Option<String>,
     pub requirements: Option<Vec<String>>,
     pub acceptance_criteria: Option<Vec<CriterionDraft>>,
+    /// Replaces the task's whole set of references. Mirrors on the other
+    /// tasks are added and removed to match.
+    pub references: Option<Vec<ReferenceDraft>>,
 }
 
 #[derive(Debug, Clone)]

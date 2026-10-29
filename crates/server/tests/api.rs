@@ -162,6 +162,56 @@ async fn stale_revision_conflicts() {
 }
 
 #[tokio::test]
+async fn references_are_mirrored() {
+    let api = Api::new(true);
+    let mut ids = Vec::new();
+    for d in ["Build the API", "Write the docs"] {
+        let (_, t) = api
+            .call("POST", "/tasks", Some(json!({"description": d})))
+            .await;
+        ids.push(t["id"].as_str().unwrap().to_string());
+    }
+    let (status, a) = api
+        .call(
+            "PATCH",
+            &format!("/tasks/{}", ids[0]),
+            Some(json!({"references": [{"task_id": ids[1], "relation": "blocks"}]})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(a["references"][0]["relation"], "blocks");
+    assert_eq!(a["references"][0]["description"], "Write the docs");
+
+    let (_, b) = api.call("GET", &format!("/tasks/{}", ids[1]), None).await;
+    assert_eq!(b["references"][0]["relation"], "blocked_by");
+    assert_eq!(b["references"][0]["task_id"], ids[0].as_str());
+
+    let (status, err) = api
+        .call(
+            "PATCH",
+            &format!("/tasks/{}", ids[0]),
+            Some(json!({"references": [{"task_id": ids[1], "relation": "likes"}]})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(err["message"].as_str().unwrap().contains("blocked_by"));
+
+    let (status, _) = api
+        .call(
+            "PATCH",
+            &format!("/tasks/{}", ids[0]),
+            Some(json!({"references": [{"task_id": ids[0], "relation": "blocks"}]})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    api.call("DELETE", &format!("/tasks/{}", ids[0]), None)
+        .await;
+    let (_, b) = api.call("GET", &format!("/tasks/{}", ids[1]), None).await;
+    assert_eq!(b["references"], json!([]));
+}
+
+#[tokio::test]
 async fn validation_errors() {
     let api = Api::new(true);
     let (status, _) = api
@@ -235,6 +285,31 @@ async fn mcp_end_to_end() {
         store.read(|b, _| b.locate_task(id.parse().unwrap())),
         Some((1, 0))
     );
+
+    // Link two tasks over MCP; the other side sees the mirrored relation.
+    let args = json!({"description": "Second"})
+        .as_object()
+        .unwrap()
+        .clone();
+    let result = client
+        .call_tool(CallToolRequestParams::new("task_create").with_arguments(args))
+        .await
+        .unwrap();
+    let second: Value = serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+    let second_id = second["id"].as_str().unwrap().to_string();
+    let args = json!({"id": id, "references": [{"task_id": second_id, "relation": "relates_to"}]})
+        .as_object()
+        .unwrap()
+        .clone();
+    let result = client
+        .call_tool(CallToolRequestParams::new("task_update").with_arguments(args))
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true));
+    let other = store
+        .read(|b, _| b.task(second_id.parse().unwrap()).cloned())
+        .unwrap();
+    assert_eq!(other.references.len(), 1);
 
     store.set_agent_write(false);
     let args = json!({"id": id}).as_object().unwrap().clone();

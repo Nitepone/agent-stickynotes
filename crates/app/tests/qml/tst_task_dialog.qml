@@ -10,26 +10,41 @@ Item {
 
     readonly property string longText: "This requirement is intentionally long so that it cannot possibly fit on one line of the dialog and must wrap onto several lines instead of scrolling sideways."
 
-    TaskDialog { id: dialog }
+    TaskDialog {
+        id: dialog
+        relationOptions: [
+            { value: "blocks", label: "blocks" },
+            { value: "blocked_by", label: "is blocked by" },
+            { value: "relates_to", label: "relates to" },
+        ]
+        linkCandidates: [
+            { id: "t1", columnTitle: "Backlog", text: "the task itself", label: "Backlog \u2014 the task itself" },
+            { id: "t2", columnTitle: "Backlog", text: "Write the docs", label: "Backlog \u2014 Write the docs" },
+            { id: "t3", columnTitle: "Done", text: "Ship it", label: "Done \u2014 Ship it" },
+        ]
+    }
+    SignalSpy { id: openSpy; target: dialog; signalName: "openTaskRequested" }
 
     TestCase {
         name: "TaskDialog"
         when: windowShown
 
-        function taskJson(requirements, criteria) {
+        function taskJson(requirements, criteria, references) {
             return JSON.stringify({
                 id: "t1", columnId: "c0", description: "d", extendedDescription: "",
                 requirements: requirements,
                 criteria: criteria,
+                references: references || [],
                 updatedAt: "2026-01-01T00:00:00Z",
             })
         }
 
-        function open(requirements, criteria) {
-            dialog.openTask(taskJson(requirements, criteria), "Backlog")
+        function open(requirements, criteria, references) {
+            dialog.openTask(taskJson(requirements, criteria, references), "Backlog")
             waitForRendering(dialog.contentItem)
         }
 
+        function init() { openSpy.clear() }
         function cleanup() { dialog.close() }
 
         function fields(name) {
@@ -117,6 +132,78 @@ Item {
             compare(form().requirements, ["a edited"])
             compare(form().criteria[0].text, "c edited")
             compare(form().criteria[0].id, "k1")
+        }
+
+        // ---- references ----
+
+        readonly property var blockedByDocs: [{
+            taskId: "t2", relation: "blocked_by", relationLabel: "is blocked by",
+            description: "Write the docs", columnTitle: "Backlog" }]
+
+        function test_references_are_listed_and_in_the_form() {
+            open([], [], blockedByDocs)
+            compare(fields("referenceRelation").length, 1)
+            compare(fields("referenceRelation")[0].text, "is blocked by")
+            compare(fields("referenceLink")[0].text, "Write the docs")
+            compare(form().references, [{ task: "t2", relation: "blocked_by" }])
+        }
+
+        function test_clicking_a_reference_requests_that_task() {
+            open([], [], blockedByDocs)
+            mouseClick(fields("referenceLink")[0])
+            compare(openSpy.count, 1)
+            compare(openSpy.signalArguments[0][0], "t2")
+        }
+
+        function test_remove_reference() {
+            open([], [], blockedByDocs)
+            mouseClick(fields("removeReference")[0])
+            compare(fields("referenceRelation").length, 0)
+            compare(form().references, [])
+        }
+
+        function test_add_reference_with_dropdowns() {
+            open([], [])
+            const [relation] = fields("relationBox")
+            const [target] = fields("targetBox")
+            const [add] = fields("addReference")
+            verify(!add.enabled, "Add needs a chosen task")
+            relation.currentIndex = 0
+            target.currentIndex = 1
+            verify(add.enabled)
+            mouseClick(add)
+            compare(form().references, [{ task: "t3", relation: "blocks" }])
+            compare(fields("referenceLink")[0].text, "Ship it")
+            compare(target.currentIndex, -1)
+        }
+
+        function test_a_task_cannot_link_to_itself() {
+            open([], [])
+            const [target] = fields("targetBox")
+            compare(target.count, 2)
+            for (let i = 0; i < target.count; i++)
+                verify(target.valueAt(i) !== "t1")
+        }
+
+        function test_adding_an_existing_target_changes_its_relation() {
+            open([], [], blockedByDocs)
+            dialog.addReference("t2", "relates_to")
+            compare(form().references, [{ task: "t2", relation: "relates_to" }])
+            compare(fields("referenceRelation").length, 1)
+        }
+
+        function test_new_tasks_cannot_be_linked_yet() {
+            dialog.openNew({ id: "c0", title: "Backlog" })
+            waitForRendering(dialog.contentItem)
+            verify(!("references" in form()), "create form must not carry references")
+            verify(!fields("addReference")[0].visible)
+        }
+
+        function test_isEdited_tracks_changes_to_references() {
+            open([], [], blockedByDocs)
+            verify(!dialog.isEdited())
+            mouseClick(fields("removeReference")[0])
+            verify(dialog.isEdited())
         }
     }
 }

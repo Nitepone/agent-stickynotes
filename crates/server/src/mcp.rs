@@ -11,7 +11,9 @@ use rmcp::service::RequestContext;
 use rmcp::{ErrorData, RoleServer, ServerHandler, schemars, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
 
-use crate::service::{AgentService, CriterionInput, NewTask, ServiceResult, TaskUpdate};
+use crate::service::{
+    AgentService, CriterionInput, NewTask, ReferenceInput, ServiceResult, TaskUpdate,
+};
 
 const BOARD_URI: &str = "stickynotes://board";
 const BOARD_MD_URI: &str = "stickynotes://board.md";
@@ -81,7 +83,20 @@ pub struct TaskUpdateArgs {
     pub requirements: Option<Vec<String>>,
     /// Replaces the whole criteria list. Pass existing ids to keep criteria.
     pub acceptance_criteria: Option<Vec<CriterionArg>>,
+    /// Replaces all links to other tasks (pass the existing ones to keep
+    /// them; omit the field to leave links alone). The other task gets the
+    /// mirrored relation automatically.
+    pub references: Option<Vec<ReferenceArg>>,
     pub expected_revision: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ReferenceArg {
+    /// Id of the other task.
+    pub task_id: String,
+    /// What this task does to the other: blocks, blocked_by, relates_to,
+    /// duplicates or duplicated_by.
+    pub relation: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -150,7 +165,7 @@ impl BoardMcp {
     }
 
     #[tool(
-        description = "Update a task. Omitted fields are unchanged; lists replace the existing list. Keep description short (~200 chars)."
+        description = "Update a task. Omitted fields are unchanged; lists (requirements, acceptance_criteria, references) replace the existing list. Keep description short (~200 chars). To link tasks, pass references like [{\"task_id\": \"...\", \"relation\": \"blocks\"}]; the other task is updated to match."
     )]
     fn task_update(&self, Parameters(a): Parameters<TaskUpdateArgs>) -> ToolResult {
         let criteria = match a.acceptance_criteria {
@@ -178,6 +193,14 @@ impl BoardMcp {
             extended_description: a.extended_description,
             requirements: a.requirements,
             acceptance_criteria: criteria,
+            references: a.references.map(|refs| {
+                refs.into_iter()
+                    .map(|r| ReferenceInput {
+                        task_id: r.task_id,
+                        relation: r.relation,
+                    })
+                    .collect()
+            }),
         };
         json(self.service.update_task(&a.id, update, a.expected_revision))
     }

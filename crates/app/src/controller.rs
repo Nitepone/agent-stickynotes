@@ -41,6 +41,8 @@ pub mod qobject {
         #[qinvokable]
         fn task_json(self: &BoardController, id: &QString) -> QString;
         #[qinvokable]
+        fn relation_options(self: &BoardController) -> QString;
+        #[qinvokable]
         fn create_task(self: &BoardController, column_id: &QString, form: &QString) -> QString;
         #[qinvokable]
         fn update_task(self: &BoardController, id: &QString, form: &QString) -> QString;
@@ -182,6 +184,10 @@ impl qobject::BoardController {
             .store
             .read(|board, _| viewmodel::task_json(board, id));
         to_qstring(json)
+    }
+
+    fn relation_options(&self) -> QString {
+        to_qstring(viewmodel::relation_options_json())
     }
 
     fn create_task(&self, column_id: &QString, form: &QString) -> QString {

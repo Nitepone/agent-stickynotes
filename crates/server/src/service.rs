@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use stickynotes_core::{
     Applied, Board, BoardStore, Column, Command, Criterion, CriterionDraft, Error, Origin,
-    Progress, Task, TaskDraft, TaskId, TaskPatch,
+    Progress, ReferenceDraft, Relation, Task, TaskDraft, TaskId, TaskPatch,
 };
 use uuid::Uuid;
 
@@ -75,12 +75,24 @@ pub struct TaskView {
     pub requirements: Vec<String>,
     pub acceptance_criteria: Vec<CriterionView>,
     pub progress: Progress,
+    pub references: Vec<ReferenceView>,
     pub column: ColumnRef,
     /// The column `advance` would move this task into, with its entry criteria.
     pub next_column: Option<ColumnRef>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub revision: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReferenceView {
+    /// The other task.
+    pub task_id: Uuid,
+    /// What this task does to the other one: blocks, blocked_by, relates_to,
+    /// duplicates or duplicated_by.
+    pub relation: &'static str,
+    pub description: String,
+    pub column: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -116,6 +128,17 @@ pub struct TaskUpdate {
     pub extended_description: Option<String>,
     pub requirements: Option<Vec<String>>,
     pub acceptance_criteria: Option<Vec<CriterionInput>>,
+    /// Replaces all of the task's references; the other tasks get the
+    /// mirrored relation automatically.
+    pub references: Option<Vec<ReferenceInput>>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReferenceInput {
+    /// The other task.
+    pub task_id: String,
+    /// One of blocks, blocked_by, relates_to, duplicates, duplicated_by.
+    pub relation: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,6 +235,19 @@ impl AgentService {
         expected: Option<u64>,
     ) -> ServiceResult<TaskView> {
         let id = parse_id(id, "task")?;
+        let references = update
+            .references
+            .map(|refs| {
+                refs.into_iter()
+                    .map(|r| {
+                        Ok(ReferenceDraft {
+                            task: parse_id(&r.task_id, "task")?,
+                            relation: parse_relation(&r.relation)?,
+                        })
+                    })
+                    .collect::<ServiceResult<Vec<_>>>()
+            })
+            .transpose()?;
         let patch = TaskPatch {
             description: update.description,
             extended_description: update.extended_description,
@@ -225,6 +261,7 @@ impl AgentService {
                     })
                     .collect()
             }),
+            references,
         };
         self.apply_to_task(Command::UpdateTask { id, patch }, expected)
     }
@@ -309,6 +346,19 @@ fn task_view(board: &Board, id: TaskId, revision: u64) -> ServiceResult<TaskView
         requirements: t.requirements.clone(),
         acceptance_criteria: t.acceptance_criteria.iter().map(criterion_view).collect(),
         progress: t.progress(),
+        references: t
+            .references
+            .iter()
+            .filter_map(|r| {
+                let (oc, ot) = board.locate_task(r.task)?;
+                Some(ReferenceView {
+                    task_id: r.task,
+                    relation: r.relation.as_str(),
+                    description: board.columns[oc].tasks[ot].description.clone(),
+                    column: board.columns[oc].title.clone(),
+                })
+            })
+            .collect(),
         column: column_ref(column),
         next_column: board.columns.get(ci + 1).map(column_ref),
         created_at: t.created_at,
@@ -358,4 +408,13 @@ fn column_titles(board: &Board) -> String {
 fn parse_id(s: &str, kind: &str) -> ServiceResult<Uuid> {
     Uuid::parse_str(s.trim())
         .map_err(|_| ServiceError::BadRequest(format!("'{s}' is not a valid {kind} id")))
+}
+
+fn parse_relation(s: &str) -> ServiceResult<Relation> {
+    Relation::parse(s).ok_or_else(|| {
+        ServiceError::BadRequest(format!(
+            "'{s}' is not a relation; use one of: {}",
+            Relation::ALL.map(Relation::as_str).join(", ")
+        ))
+    })
 }

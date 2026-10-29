@@ -53,10 +53,89 @@ pub struct Task {
     pub requirements: Vec<String>,
     #[serde(default)]
     pub acceptance_criteria: Vec<Criterion>,
+    /// Links to other tasks. Every link has a mirror on the other task.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<Reference>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
+}
+
+/// How one task relates to another, read as "<this task> <relation> <other>".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Relation {
+    Blocks,
+    BlockedBy,
+    RelatesTo,
+    Duplicates,
+    DuplicatedBy,
+}
+
+impl Relation {
+    pub const ALL: [Relation; 5] = [
+        Relation::Blocks,
+        Relation::BlockedBy,
+        Relation::RelatesTo,
+        Relation::Duplicates,
+        Relation::DuplicatedBy,
+    ];
+
+    /// The relation as seen from the other task.
+    pub fn inverse(self) -> Relation {
+        match self {
+            Relation::Blocks => Relation::BlockedBy,
+            Relation::BlockedBy => Relation::Blocks,
+            Relation::RelatesTo => Relation::RelatesTo,
+            Relation::Duplicates => Relation::DuplicatedBy,
+            Relation::DuplicatedBy => Relation::Duplicates,
+        }
+    }
+
+    /// Stable identifier used in JSON, the API and MCP.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Relation::Blocks => "blocks",
+            Relation::BlockedBy => "blocked_by",
+            Relation::RelatesTo => "relates_to",
+            Relation::Duplicates => "duplicates",
+            Relation::DuplicatedBy => "duplicated_by",
+        }
+    }
+
+    /// Human-readable form for UIs and exports.
+    pub fn label(self) -> &'static str {
+        match self {
+            Relation::Blocks => "blocks",
+            Relation::BlockedBy => "is blocked by",
+            Relation::RelatesTo => "relates to",
+            Relation::Duplicates => "duplicates",
+            Relation::DuplicatedBy => "is duplicated by",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Relation> {
+        Relation::ALL.into_iter().find(|r| r.as_str() == s.trim())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Reference {
+    pub task: TaskId,
+    pub relation: Relation,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+impl Reference {
+    pub fn new(task: TaskId, relation: Relation) -> Self {
+        Reference {
+            task,
+            relation,
+            extra: Map::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -123,6 +202,11 @@ impl Board {
     pub fn task(&self, id: TaskId) -> Option<&Task> {
         self.locate_task(id)
             .map(|(ci, ti)| &self.columns[ci].tasks[ti])
+    }
+
+    pub fn task_mut(&mut self, id: TaskId) -> Option<&mut Task> {
+        let (ci, ti) = self.locate_task(id)?;
+        Some(&mut self.columns[ci].tasks[ti])
     }
 
     pub fn tasks(&self) -> impl Iterator<Item = (&Column, &Task)> {

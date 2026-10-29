@@ -4,9 +4,11 @@ use chrono::Utc;
 use serde_json::Map;
 use uuid::Uuid;
 
-use crate::command::{Applied, Command, CriterionDraft, Origin, TaskDraft, TaskPatch};
+use crate::command::{
+    Applied, Command, CriterionDraft, Origin, ReferenceDraft, TaskDraft, TaskPatch,
+};
 use crate::error::{Error, Result};
-use crate::model::{Board, Column, ColumnId, Criterion, Task, TaskId};
+use crate::model::{Board, Column, ColumnId, Criterion, Reference, Task, TaskId};
 
 /// Validate and apply `cmd` to `board`. On error the board is unchanged.
 pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applied> {
@@ -38,6 +40,7 @@ pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applie
         Command::DeleteTask { id } => {
             let (ci, ti) = locate(board, id)?;
             board.columns[ci].tasks.remove(ti);
+            remove_references_to(board, &[id]);
             Ok(Applied::Task(id))
         }
         Command::SetCriterion {
@@ -96,7 +99,9 @@ pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applie
             if !col.tasks.is_empty() && !force {
                 return Err(Error::ColumnNotEmpty(col.title.clone()));
             }
-            board.columns.remove(idx);
+            let removed = board.columns.remove(idx);
+            let ids: Vec<_> = removed.tasks.iter().map(|t| t.id).collect();
+            remove_references_to(board, &ids);
             Ok(Applied::Column(id))
         }
         Command::RenameBoard { title } => {
@@ -158,6 +163,7 @@ fn create_task(
         extended_description: draft.extended_description.trim().to_string(),
         requirements: clean_lines(draft.requirements),
         acceptance_criteria: merge_criteria(&[], draft.acceptance_criteria),
+        references: Vec::new(),
         created_at: now,
         updated_at: now,
         extra: Map::new(),
@@ -170,10 +176,17 @@ fn create_task(
 }
 
 fn update_task(board: &mut Board, id: TaskId, patch: TaskPatch) -> Result<Applied> {
+    // Validate everything before changing anything.
     let description = patch
         .description
         .map(|d| required(&d, "task description"))
         .transpose()?;
+    locate(board, id)?;
+    let references = patch
+        .references
+        .map(|drafts| normalize_references(board, id, drafts))
+        .transpose()?;
+
     let task = task_mut(board, id)?;
     if let Some(d) = description {
         task.description = d;
@@ -188,7 +201,91 @@ fn update_task(board: &mut Board, id: TaskId, patch: TaskPatch) -> Result<Applie
         task.acceptance_criteria = merge_criteria(&task.acceptance_criteria, c);
     }
     task.updated_at = Utc::now();
+    if let Some(references) = references {
+        set_references(board, id, references);
+    }
     Ok(Applied::Task(id))
+}
+
+/// Check that every target exists and is not the task itself; keep the last
+/// relation given for a target.
+fn normalize_references(
+    board: &Board,
+    id: TaskId,
+    drafts: Vec<ReferenceDraft>,
+) -> Result<Vec<(TaskId, crate::model::Relation)>> {
+    let mut result: Vec<(TaskId, crate::model::Relation)> = Vec::new();
+    for draft in drafts {
+        if draft.task == id {
+            return Err(Error::Validation("a task cannot reference itself".into()));
+        }
+        if board.task(draft.task).is_none() {
+            return Err(not_found("task", draft.task));
+        }
+        result.retain(|(t, _)| *t != draft.task);
+        result.push((draft.task, draft.relation));
+    }
+    Ok(result)
+}
+
+/// Make `id`'s references exactly `wanted`, mirroring every change onto the
+/// other task. `wanted` must already be validated.
+fn set_references(board: &mut Board, id: TaskId, wanted: Vec<(TaskId, crate::model::Relation)>) {
+    let current: Vec<Reference> = board
+        .task(id)
+        .map(|t| t.references.clone())
+        .unwrap_or_default();
+    let now = Utc::now();
+
+    // Drop links that are gone or changed, along with their mirrors.
+    for old in &current {
+        if wanted.contains(&(old.task, old.relation)) {
+            continue;
+        }
+        if let Some(other) = board.task_mut(old.task) {
+            other.references.retain(|r| r.task != id);
+            other.updated_at = now;
+        }
+    }
+
+    let mut kept = Vec::with_capacity(wanted.len());
+    for (target, relation) in wanted {
+        let existing = current
+            .iter()
+            .find(|r| r.task == target && r.relation == relation);
+        kept.push(
+            existing
+                .cloned()
+                .unwrap_or_else(|| Reference::new(target, relation)),
+        );
+        if existing.is_some() {
+            continue;
+        }
+        if let Some(other) = board.task_mut(target) {
+            other.references.retain(|r| r.task != id);
+            other
+                .references
+                .push(Reference::new(id, relation.inverse()));
+            other.updated_at = now;
+        }
+    }
+    if let Some(task) = board.task_mut(id) {
+        task.references = kept;
+    }
+}
+
+/// Remove every reference that points at one of `gone`.
+fn remove_references_to(board: &mut Board, gone: &[TaskId]) {
+    let now = Utc::now();
+    for column in &mut board.columns {
+        for task in &mut column.tasks {
+            let before = task.references.len();
+            task.references.retain(|r| !gone.contains(&r.task));
+            if task.references.len() != before {
+                task.updated_at = now;
+            }
+        }
+    }
 }
 
 fn move_task(
@@ -637,5 +734,235 @@ mod tests {
         )
         .unwrap();
         assert!(b.task(task).unwrap().acceptance_criteria[0].done);
+    }
+
+    // ---- references ----
+
+    use crate::model::Relation;
+
+    fn add_task(b: &mut Board, description: &str) -> TaskId {
+        let Applied::Task(id) = execute(
+            b,
+            Origin::User,
+            Command::CreateTask {
+                column: None,
+                position: None,
+                draft: draft(description),
+            },
+        )
+        .unwrap() else {
+            unreachable!()
+        };
+        id
+    }
+
+    fn set_refs(
+        b: &mut Board,
+        origin: Origin,
+        id: TaskId,
+        refs: &[(TaskId, Relation)],
+    ) -> Result<Applied> {
+        execute(
+            b,
+            origin,
+            Command::UpdateTask {
+                id,
+                patch: TaskPatch {
+                    references: Some(
+                        refs.iter()
+                            .map(|&(task, relation)| ReferenceDraft { task, relation })
+                            .collect(),
+                    ),
+                    ..Default::default()
+                },
+            },
+        )
+    }
+
+    fn refs_of(b: &Board, id: TaskId) -> Vec<(TaskId, Relation)> {
+        b.task(id)
+            .unwrap()
+            .references
+            .iter()
+            .map(|r| (r.task, r.relation))
+            .collect()
+    }
+
+    #[test]
+    fn adding_a_reference_adds_the_mirror() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::Blocks)]).unwrap();
+        assert_eq!(refs_of(&b, a), [(c, Relation::Blocks)]);
+        assert_eq!(refs_of(&b, c), [(a, Relation::BlockedBy)]);
+    }
+
+    #[test]
+    fn every_relation_mirrors_to_its_inverse() {
+        for relation in Relation::ALL {
+            let mut b = Board::new_default();
+            let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+            set_refs(&mut b, Origin::User, a, &[(c, relation)]).unwrap();
+            assert_eq!(refs_of(&b, c), [(a, relation.inverse())], "{relation:?}");
+            assert_eq!(relation.inverse().inverse(), relation);
+        }
+    }
+
+    #[test]
+    fn removing_from_either_side_removes_both() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::RelatesTo)]).unwrap();
+        set_refs(&mut b, Origin::User, a, &[]).unwrap();
+        assert!(refs_of(&b, a).is_empty() && refs_of(&b, c).is_empty());
+
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::RelatesTo)]).unwrap();
+        set_refs(&mut b, Origin::User, c, &[]).unwrap();
+        assert!(refs_of(&b, a).is_empty() && refs_of(&b, c).is_empty());
+    }
+
+    #[test]
+    fn changing_a_relation_replaces_the_mirror() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::Blocks)]).unwrap();
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::Duplicates)]).unwrap();
+        assert_eq!(refs_of(&b, a), [(c, Relation::Duplicates)]);
+        assert_eq!(refs_of(&b, c), [(a, Relation::DuplicatedBy)]);
+    }
+
+    #[test]
+    fn unrelated_references_are_untouched_by_an_update() {
+        let mut b = Board::new_default();
+        let (a, c, d) = (
+            add_task(&mut b, "a"),
+            add_task(&mut b, "c"),
+            add_task(&mut b, "d"),
+        );
+        set_refs(
+            &mut b,
+            Origin::User,
+            a,
+            &[(c, Relation::Blocks), (d, Relation::RelatesTo)],
+        )
+        .unwrap();
+        set_refs(&mut b, Origin::User, a, &[(d, Relation::RelatesTo)]).unwrap();
+        assert!(refs_of(&b, c).is_empty());
+        assert_eq!(refs_of(&b, d), [(a, Relation::RelatesTo)]);
+    }
+
+    #[test]
+    fn a_patch_without_references_leaves_them_alone() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::Blocks)]).unwrap();
+        execute(
+            &mut b,
+            Origin::User,
+            Command::UpdateTask {
+                id: a,
+                patch: TaskPatch {
+                    description: Some("renamed".into()),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        assert_eq!(refs_of(&b, a), [(c, Relation::Blocks)]);
+        assert_eq!(refs_of(&b, c), [(a, Relation::BlockedBy)]);
+    }
+
+    #[test]
+    fn invalid_references_are_rejected_without_side_effects() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        let before = b.clone();
+        let ghost = Uuid::new_v4();
+        assert!(matches!(
+            set_refs(&mut b, Origin::User, a, &[(a, Relation::Blocks)]),
+            Err(Error::Validation(_))
+        ));
+        assert!(matches!(
+            set_refs(
+                &mut b,
+                Origin::User,
+                a,
+                &[(c, Relation::Blocks), (ghost, Relation::Blocks)]
+            ),
+            Err(Error::NotFound { .. })
+        ));
+        assert_eq!(b, before);
+    }
+
+    #[test]
+    fn deleting_a_task_removes_references_to_it() {
+        let mut b = Board::new_default();
+        let (a, c, d) = (
+            add_task(&mut b, "a"),
+            add_task(&mut b, "c"),
+            add_task(&mut b, "d"),
+        );
+        set_refs(
+            &mut b,
+            Origin::User,
+            a,
+            &[(c, Relation::Blocks), (d, Relation::RelatesTo)],
+        )
+        .unwrap();
+        execute(&mut b, Origin::User, Command::DeleteTask { id: c }).unwrap();
+        assert_eq!(refs_of(&b, a), [(d, Relation::RelatesTo)]);
+    }
+
+    #[test]
+    fn deleting_a_column_removes_references_to_its_tasks() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        let to = col(&b, 1);
+        execute(
+            &mut b,
+            Origin::User,
+            Command::MoveTask {
+                id: c,
+                to_column: to,
+                position: None,
+            },
+        )
+        .unwrap();
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::Blocks)]).unwrap();
+        execute(
+            &mut b,
+            Origin::User,
+            Command::DeleteColumn {
+                id: to,
+                force: true,
+            },
+        )
+        .unwrap();
+        assert!(refs_of(&b, a).is_empty());
+    }
+
+    #[test]
+    fn agents_can_edit_references() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        set_refs(&mut b, Origin::Agent, a, &[(c, Relation::Blocks)]).unwrap();
+        assert_eq!(refs_of(&b, c), [(a, Relation::BlockedBy)]);
+    }
+
+    #[test]
+    fn references_round_trip_through_json() {
+        let mut b = Board::new_default();
+        let (a, c) = (add_task(&mut b, "a"), add_task(&mut b, "c"));
+        set_refs(&mut b, Origin::User, a, &[(c, Relation::DuplicatedBy)]).unwrap();
+        let json = serde_json::to_string(&b).unwrap();
+        assert!(json.contains("\"duplicated_by\""));
+        let back: Board = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, b);
+        // Boards written before references existed still load.
+        assert!(
+            !serde_json::to_string(&Board::new_default())
+                .unwrap()
+                .contains("references")
+        );
     }
 }

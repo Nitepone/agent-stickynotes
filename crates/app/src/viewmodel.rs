@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use stickynotes_core::model::SUGGESTED_DESCRIPTION_CHARS;
 use stickynotes_core::{
-    Applied, Board, CriterionDraft, Error, Snapshot, Task, TaskDraft, TaskPatch, card_text,
+    Applied, Board, CriterionDraft, Error, ReferenceDraft, Relation, Snapshot, Task, TaskDraft,
+    TaskPatch, card_text,
 };
 use uuid::Uuid;
 
@@ -46,7 +47,18 @@ struct TaskVm<'a> {
     extended_description: &'a str,
     requirements: &'a [String],
     criteria: Vec<CriterionVm<'a>>,
+    references: Vec<ReferenceVm<'a>>,
     updated_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReferenceVm<'a> {
+    task_id: Uuid,
+    relation: &'static str,
+    relation_label: &'static str,
+    description: &'a str,
+    column_title: &'a str,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -110,9 +122,32 @@ pub fn task_json(board: &Board, id: Uuid) -> String {
                 done: c.done,
             })
             .collect(),
+        references: t
+            .references
+            .iter()
+            .filter_map(|r| {
+                let (oc, ot) = board.locate_task(r.task)?;
+                Some(ReferenceVm {
+                    task_id: r.task,
+                    relation: r.relation.as_str(),
+                    relation_label: r.relation.label(),
+                    description: &board.columns[oc].tasks[ot].description,
+                    column_title: &board.columns[oc].title,
+                })
+            })
+            .collect(),
         updated_at: t.updated_at.to_rfc3339(),
     };
     serde_json::to_string(&vm).expect("view model serializes")
+}
+
+/// The relations a user can pick from: `[{value, label}]`.
+pub fn relation_options_json() -> String {
+    let options: Vec<_> = Relation::ALL
+        .iter()
+        .map(|r| json!({ "value": r.as_str(), "label": r.label() }))
+        .collect();
+    serde_json::Value::Array(options).to_string()
 }
 
 /// Shown in the window title, e.g. `Sprint 4 — sprint4.json •`.
@@ -136,6 +171,15 @@ pub struct TaskForm {
     requirements: Vec<String>,
     #[serde(default)]
     criteria: Vec<CriterionForm>,
+    /// Absent when creating a task: links need an existing task.
+    #[serde(default)]
+    references: Option<Vec<ReferenceForm>>,
+}
+
+#[derive(Deserialize)]
+pub struct ReferenceForm {
+    task: Uuid,
+    relation: Relation,
 }
 
 #[derive(Deserialize)]
@@ -168,6 +212,14 @@ impl TaskForm {
             extended_description: Some(self.extended_description),
             requirements: Some(self.requirements),
             acceptance_criteria: Some(criterion_drafts(self.criteria)),
+            references: self.references.map(|refs| {
+                refs.into_iter()
+                    .map(|r| ReferenceDraft {
+                        task: r.task,
+                        relation: r.relation,
+                    })
+                    .collect()
+            }),
         }
     }
 }
@@ -274,5 +326,76 @@ mod tests {
         s.dirty = true;
         s.path = Some("/tmp/x.json".into());
         assert_eq!(window_title(&s), "Untitled board — x.json •");
+    }
+
+    #[test]
+    fn task_json_lists_references_with_labels() {
+        use stickynotes_core::{Command, Origin};
+        let store = BoardStore::new(false);
+        let mut ids = Vec::new();
+        for d in ["one", "two"] {
+            let form = TaskForm::parse(&format!(r#"{{"description":"{d}"}}"#)).unwrap();
+            let (applied, _) = store
+                .apply(
+                    Origin::User,
+                    Command::CreateTask {
+                        column: None,
+                        position: None,
+                        draft: form.into_draft(),
+                    },
+                    None,
+                )
+                .unwrap();
+            let Applied::Task(id) = applied else { panic!() };
+            ids.push(id);
+        }
+        let form = TaskForm::parse(&format!(
+            r#"{{"description":"one","references":[{{"task":"{}","relation":"blocks"}}]}}"#,
+            ids[1]
+        ))
+        .unwrap();
+        store
+            .apply(
+                Origin::User,
+                Command::UpdateTask {
+                    id: ids[0],
+                    patch: form.into_patch(),
+                },
+                None,
+            )
+            .unwrap();
+
+        let json: serde_json::Value =
+            serde_json::from_str(&store.read(|b, _| task_json(b, ids[1]))).unwrap();
+        let r = &json["references"][0];
+        assert_eq!(r["taskId"], ids[0].to_string());
+        assert_eq!(r["relation"], "blocked_by");
+        assert_eq!(r["relationLabel"], "is blocked by");
+        assert_eq!(r["description"], "one");
+        assert_eq!(r["columnTitle"], "Backlog");
+    }
+
+    #[test]
+    fn form_without_references_does_not_touch_them() {
+        let patch = TaskForm::parse(r#"{"description":"d"}"#)
+            .unwrap()
+            .into_patch();
+        assert!(patch.references.is_none());
+        assert!(
+            TaskForm::parse(
+                r#"{"description":"d","references":[{"task":"nope","relation":"blocks"}]}"#
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn relation_options_cover_every_relation() {
+        let v: serde_json::Value = serde_json::from_str(&relation_options_json()).unwrap();
+        assert_eq!(v.as_array().unwrap().len(), Relation::ALL.len());
+        assert_eq!(
+            v[1],
+            json!({"value": "blocked_by", "label": "is blocked by"})
+        );
     }
 }
