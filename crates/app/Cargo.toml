@@ -3,6 +3,11 @@ name = "stickynotes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Local kanban board for humans and AI agents, with an MCP and REST server"
+repository = "https://github.com/Nitepone/agent-stickynotes"
+readme = "../../README.md"
+keywords = ["kanban", "mcp", "agents", "qt"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0.104"

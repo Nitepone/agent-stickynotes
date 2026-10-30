@@ -35,6 +35,17 @@ export QMAKE=/usr/lib/qt6/bin/qmake6     # if `qmake` is Qt 5
 cargo run --release -- [project-folder]  # a new or empty folder becomes a project
 ```
 
+To install it instead of running from the checkout:
+
+```sh
+cargo install --locked --git https://github.com/Nitepone/agent-stickynotes stickynotes
+# or, from a clone, also adding the application-menu entry and icon (Linux):
+scripts/install-linux.sh              # --uninstall removes it again
+```
+
+The binary lands in `~/.cargo/bin` (put that on your `PATH`); it needs the Qt 6 runtime
+libraries it was built against.
+
 Without an argument the last project is reopened; on first run the project
 picker opens. Projects are kept by default in your user data folder
 (`~/.local/share/agent-stickynotes/projects` on Linux, `~/Library/Application
