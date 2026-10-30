@@ -31,6 +31,18 @@ pub const TOOLS: &[(&str, &str)] = &[
     ),
     ("task_delete", "delete a task"),
     ("criterion_set", "tick or untick an acceptance criterion"),
+    (
+        "artifact_add",
+        "attach a Markdown or image file to a task (stored in the project's artifacts folder)",
+    ),
+    (
+        "artifact_get",
+        "read an attached artifact (text for Markdown and SVG)",
+    ),
+    (
+        "artifact_detach",
+        "detach an artifact from a task; the file stays on disk",
+    ),
 ];
 
 /// The rules of the workflow, as a Markdown bullet list.
@@ -50,6 +62,9 @@ extended_description, requirements and acceptance_criteria.
 - Tick acceptance criteria with criterion_set as you complete them.
 - Link related tasks with references in task_update (blocks, blocked_by, relates_to, duplicates, \
 duplicated_by); the other task is updated to match.
+- Attach documents and diagrams you produce for a task with artifact_add (Markdown or images) \
+instead of pasting them into the description. Artifacts cannot be replaced: add a new one and \
+detach the old; detaching never deletes the file.
 - The human may disable write access at any time; write tools then fail and you should tell the user.
 - Write tools accept expected_revision. If it no longer matches, the board changed: re-read and retry.
 - Columns cannot be created, edited, reordered or deleted by agents, and neither can project settings.";

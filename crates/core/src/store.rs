@@ -9,11 +9,11 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use crate::command::{Applied, Command, Origin};
 use crate::error::{Error, Result};
-use crate::model::Board;
+use crate::model::{Artifact, ArtifactId, Board, TaskId};
 use crate::ops;
 use crate::persist::{self, FileStamp};
 use crate::project;
-use crate::{agent_guide, export_md};
+use crate::{agent_guide, artifact, export_md};
 
 /// Emitted after any change to the board or session state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +30,14 @@ pub struct Snapshot {
     pub dirty: bool,
     pub path: Option<PathBuf>,
     pub agent_write: bool,
+}
+
+/// A file in `artifacts/` and where it is attached.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArtifactFile {
+    pub file: artifact::StoredFile,
+    /// `(task id, task number, artifact id)` for each task it is attached to.
+    pub tasks: Vec<(TaskId, u64, ArtifactId)>,
 }
 
 type Listener = Box<dyn Fn(Change) + Send + Sync>;
@@ -219,6 +227,84 @@ impl BoardStore {
             s.path = Some(path.to_path_buf());
             s.dirty = false;
             Ok(())
+        })
+    }
+
+    /// Save `data` as a new file in the project's `artifacts/` folder and
+    /// attach it to `task`. `name` is cleaned up (see [`artifact::clean_name`])
+    /// and made unique; the attached [`Artifact`] says what it ended up as.
+    /// The file is written at once; the record is saved with the board.
+    pub fn add_artifact(
+        &self,
+        origin: Origin,
+        task: TaskId,
+        name: &str,
+        data: &[u8],
+        expected_revision: Option<u64>,
+    ) -> Result<(Artifact, u64)> {
+        if origin == Origin::Agent && !self.agent_write() {
+            return Err(Error::AgentWriteDisabled);
+        }
+        let (file_name, kind) = artifact::clean_name(name)?;
+        artifact::validate_content(&file_name, kind, data)?;
+        let dir = self.project_dir().ok_or(Error::NoPath)?;
+        if self.read(|board, _| board.task(task).is_none()) {
+            return Err(Error::NotFound {
+                kind: "task",
+                id: task.to_string(),
+            });
+        }
+        let stored = artifact::write_new(&dir, &file_name, data)?;
+        let record = Artifact {
+            id: uuid::Uuid::new_v4(),
+            name: stored.clone(),
+            kind,
+            added_at: chrono::Utc::now(),
+            by_agent: origin == Origin::Agent,
+            extra: Default::default(),
+        };
+        let cmd = Command::AttachArtifact {
+            task,
+            artifact: record.clone(),
+        };
+        match self.apply(origin, cmd, expected_revision) {
+            Ok((_, revision)) => Ok((record, revision)),
+            Err(e) => {
+                artifact::remove(&dir, &stored);
+                Err(e)
+            }
+        }
+    }
+
+    /// The bytes of a file in the project's `artifacts/` folder.
+    pub fn read_artifact(&self, file_name: &str) -> Result<Vec<u8>> {
+        let dir = self.project_dir().ok_or(Error::NoPath)?;
+        artifact::read(&dir, file_name)
+    }
+
+    /// Every file in `artifacts/`, with the tasks it is attached to. Files
+    /// no task points at (detached, or left by a deleted task) are listed too.
+    pub fn artifact_files(&self) -> Vec<ArtifactFile> {
+        let Some(dir) = self.project_dir() else {
+            return Vec::new();
+        };
+        let stored = artifact::list_files(&dir);
+        self.read(|board, _| {
+            stored
+                .into_iter()
+                .map(|file| {
+                    let tasks = board
+                        .tasks()
+                        .filter_map(|(_, t)| {
+                            t.artifacts
+                                .iter()
+                                .find(|a| a.name == file.name)
+                                .map(|a| (t.id, t.number, a.id))
+                        })
+                        .collect();
+                    ArtifactFile { file, tasks }
+                })
+                .collect()
         })
     }
 
@@ -476,5 +562,160 @@ mod tests {
         other.open(&path).unwrap();
         assert!(!other.snapshot().dirty);
         assert_eq!(other.snapshot().board, store.snapshot().board);
+    }
+
+    // ---- artifacts ----
+
+    fn project_store() -> (tempfile::TempDir, Arc<BoardStore>, TaskId) {
+        let root = tempfile::tempdir().unwrap();
+        let store = BoardStore::new(true);
+        store.create_project(&root.path().join("p"), "P").unwrap();
+        let (applied, _) = store.apply(Origin::User, create(), None).unwrap();
+        let Applied::Task(id) = applied else { panic!() };
+        (root, store, id)
+    }
+
+    #[test]
+    fn attaching_writes_the_file_and_records_it_on_the_task() {
+        let (_root, store, task) = project_store();
+        let (art, _) = store
+            .add_artifact(Origin::Agent, task, "Plan v1.md", b"# Plan", None)
+            .unwrap();
+        assert_eq!(art.name, "Plan-v1.md");
+        assert!(art.by_agent);
+        assert_eq!(store.read_artifact("Plan-v1.md").unwrap(), b"# Plan");
+        let snap = store.snapshot();
+        assert_eq!(
+            snap.board.task(task).unwrap().artifacts,
+            std::slice::from_ref(&art)
+        );
+        assert!(snap.dirty);
+        assert!(snap.board.task(task).unwrap().agent_change.is_some());
+
+        // The record survives a save and reload.
+        store.save(false).unwrap();
+        let other = BoardStore::new(false);
+        other.open_project(&store.project_dir().unwrap()).unwrap();
+        assert_eq!(other.snapshot().board.task(task).unwrap().artifacts, [art]);
+    }
+
+    #[test]
+    fn same_name_twice_gets_a_new_file() {
+        let (_root, store, task) = project_store();
+        let (a, _) = store
+            .add_artifact(Origin::User, task, "n.md", b"one", None)
+            .unwrap();
+        let (b, _) = store
+            .add_artifact(Origin::User, task, "n.md", b"two", None)
+            .unwrap();
+        assert_eq!((a.name.as_str(), b.name.as_str()), ("n.md", "n-2.md"));
+        assert_eq!(store.read_artifact("n.md").unwrap(), b"one");
+    }
+
+    #[test]
+    fn detaching_keeps_the_file_and_lists_it_as_unattached() {
+        let (_root, store, task) = project_store();
+        let (art, _) = store
+            .add_artifact(Origin::Agent, task, "n.md", b"x", None)
+            .unwrap();
+        let files = store.artifact_files();
+        assert_eq!(files[0].tasks.len(), 1);
+
+        store
+            .apply(
+                Origin::Agent,
+                Command::DetachArtifact {
+                    task,
+                    artifact: art.id,
+                },
+                None,
+            )
+            .unwrap();
+        assert!(
+            store
+                .snapshot()
+                .board
+                .task(task)
+                .unwrap()
+                .artifacts
+                .is_empty()
+        );
+        let files = store.artifact_files();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].tasks.is_empty());
+        assert!(store.read_artifact("n.md").is_ok());
+    }
+
+    #[test]
+    fn a_rejected_attach_leaves_no_file_behind() {
+        let (_root, store, task) = project_store();
+        let stale = store.revision() - 1;
+        let err = store
+            .add_artifact(Origin::Agent, task, "n.md", b"x", Some(stale))
+            .unwrap_err();
+        assert!(matches!(err, Error::RevisionConflict { .. }));
+        assert!(store.artifact_files().is_empty());
+
+        store.set_agent_write(false);
+        let err = store
+            .add_artifact(Origin::Agent, task, "n.md", b"x", None)
+            .unwrap_err();
+        assert!(matches!(err, Error::AgentWriteDisabled));
+        assert!(store.artifact_files().is_empty());
+    }
+
+    #[test]
+    fn attaching_needs_a_project_a_task_and_good_content() {
+        let (_root, store, task) = project_store();
+        let missing = uuid::Uuid::new_v4();
+        assert!(matches!(
+            store.add_artifact(Origin::User, missing, "n.md", b"x", None),
+            Err(Error::NotFound { .. })
+        ));
+        assert!(
+            store
+                .add_artifact(Origin::User, task, "n.exe", b"x", None)
+                .is_err()
+        );
+        assert!(
+            store
+                .add_artifact(Origin::User, task, "n.png", b"not a png", None)
+                .is_err()
+        );
+
+        let loose = BoardStore::new(true);
+        let (applied, _) = loose.apply(Origin::User, create(), None).unwrap();
+        let Applied::Task(id) = applied else { panic!() };
+        assert!(matches!(
+            loose.add_artifact(Origin::User, id, "n.md", b"x", None),
+            Err(Error::NoPath)
+        ));
+    }
+
+    #[test]
+    fn a_task_has_a_limited_number_of_artifacts() {
+        let (_root, store, task) = project_store();
+        for i in 0..artifact::MAX_PER_TASK {
+            store
+                .add_artifact(Origin::User, task, &format!("n{i}.md"), b"x", None)
+                .unwrap();
+        }
+        assert!(matches!(
+            store.add_artifact(Origin::User, task, "extra.md", b"x", None),
+            Err(Error::Validation(_))
+        ));
+        assert_eq!(store.artifact_files().len(), artifact::MAX_PER_TASK);
+    }
+
+    #[test]
+    fn boards_without_artifacts_load_and_stay_unchanged_on_disk() {
+        let (_root, store, _) = project_store();
+        store.save(false).unwrap();
+        let text =
+            std::fs::read_to_string(project::board_path(&store.project_dir().unwrap())).unwrap();
+        assert!(
+            !text.contains("artifacts"),
+            "no empty artifacts field is written"
+        );
     }
 }

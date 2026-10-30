@@ -2041,6 +2041,7 @@ name = "stickynotes-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "chrono",
  "http-body-util",
  "reqwest",
@@ -2048,6 +2049,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stickynotes-core",
+ "tempfile",
  "tokio",
  "tokio-util",
  "tower",

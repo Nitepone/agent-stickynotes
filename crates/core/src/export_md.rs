@@ -47,6 +47,17 @@ pub fn to_markdown(board: &Board) -> String {
                     let _ = writeln!(out, "- [{mark}] {}", c.text);
                 }
             }
+            if !task.artifacts.is_empty() {
+                out.push_str("\n**Artifacts**\n\n");
+                for a in &task.artifacts {
+                    let _ = writeln!(
+                        out,
+                        "- [{name}]({dir}/{name})",
+                        name = a.name,
+                        dir = crate::project::ARTIFACTS_DIR
+                    );
+                }
+            }
             let references: Vec<_> = task
                 .references
                 .iter()
@@ -111,6 +122,47 @@ mod tests {
         )
         .unwrap();
         insta::assert_snapshot!(to_markdown(&board));
+    }
+
+    #[test]
+    fn export_links_artifacts_by_relative_path() {
+        use crate::model::{Artifact, ArtifactKind};
+
+        let mut board = Board::new_default();
+        let Applied::Task(id) = execute(
+            &mut board,
+            Origin::User,
+            Command::CreateTask {
+                column: None,
+                position: None,
+                draft: TaskDraft {
+                    description: "Design".into(),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap() else {
+            unreachable!()
+        };
+        let artifact = Artifact {
+            id: uuid::Uuid::new_v4(),
+            name: "flow.png".into(),
+            kind: ArtifactKind::Image,
+            added_at: chrono::Utc::now(),
+            by_agent: false,
+            extra: Default::default(),
+        };
+        execute(
+            &mut board,
+            Origin::User,
+            Command::AttachArtifact { task: id, artifact },
+        )
+        .unwrap();
+        let md = to_markdown(&board);
+        assert!(
+            md.contains("**Artifacts**\n\n- [flow.png](artifacts/flow.png)"),
+            "{md}"
+        );
     }
 
     #[test]

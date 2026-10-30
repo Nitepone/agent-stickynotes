@@ -3,11 +3,13 @@
 
 use std::sync::Arc;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use stickynotes_core::{
-    Applied, Board, BoardStore, Column, Command, Criterion, CriterionDraft, Error, Origin,
-    Progress, ReferenceDraft, Relation, Task, TaskDraft, TaskId, TaskPatch,
+    Applied, Artifact, ArtifactKind, Board, BoardStore, Column, Command, Criterion, CriterionDraft,
+    Error, Origin, Progress, ReferenceDraft, Relation, Task, TaskDraft, TaskId, TaskPatch,
 };
 use uuid::Uuid;
 
@@ -90,6 +92,7 @@ pub struct TaskView {
     pub acceptance_criteria: Vec<CriterionView>,
     pub progress: Progress,
     pub references: Vec<ReferenceView>,
+    pub artifacts: Vec<ArtifactView>,
     pub column: ColumnRef,
     /// The column `advance` would move this task into, with its entry criteria.
     pub next_column: Option<ColumnRef>,
@@ -108,6 +111,45 @@ pub struct ReferenceView {
     pub relation: &'static str,
     pub description: String,
     pub column: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ArtifactView {
+    pub id: Uuid,
+    /// File name, as shown to the user.
+    pub name: String,
+    /// `markdown` or `image`.
+    pub kind: &'static str,
+    /// Where the file is, relative to the project folder.
+    pub path: String,
+    pub added_at: DateTime<Utc>,
+    pub added_by_agent: bool,
+}
+
+/// An artifact with its text, when it has any.
+#[derive(Debug, Serialize)]
+pub struct ArtifactContent {
+    #[serde(flatten)]
+    pub artifact: ArtifactView,
+    /// The file's text for Markdown and SVG; images are binary, so this is
+    /// null for them and the file at `path` is the content.
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ArtifactAdded {
+    pub artifact: ArtifactView,
+    pub revision: u64,
+}
+
+/// Body of an add-artifact request. Give `content` for text, or
+/// `content_base64` for any file (needed for raster images).
+#[derive(Debug, Deserialize)]
+pub struct NewArtifact {
+    /// File name with extension, e.g. `design.md` or `login.png`.
+    pub name: String,
+    pub content: Option<String>,
+    pub content_base64: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -330,6 +372,86 @@ impl AgentService {
         self.apply_to_task(cmd, expected)
     }
 
+    pub fn add_artifact(
+        &self,
+        task: &str,
+        new: NewArtifact,
+        expected: Option<u64>,
+    ) -> ServiceResult<ArtifactAdded> {
+        let task = self.resolve_task(task)?;
+        let data = match (new.content, new.content_base64) {
+            (Some(text), None) => text.into_bytes(),
+            (None, Some(b64)) => BASE64.decode(b64.trim()).map_err(|_| {
+                ServiceError::BadRequest("content_base64 is not valid base64".into())
+            })?,
+            _ => {
+                return Err(ServiceError::BadRequest(
+                    "give exactly one of content (text) or content_base64".into(),
+                ));
+            }
+        };
+        let (artifact, revision) =
+            self.store
+                .add_artifact(Origin::Agent, task, &new.name, &data, expected)?;
+        Ok(ArtifactAdded {
+            artifact: artifact_view(&artifact),
+            revision,
+        })
+    }
+
+    /// An artifact of a task, named by its id or file name.
+    pub fn artifact(&self, task: &str, artifact: &str) -> ServiceResult<ArtifactContent> {
+        let task = self.resolve_task(task)?;
+        let found = self.find_artifact(task, artifact)?;
+        let content = match found.kind {
+            ArtifactKind::Markdown => Some(self.read_text(&found)?),
+            ArtifactKind::Image if found.name.ends_with(".svg") => Some(self.read_text(&found)?),
+            ArtifactKind::Image => None,
+        };
+        Ok(ArtifactContent {
+            artifact: artifact_view(&found),
+            content,
+        })
+    }
+
+    pub fn detach_artifact(
+        &self,
+        task: &str,
+        artifact: &str,
+        expected: Option<u64>,
+    ) -> ServiceResult<TaskView> {
+        let task = self.resolve_task(task)?;
+        let artifact = self.find_artifact(task, artifact)?.id;
+        self.apply_to_task(Command::DetachArtifact { task, artifact }, expected)
+    }
+
+    fn find_artifact(&self, task: Uuid, reference: &str) -> ServiceResult<Artifact> {
+        let reference = reference.trim();
+        let id = Uuid::parse_str(reference).ok();
+        self.store.read(|board, _| {
+            let t = board.task(task).ok_or_else(|| Error::NotFound {
+                kind: "task",
+                id: task.to_string(),
+            })?;
+            t.artifacts
+                .iter()
+                .find(|a| Some(a.id) == id || a.name == reference)
+                .cloned()
+                .ok_or_else(|| {
+                    ServiceError::Core(Error::NotFound {
+                        kind: "artifact",
+                        id: reference.to_string(),
+                    })
+                })
+        })
+    }
+
+    fn read_text(&self, artifact: &Artifact) -> ServiceResult<String> {
+        let bytes = self.store.read_artifact(&artifact.name)?;
+        String::from_utf8(bytes)
+            .map_err(|_| ServiceError::BadRequest("the file is not valid UTF-8 text".into()))
+    }
+
     pub fn delete_task(&self, id: &str, expected: Option<u64>) -> ServiceResult<Deleted> {
         let id = self.resolve_task(id)?;
         let (_, revision) =
@@ -358,6 +480,17 @@ fn summary(column: &Column, task: &Task) -> TaskSummary {
         column: column.title.clone(),
         description: task.description.clone(),
         progress: task.progress(),
+    }
+}
+
+fn artifact_view(a: &Artifact) -> ArtifactView {
+    ArtifactView {
+        id: a.id,
+        name: a.name.clone(),
+        kind: a.kind.as_str(),
+        path: format!("{}/{}", stickynotes_core::project::ARTIFACTS_DIR, a.name),
+        added_at: a.added_at,
+        added_by_agent: a.by_agent,
     }
 }
 
@@ -406,6 +539,7 @@ fn task_view(board: &Board, id: TaskId, revision: u64) -> ServiceResult<TaskView
                 })
             })
             .collect(),
+        artifacts: t.artifacts.iter().map(artifact_view).collect(),
         column: column_ref(column),
         next_column: board.columns.get(ci + 1).map(column_ref),
         created_at: t.created_at,

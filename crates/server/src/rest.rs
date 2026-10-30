@@ -1,6 +1,6 @@
 //! REST transport: `/api/v1/...`.
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
@@ -9,7 +9,7 @@ use serde::Deserialize;
 use serde_json::json;
 use stickynotes_core::Error;
 
-use crate::service::{AgentService, NewTask, ServiceError, TaskUpdate};
+use crate::service::{AgentService, NewArtifact, NewTask, ServiceError, TaskUpdate};
 
 pub fn router(service: AgentService) -> Router {
     Router::new()
@@ -23,8 +23,19 @@ pub fn router(service: AgentService) -> Router {
         )
         .route("/tasks/{id}/advance", post(advance_task))
         .route("/tasks/{id}/criteria/{cid}", put(set_criterion))
+        .route(
+            "/tasks/{id}/artifacts",
+            // Images arrive base64 encoded: room for the largest one.
+            post(add_artifact).layer(DefaultBodyLimit::max(ARTIFACT_BODY_LIMIT)),
+        )
+        .route(
+            "/tasks/{id}/artifacts/{aid}",
+            get(get_artifact).delete(detach_artifact),
+        )
         .with_state(service)
 }
+
+pub(crate) const ARTIFACT_BODY_LIMIT: usize = 8 << 20;
 
 type ApiResult = Result<Response, ServiceError>;
 
@@ -96,6 +107,31 @@ async fn set_criterion(
     Ok(Json(s.set_criterion(&id, &cid, body.done, if_match(&headers)?)?).into_response())
 }
 
+async fn add_artifact(
+    State(s): State<AgentService>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<NewArtifact>,
+) -> ApiResult {
+    let added = s.add_artifact(&id, body, if_match(&headers)?)?;
+    Ok((StatusCode::CREATED, Json(added)).into_response())
+}
+
+async fn get_artifact(
+    State(s): State<AgentService>,
+    Path((id, aid)): Path<(String, String)>,
+) -> ApiResult {
+    Ok(Json(s.artifact(&id, &aid)?).into_response())
+}
+
+async fn detach_artifact(
+    State(s): State<AgentService>,
+    Path((id, aid)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> ApiResult {
+    Ok(Json(s.detach_artifact(&id, &aid, if_match(&headers)?)?).into_response())
+}
+
 async fn delete_task(
     State(s): State<AgentService>,
     Path(id): Path<String>,
@@ -129,6 +165,7 @@ impl IntoResponse for ServiceError {
                 Error::AgentWriteDisabled => (StatusCode::FORBIDDEN, "agent_write_disabled"),
                 Error::AgentNotPermitted(_) => (StatusCode::FORBIDDEN, "not_permitted"),
                 Error::RevisionConflict { .. } => (StatusCode::CONFLICT, "revision_conflict"),
+                Error::NoPath => (StatusCode::CONFLICT, "no_project"),
                 _ => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
             },
         };

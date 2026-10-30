@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use stickynotes_core::agent_guide;
 
 use crate::service::{
-    AgentService, CriterionInput, NewTask, ReferenceInput, ServiceResult, TaskUpdate,
+    AgentService, CriterionInput, NewArtifact, NewTask, ReferenceInput, ServiceResult, TaskUpdate,
 };
 
 const BOARD_URI: &str = "stickynotes://board";
@@ -90,6 +90,31 @@ pub struct CriterionSetArgs {
     pub task_id: String,
     pub criterion_id: String,
     pub done: bool,
+    pub expected_revision: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ArtifactAddArgs {
+    /// Task id, or its number such as #12.
+    pub task_id: String,
+    /// File name with extension: .md for Markdown, or .png .jpg .jpeg .gif
+    /// .webp .svg for images. It is cleaned up and made unique, so check the
+    /// returned name.
+    pub name: String,
+    /// The text, for .md and .svg files. Give this or content_base64.
+    pub content: Option<String>,
+    /// The file's bytes, base64 encoded (needed for raster images). Limits:
+    /// 1 MiB for Markdown and SVG, 5 MiB for other images.
+    pub content_base64: Option<String>,
+    pub expected_revision: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct ArtifactRefArgs {
+    /// Task id, or its number such as #12.
+    pub task_id: String,
+    /// Artifact id or file name.
+    pub artifact: String,
     pub expected_revision: Option<u64>,
 }
 
@@ -208,6 +233,38 @@ impl BoardMcp {
     #[tool(description = "Delete a task permanently.")]
     fn task_delete(&self, Parameters(a): Parameters<TaskIdArgs>) -> ToolResult {
         json(self.service.delete_task(&a.id, a.expected_revision))
+    }
+
+    #[tool(
+        description = "Attach a file to a task: Markdown (.md) or an image (.png .jpg .gif .webp .svg), for example a design note, a report or a diagram. Pass text as content, or bytes as content_base64. The file is stored in the project's artifacts folder and shown to the user on the task. You cannot replace an existing artifact; add a new one and detach the old."
+    )]
+    fn artifact_add(&self, Parameters(a): Parameters<ArtifactAddArgs>) -> ToolResult {
+        let new = NewArtifact {
+            name: a.name,
+            content: a.content,
+            content_base64: a.content_base64,
+        };
+        json(
+            self.service
+                .add_artifact(&a.task_id, new, a.expected_revision),
+        )
+    }
+
+    #[tool(
+        description = "Read an artifact attached to a task. Markdown and SVG come back as text; for other images only the metadata and path are returned."
+    )]
+    fn artifact_get(&self, Parameters(a): Parameters<ArtifactRefArgs>) -> ToolResult {
+        json(self.service.artifact(&a.task_id, &a.artifact))
+    }
+
+    #[tool(
+        description = "Detach an artifact from a task. The file stays in the project's artifacts folder; only the user can remove it."
+    )]
+    fn artifact_detach(&self, Parameters(a): Parameters<ArtifactRefArgs>) -> ToolResult {
+        json(
+            self.service
+                .detach_artifact(&a.task_id, &a.artifact, a.expected_revision),
+        )
     }
 
     #[tool(description = "Mark an acceptance criterion as done or not done.")]

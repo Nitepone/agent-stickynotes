@@ -7,6 +7,9 @@ loopback so Claude Code (or any agent) can read and update the board.
 - A board lives in a project folder: `stickynotes.json` plus an `artifacts/` folder
   (for the Markdown and images agents attach to tasks). **File ▸ Export to Markdown**
   produces a readable copy.
+- Agents can attach Markdown and image files to tasks (see
+  [docs/claude-code-setup.md](docs/claude-code-setup.md#artifacts)); they can add and
+  detach artifacts but never delete files.
 - Columns are an ordered pipeline. Each column's description says what a task
   must satisfy to be there.
 - You can drag tasks anywhere. Agents can only create tasks in the first column

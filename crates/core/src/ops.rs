@@ -120,6 +120,38 @@ fn run(board: &mut Board, cmd: Command) -> Result<Applied> {
             }
             Ok(Applied::Task(task))
         }
+        Command::AttachArtifact { task, artifact } => {
+            let t = task_mut(board, task)?;
+            if t.artifacts.len() >= crate::artifact::MAX_PER_TASK {
+                return Err(Error::Validation(format!(
+                    "a task can have at most {} artifacts; detach one first",
+                    crate::artifact::MAX_PER_TASK
+                )));
+            }
+            if t.artifacts
+                .iter()
+                .any(|a| a.id == artifact.id || a.name == artifact.name)
+            {
+                return Err(Error::Validation(format!(
+                    "'{}' is already attached to this task",
+                    artifact.name
+                )));
+            }
+            t.artifacts.push(artifact);
+            t.updated_at = Utc::now();
+            Ok(Applied::Task(task))
+        }
+        Command::DetachArtifact { task, artifact } => {
+            let t = task_mut(board, task)?;
+            let at = t
+                .artifacts
+                .iter()
+                .position(|a| a.id == artifact)
+                .ok_or_else(|| not_found("artifact", artifact))?;
+            t.artifacts.remove(at);
+            t.updated_at = Utc::now();
+            Ok(Applied::Task(task))
+        }
         Command::CreateColumn {
             position,
             title,
@@ -212,7 +244,9 @@ fn check_agent_rules(board: &Board, cmd: &Command) -> Result<()> {
         Command::UpdateTask { .. }
         | Command::AdvanceTask { .. }
         | Command::DeleteTask { .. }
-        | Command::SetCriterion { .. } => Ok(()),
+        | Command::SetCriterion { .. }
+        | Command::AttachArtifact { .. }
+        | Command::DetachArtifact { .. } => Ok(()),
     }
 }
 
@@ -238,6 +272,7 @@ fn create_task(
         requirements: clean_lines(draft.requirements),
         acceptance_criteria: merge_criteria(&[], draft.acceptance_criteria),
         references: Vec::new(),
+        artifacts: Vec::new(),
         agent_change: None,
         created_at: now,
         updated_at: now,

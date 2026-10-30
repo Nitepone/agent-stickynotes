@@ -3,7 +3,7 @@
 
 use serde::Deserialize;
 
-use crate::model::{ColumnId, CriterionId, Relation, TaskId};
+use crate::model::{Artifact, ArtifactId, ColumnId, CriterionId, Relation, TaskId};
 
 /// Who issued a command. Agents are subject to extra rules.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +82,16 @@ pub enum Command {
         task: TaskId,
         criterion: CriterionId,
         done: bool,
+    },
+    /// Record a file already written to `artifacts/` on a task.
+    AttachArtifact {
+        task: TaskId,
+        artifact: Artifact,
+    },
+    /// Remove the record from the task; the file stays in `artifacts/`.
+    DetachArtifact {
+        task: TaskId,
+        artifact: ArtifactId,
     },
     CreateColumn {
         position: Option<usize>,

@@ -16,6 +16,7 @@ pub const SUGGESTED_DESCRIPTION_CHARS: usize = 200;
 pub type ColumnId = Uuid;
 pub type TaskId = Uuid;
 pub type CriterionId = Uuid;
+pub type ArtifactId = Uuid;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Board {
@@ -86,12 +87,47 @@ pub struct Task {
     /// Links to other tasks. Every link has a mirror on the other task.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub references: Vec<Reference>,
+    /// Files attached to this task, kept in the project's `artifacts/` folder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artifacts: Vec<Artifact>,
     /// Set when the most recent change to this task was made by an agent, so
     /// the UI can draw attention to it. A change by the user clears it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_change: Option<AgentChange>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(flatten)]
+    pub extra: Map<String, Value>,
+}
+
+/// What kind of file an artifact is, which decides how the viewer shows it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ArtifactKind {
+    Markdown,
+    Image,
+}
+
+impl ArtifactKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ArtifactKind::Markdown => "markdown",
+            ArtifactKind::Image => "image",
+        }
+    }
+}
+
+/// A file attached to a task. The file itself lives in the project's
+/// `artifacts/` folder; detaching removes this record and leaves the file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Artifact {
+    pub id: ArtifactId,
+    /// The file's name inside `artifacts/`; also what is shown.
+    pub name: String,
+    pub kind: ArtifactKind,
+    pub added_at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub by_agent: bool,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
@@ -433,6 +469,7 @@ mod tests {
             requirements: Vec::new(),
             acceptance_criteria: Vec::new(),
             references: Vec::new(),
+            artifacts: Vec::new(),
             agent_change: None,
             created_at: at,
             updated_at: at,

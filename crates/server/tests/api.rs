@@ -26,6 +26,16 @@ impl Api {
         Api { store, app }
     }
 
+    /// An API whose board is saved in a fresh project folder (needed for artifacts).
+    fn in_project() -> (tempfile::TempDir, Self) {
+        let api = Api::new(true);
+        let root = tempfile::tempdir().unwrap();
+        api.store
+            .create_project(&root.path().join("p"), "P")
+            .unwrap();
+        (root, api)
+    }
+
     async fn call(&self, method: &str, uri: &str, body: Option<Value>) -> (StatusCode, Value) {
         self.call_with(method, uri, body, Some(TOKEN), None).await
     }
@@ -422,6 +432,173 @@ async fn mcp_end_to_end() {
         .await
         .unwrap();
     assert!(format!("{:?}", resource.contents).contains("From MCP"));
+
+    client.cancel().await.unwrap();
+    handle.shutdown();
+}
+
+/// A PNG header followed by `len` bytes, base64 encoded.
+fn png_base64(len: usize) -> String {
+    use base64::Engine as _;
+    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+    bytes.resize(len, 7);
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+#[tokio::test]
+async fn artifacts_are_attached_read_and_detached() {
+    let (_root, api) = Api::in_project();
+    let (_, task) = api
+        .call("POST", "/tasks", Some(json!({"description": "T"})))
+        .await;
+    let id = task["id"].as_str().unwrap();
+
+    let (status, added) = api
+        .call(
+            "POST",
+            &format!("/tasks/{id}/artifacts"),
+            Some(json!({"name": "Design Notes.md", "content": "# Design"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "{added}");
+    assert_eq!(added["artifact"]["name"], "Design-Notes.md");
+    assert_eq!(added["artifact"]["kind"], "markdown");
+    assert_eq!(added["artifact"]["path"], "artifacts/Design-Notes.md");
+    assert_eq!(added["artifact"]["added_by_agent"], true);
+
+    let (status, _) = api
+        .call(
+            "POST",
+            "/tasks/%231/artifacts",
+            Some(json!({"name": "shot.png", "content_base64": png_base64(64)})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED, "task is addressable as #1");
+
+    let (_, task) = api.call("GET", &format!("/tasks/{id}"), None).await;
+    let names: Vec<_> = task["artifacts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| a["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["Design-Notes.md", "shot.png"]);
+
+    // Text comes back by file name; images are metadata only.
+    let (_, md) = api
+        .call(
+            "GET",
+            &format!("/tasks/{id}/artifacts/Design-Notes.md"),
+            None,
+        )
+        .await;
+    assert_eq!(md["content"], "# Design");
+    let (_, img) = api
+        .call("GET", &format!("/tasks/{id}/artifacts/shot.png"), None)
+        .await;
+    assert_eq!(img["content"], Value::Null);
+    assert_eq!(img["kind"], "image");
+
+    // Detach by id: the record goes, the file stays.
+    let aid = added["artifact"]["id"].as_str().unwrap();
+    let (status, task) = api
+        .call("DELETE", &format!("/tasks/{id}/artifacts/{aid}"), None)
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(task["artifacts"].as_array().unwrap().len(), 1);
+    assert_eq!(api.store.artifact_files().len(), 2);
+    let (status, _) = api
+        .call("GET", &format!("/tasks/{id}/artifacts/{aid}"), None)
+        .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn artifact_requests_are_validated() {
+    let (_root, api) = Api::in_project();
+    let (_, task) = api
+        .call("POST", "/tasks", Some(json!({"description": "T"})))
+        .await;
+    let uri = format!("/tasks/{}/artifacts", task["id"].as_str().unwrap());
+    for body in [
+        json!({"name": "run.sh", "content": "echo hi"}),
+        json!({"name": "no-extension", "content": "x"}),
+        json!({"name": "a.png", "content": "text, not a png"}),
+        json!({"name": "a.png", "content_base64": "!!! not base64"}),
+        json!({"name": "a.md"}),
+        json!({"name": "a.md", "content": "x", "content_base64": "eA=="}),
+        json!({"name": "a.md", "content": ""}),
+    ] {
+        let (status, err) = api.call("POST", &uri, Some(body.clone())).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}: {err}");
+    }
+    assert!(api.store.artifact_files().is_empty());
+
+    api.store.set_agent_write(false);
+    let (status, _) = api
+        .call("POST", &uri, Some(json!({"name": "a.md", "content": "x"})))
+        .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Without a project there is nowhere to put the file.
+    let loose = Api::new(true);
+    let (_, task) = loose
+        .call("POST", "/tasks", Some(json!({"description": "T"})))
+        .await;
+    let (status, err) = loose
+        .call(
+            "POST",
+            &format!("/tasks/{}/artifacts", task["id"].as_str().unwrap()),
+            Some(json!({"name": "a.md", "content": "x"})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{err}");
+    assert_eq!(err["error"], "no_project");
+}
+
+#[tokio::test]
+async fn a_large_image_can_be_attached_over_mcp() {
+    let (_root, api) = Api::in_project();
+    let handle = stickynotes_server::start(api.store.clone(), TOKEN.into(), 0)
+        .await
+        .unwrap();
+    let config =
+        StreamableHttpClientTransportConfig::with_uri(format!("http://{}/mcp", handle.addr))
+            .auth_header(TOKEN);
+    let client = ().serve(StreamableHttpClientTransport::from_config(config)).await.unwrap();
+
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("task_create")
+                .with_arguments(json!({"description": "T"}).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let task: Value = serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+    let id = task["id"].as_str().unwrap();
+
+    // Just under the 5 MiB limit, so the encoded request is about 6.7 MB.
+    let big = 5 * 1024 * 1024 - 16;
+    let args = json!({"task_id": id, "name": "big.png", "content_base64": png_base64(big)});
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("artifact_add")
+                .with_arguments(args.as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true), "{:?}", result.content);
+    assert_eq!(api.store.read_artifact("big.png").unwrap().len(), big);
+
+    let args = json!({"task_id": id, "artifact": "big.png"});
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("artifact_detach")
+                .with_arguments(args.as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true));
 
     client.cancel().await.unwrap();
     handle.shutdown();

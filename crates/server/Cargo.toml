@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 axum = "0.8.9"
+base64 = "0.23.1"
 chrono = { version = "0.4.45", features = ["serde"] }
 rmcp = { version = "3.8.0", features = ["server", "transport-streamable-http-server", "macros"] }
 serde = { version = "1.0.229", features = ["derive"] }
@@ -17,6 +18,7 @@ tracing = "0.1.44"
 uuid = { version = "1.29.0", features = ["serde"] }
 
 [dev-dependencies]
+tempfile = "3.27.0"
 http-body-util = "0.1.5"
 reqwest = { version = "0.13.5", features = ["json"] }
 rmcp = { version = "3.8.0", features = ["client", "transport-streamable-http-client-reqwest"] }

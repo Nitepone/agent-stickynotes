@@ -38,6 +38,8 @@ pub fn router(store: Arc<BoardStore>, token: String, cancel: CancellationToken) 
     let mcp_service = service.clone();
     let mut config = StreamableHttpServerConfig::default();
     config.cancellation_token = cancel.child_token();
+    // Room for the largest artifact once it is base64 encoded.
+    config.max_request_body_bytes = rest::ARTIFACT_BODY_LIMIT;
     let mcp: StreamableHttpService<mcp::BoardMcp, LocalSessionManager> = StreamableHttpService::new(
         move || Ok(mcp::BoardMcp::new(mcp_service.clone())),
         Default::default(),
