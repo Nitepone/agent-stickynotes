@@ -1,7 +1,42 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect x="24" y="24" width="208" height="208" rx="14" fill="#f7d54a"/>
-  <path d="M232 168 168 232h48a16 16 0 0 0 16-16z" fill="#d9b72f"/>
-  <rect x="56" y="64" width="112" height="14" rx="7" fill="#7a6410"/>
-  <rect x="56" y="100" width="144" height="14" rx="7" fill="#7a6410"/>
-  <rect x="56" y="136" width="96" height="14" rx="7" fill="#7a6410"/>
+  <defs>
+    <linearGradient id="board" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#434850"/>
+      <stop offset="1" stop-color="#17191d"/>
+    </linearGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".28"/>
+      <stop offset=".4" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity=".5"/>
+    </linearGradient>
+    <linearGradient id="column" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a606a"/>
+      <stop offset="1" stop-color="#31353c"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e6e9ee"/>
+      <stop offset="1" stop-color="#aab0ba"/>
+    </linearGradient>
+    <linearGradient id="note" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe680"/>
+      <stop offset="1" stop-color="#f0b723"/>
+    </linearGradient>
+    <filter id="lift" x="-10%" y="-30%" width="120%" height="190%">
+      <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#000" flood-opacity=".45"/>
+    </filter>
+  </defs>
+  <!-- the board -->
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="url(#board)"/>
+  <rect x="17" y="17" width="222" height="222" rx="47" fill="none" stroke="url(#rim)" stroke-width="2"/>
+  <!-- one column -->
+  <rect x="60" y="44" width="136" height="168" rx="18" fill="url(#column)"/>
+  <rect x="60.5" y="44.5" width="135" height="167" rx="17.5" fill="none" stroke="#ffffff" stroke-opacity=".12"/>
+  <!-- its title -->
+  <rect x="78" y="62" width="64" height="12" rx="6" fill="url(#title)"/>
+  <!-- three sticky notes -->
+  <g filter="url(#lift)" fill="url(#note)">
+    <rect x="78" y="94" width="100" height="26" rx="7"/>
+    <rect x="78" y="130" width="100" height="26" rx="7"/>
+    <rect x="78" y="166" width="100" height="26" rx="7"/>
+  </g>
 </svg>
