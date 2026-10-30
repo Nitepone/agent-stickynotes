@@ -36,6 +36,7 @@ pub mod qobject {
         #[qproperty(QString, primary_color)]
         #[qproperty(QString, secondary_color)]
         #[qproperty(QString, note_color)]
+        #[qproperty(QString, markdown_style)]
         #[qproperty(bool, spell_check)]
         #[qproperty(bool, spell_available)]
         #[qproperty(QString, draft_agent)]
@@ -139,6 +140,9 @@ pub mod qobject {
         /// Back to the theme's yellow note.
         #[qinvokable]
         fn reset_note_color(self: Pin<&mut BoardController>);
+        /// The Markdown viewer's display style, remembered across runs.
+        #[qinvokable]
+        fn choose_markdown_style(self: Pin<&mut BoardController>, style: &QString);
 
         /// Editor preferences. They are saved at once. The `choose_draft_*`
         /// calls that take a fixed set of values return false and change
@@ -213,6 +217,7 @@ pub struct BoardControllerRust {
     primary_color: QString,
     secondary_color: QString,
     note_color: QString,
+    markdown_style: QString,
     spell_check: bool,
     spell_available: bool,
     draft_agent: QString,
@@ -253,6 +258,8 @@ impl cxx_qt::Initialize for qobject::BoardController {
                 .set_secondary_color(QString::from(color(&settings.secondary_color).as_str()));
             self.as_mut()
                 .set_note_color(QString::from(color(&settings.note_color).as_str()));
+            self.as_mut()
+                .set_markdown_style(QString::from(settings.markdown_style.as_str()));
             // Stored editor choices that are no longer valid fall back to the default.
             self.as_mut().set_spell_check(settings.spell_check);
             self.as_mut().set_spell_available(ctx.spell.available());
@@ -502,6 +509,13 @@ impl qobject::BoardController {
     fn reset_note_color(mut self: Pin<&mut Self>) {
         self.as_mut().set_note_color(QString::default());
         context::get().update_settings(|s| s.note_color.clear());
+    }
+
+    fn choose_markdown_style(mut self: Pin<&mut Self>, style: &QString) {
+        let style = String::from(style);
+        self.as_mut()
+            .set_markdown_style(QString::from(style.as_str()));
+        context::get().update_settings(|s| s.markdown_style = style);
     }
 
     fn choose_spell_check(mut self: Pin<&mut Self>, enabled: bool) {

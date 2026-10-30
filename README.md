@@ -11,7 +11,10 @@ loopback so Claude Code (or any agent) can read and update the board.
   [docs/claude-code-setup.md](docs/claude-code-setup.md#artifacts)); they can add and
   detach artifacts but never delete files.
   Click a task's file in the task editor to open it in a viewer window; **Board ▸ Project
-  Settings…** lists every file in the project's `artifacts/` folder.
+  Settings…** lists every file in the project's `artifacts/` folder. The Markdown viewer has
+  a contents pane to jump between sections, search (Ctrl+F, Enter / Shift+Enter for next and
+  previous), zoom (Ctrl+`+`/`-`/`0` or Ctrl + wheel) and a display style menu (Default,
+  Reading, Compact, Monospace) that is remembered.
 - Columns are an ordered pipeline. Each column's description says what a task
   must satisfy to be there.
 - You can drag tasks anywhere. Agents can only create tasks in the first column

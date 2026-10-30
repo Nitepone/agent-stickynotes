@@ -272,6 +272,8 @@ ApplicationWindow {
     Component {
         id: viewerComponent
         ArtifactViewer {
+            styleId: controller.markdownStyle
+            onStyleChosen: (id) => controller.chooseMarkdownStyle(id)
             onClosing: Qt.callLater(destroy)
         }
     }

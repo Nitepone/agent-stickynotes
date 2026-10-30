@@ -42,6 +42,9 @@ pub struct Settings {
     pub draft_model: String,
     /// Claude Code thinking (effort) level; empty means its default.
     pub draft_effort: String,
+    /// Display style of the Markdown viewer (`default`, `reading`, ...); the
+    /// viewer falls back to the default for an id it does not know.
+    pub markdown_style: String,
 }
 
 impl Default for Settings {
@@ -62,6 +65,7 @@ impl Default for Settings {
             draft_system_prompt: String::new(),
             draft_model: String::new(),
             draft_effort: String::new(),
+            markdown_style: "default".into(),
         }
     }
 }
@@ -234,6 +238,7 @@ mod tests {
         assert_eq!(settings.draft_system_prompt, "");
         assert_eq!(settings.draft_model, "");
         assert_eq!(settings.draft_effort, "");
+        assert_eq!(settings.markdown_style, "default");
     }
 
     #[test]
@@ -246,6 +251,7 @@ mod tests {
         settings.draft_system_prompt = "Write in British English.".into();
         settings.draft_model = "opus".into();
         settings.draft_effort = "high".into();
+        settings.markdown_style = "reading".into();
         config.save_settings(&settings).unwrap();
 
         let restored = config_in(dir.path()).load_settings();
@@ -254,6 +260,7 @@ mod tests {
         assert_eq!(restored.draft_system_prompt, "Write in British English.");
         assert_eq!(restored.draft_model, "opus");
         assert_eq!(restored.draft_effort, "high");
+        assert_eq!(restored.markdown_style, "reading");
     }
 
     #[test]
