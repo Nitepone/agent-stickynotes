@@ -87,7 +87,7 @@ columns, the board title or project settings. Those rules live in
 
 ## Checking UI work without a display
 
-`QT_QPA_PLATFORM=offscreen` works. Set `STICKYNOTES_SCREENSHOT=out.png:<scene>[:delayMs]`
+`QT_QPA_PLATFORM=offscreen` works. Set `STICKYNOTES_SCREENSHOT=out.png:<scene>[:delayMs[:WxH]]` (`WxH` resizes the window, e.g. `1560x820`)
 and run `cargo run -p stickynotes -- <project-folder>`: it renders to a PNG and exits.
 Scenes: `board`, `projects`, `artifacts`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`,
 `editor`, `note-demo`, `theme-demo`, `theme-reset`, `generate`, `interact`, `synthetic`. Always point
@@ -111,6 +111,6 @@ API token from the config directory to work around a failed connection.
 ## Commits
 
 - One logical change per commit, with a message explaining what and why.
-- Tests, docs (`README.md`, `docs/claude-code-setup.md`) and the code ship together.
+- Tests, docs (`README.md`, `docs/`) and the code ship together.
 - Do not commit editor files (`.qmlls.ini`) or build output (`target/`).
 - Do not push, tag or rewrite history unless asked.

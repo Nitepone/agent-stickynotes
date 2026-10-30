@@ -1,0 +1,468 @@
+{
+  "schema_version": 1,
+  "id": "e03d5a41-522c-4d87-a77e-1d0f55ac1d22",
+  "title": "ACD2300 codec driver",
+  "project": {
+    "document_prompt": "Write short, plain Markdown. Lead with what the reader needs to know. Use tables for registers and numbers, and code blocks for kernel code.",
+    "code_guidance": "Linux kernel C: follow Documentation/process/coding-style.rst, run scripts/checkpatch.pl --strict, use devm_ helpers, and return errors with dev_err_probe()."
+  },
+  "columns": [
+    {
+      "id": "f7156f00-cfce-4916-8ee8-a9419a30f3bf",
+      "title": "Backlog",
+      "description": "Ideas and requests that have not been scoped yet.",
+      "tasks": [
+        {
+          "id": "8c433be7-ae61-400e-a892-c1f6352ec5b0",
+          "number": 11,
+          "description": "Support headphone jack detection through the interrupt line",
+          "extended_description": "Report insert and remove events with snd_soc_jack and debounce them in hardware.",
+          "requirements": [],
+          "acceptance_criteria": [],
+          "created_at": "2026-10-01T22:17:54Z",
+          "updated_at": "2026-10-01T22:17:54Z"
+        },
+        {
+          "id": "0042c445-bb9e-4d1d-a9ae-c6f8d5fa5ce5",
+          "number": 12,
+          "description": "Add DAPM routes for the line-in bypass path",
+          "extended_description": "",
+          "requirements": [],
+          "acceptance_criteria": [],
+          "created_at": "2026-10-02T22:17:54Z",
+          "updated_at": "2026-10-02T22:17:54Z"
+        },
+        {
+          "id": "44c57bca-6576-4368-ad9f-16d21881c49e",
+          "number": 13,
+          "description": "Suspend and resume: restore the register cache",
+          "extended_description": "Power down the codec on suspend and sync the cache back on resume.",
+          "requirements": [],
+          "acceptance_criteria": [],
+          "created_at": "2026-10-03T22:17:54Z",
+          "updated_at": "2026-10-03T22:17:54Z",
+          "references": [
+            {
+              "task": "9323c7bf-eb0e-42b5-8bad-22e49a953ecd",
+              "relation": "blocked_by"
+            }
+          ]
+        },
+        {
+          "id": "7d57d0ae-827a-407e-97ab-a6b46a20cee0",
+          "number": 14,
+          "description": "Send the driver and binding to the ASoC mailing list",
+          "extended_description": "Prepare a clean series, run checkpatch --strict and get an ack on the binding first.",
+          "requirements": [],
+          "acceptance_criteria": [],
+          "created_at": "2026-10-04T22:17:54Z",
+          "updated_at": "2026-10-04T22:17:54Z",
+          "references": [
+            {
+              "task": "6b7d4bf4-f13d-40b5-9906-ee8f9231e89e",
+              "relation": "blocked_by"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "81a8d495-5f66-4316-8faa-133a5fb0476c",
+      "title": "To Do",
+      "description": "Scoped and ready to start: the description is clear and acceptance criteria are written.",
+      "tasks": [
+        {
+          "id": "6b7d4bf4-f13d-40b5-9906-ee8f9231e89e",
+          "number": 9,
+          "description": "Write the devicetree binding schema",
+          "extended_description": "YAML binding with compatible, reg, clocks, supplies and the optional reset GPIO.",
+          "requirements": [
+            "dt_binding_check passes",
+            "Example node validates"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "5ca8116f-0be5-47d2-8c6a-481673ef645f",
+              "text": "make dt_binding_check is clean",
+              "done": false
+            },
+            {
+              "id": "31851c60-81bd-4749-9a44-2e8909398164",
+              "text": "The binding is reviewed by the audio maintainers",
+              "done": false
+            }
+          ],
+          "artifacts": [
+            {
+              "id": "b89cd850-a9f5-4ed5-988d-19ed9e165ec7",
+              "name": "dt-binding-draft.md",
+              "kind": "markdown",
+              "added_at": "2026-10-26T22:17:54Z",
+              "by_agent": true
+            }
+          ],
+          "created_at": "2026-09-29T22:17:54Z",
+          "updated_at": "2026-09-29T22:17:54Z",
+          "references": [
+            {
+              "task": "7d57d0ae-827a-407e-97ab-a6b46a20cee0",
+              "relation": "blocks"
+            }
+          ]
+        },
+        {
+          "id": "9323c7bf-eb0e-42b5-8bad-22e49a953ecd",
+          "number": 10,
+          "description": "Mark the volatile registers and enable the regmap cache",
+          "extended_description": "Cache the static registers with an rbtree and leave the ramping volume and IRQ registers uncached.",
+          "requirements": [
+            "volatile_reg() covers 0x10-0x12 and 0x21",
+            "Cache type is REGCACHE_RBTREE"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "de5fe6d9-1415-406e-a08d-d0065ada8823",
+              "text": "Register reads while the DAC ramps return live values",
+              "done": false
+            },
+            {
+              "id": "77f47470-46b1-4e1a-97f5-e43e9add99fa",
+              "text": "regcache_sync works after resume",
+              "done": false
+            }
+          ],
+          "created_at": "2026-09-30T22:17:54Z",
+          "updated_at": "2026-09-30T22:17:54Z",
+          "references": [
+            {
+              "task": "44c57bca-6576-4368-ad9f-16d21881c49e",
+              "relation": "blocks"
+            },
+            {
+              "task": "dfb1ca34-8452-4054-bcee-3fa7e1dce48a",
+              "relation": "relates_to"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dd24f1ae-2b5e-4883-811d-23d5b8c6fe20",
+      "title": "In Progress",
+      "description": "Actively being worked on. Requirements are understood and work has started.",
+      "tasks": [
+        {
+          "id": "dfb1ca34-8452-4054-bcee-3fa7e1dce48a",
+          "number": 6,
+          "description": "Register the ASoC component with a regmap over I2C",
+          "extended_description": "Create the snd_soc_component_driver, the DAI driver and the regmap config.",
+          "requirements": [
+            "8-bit registers and values",
+            "One playback DAI, 44.1-96 kHz, 16/24-bit"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "c663cbc6-b2aa-4af1-b649-4daf031615ce",
+              "text": "Component registers and shows up in /proc/asound/cards",
+              "done": true
+            },
+            {
+              "id": "394eef55-a588-4663-8dba-adffcac24c17",
+              "text": "DAI formats are limited to I2S and left-justified",
+              "done": false
+            },
+            {
+              "id": "bd5716d9-b3f7-4c9a-b123-94ec1159fc2a",
+              "text": "aplay plays a 48 kHz tone",
+              "done": false
+            }
+          ],
+          "artifacts": [
+            {
+              "id": "7bf7607c-d5ac-47a3-b127-e26f4be8d036",
+              "name": "codec-block-diagram.png",
+              "kind": "image",
+              "added_at": "2026-10-28T22:17:54Z",
+              "by_agent": true
+            }
+          ],
+          "created_at": "2026-09-26T22:17:54Z",
+          "updated_at": "2026-09-26T22:17:54Z",
+          "references": [
+            {
+              "task": "9323c7bf-eb0e-42b5-8bad-22e49a953ecd",
+              "relation": "relates_to"
+            },
+            {
+              "task": "39631c69-0eaf-4556-923b-7db893cbec0d",
+              "relation": "blocked_by"
+            }
+          ]
+        },
+        {
+          "id": "2a369397-edc0-4665-a4ba-0755d0477ae8",
+          "number": 7,
+          "description": "Set the sysclk and PLL dividers for 44.1 and 48 kHz families",
+          "extended_description": "hw_params() picks the right divider; the PLL runs only when it has to.",
+          "requirements": [
+            "Reject an MCLK outside 8-27 MHz",
+            "Wait for PLL lock before unmuting"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "ef39a697-c4b9-4ab7-9797-809041b7903c",
+              "text": "48 kHz works without the PLL",
+              "done": true
+            },
+            {
+              "id": "e3d78705-8ec3-46b5-a1d7-558370716267",
+              "text": "44.1 kHz works with the PLL",
+              "done": false
+            },
+            {
+              "id": "525a59b7-29d3-4c36-8dde-4d3392a76c5b",
+              "text": "Lock timeout returns -ETIMEDOUT",
+              "done": false
+            }
+          ],
+          "artifacts": [
+            {
+              "id": "72fe44b7-7c63-466c-8755-555831e9c092",
+              "name": "clocking-notes.md",
+              "kind": "markdown",
+              "added_at": "2026-10-30T19:17:54Z",
+              "by_agent": true
+            },
+            {
+              "id": "17130bf5-14a7-4ebc-8cad-596abde167ad",
+              "name": "codec-block-diagram.png",
+              "kind": "image",
+              "added_at": "2026-10-28T22:17:54Z",
+              "by_agent": true
+            }
+          ],
+          "created_at": "2026-09-27T22:17:54Z",
+          "updated_at": "2026-09-27T22:17:54Z",
+          "references": [
+            {
+              "task": "d2189625-be15-4d23-818d-04bd814f3bc2",
+              "relation": "blocks"
+            }
+          ]
+        },
+        {
+          "id": "d2189625-be15-4d23-818d-04bd814f3bc2",
+          "number": 8,
+          "description": "Add the playback volume and mute controls",
+          "extended_description": "Expose DAC volume (0.5 dB steps) and per-channel mute as ALSA mixer controls.",
+          "requirements": [
+            "TLV scale from -63.5 dB to 0 dB",
+            "Mute switches for each channel"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "c161c57d-b9a9-4ead-b3c8-74fb2dd80a80",
+              "text": "amixer lists the volume and mute controls",
+              "done": true
+            },
+            {
+              "id": "ba750cf4-b2fd-4307-a70d-32258c0c78dc",
+              "text": "Volume changes are audible and glitch-free",
+              "done": false
+            }
+          ],
+          "created_at": "2026-09-28T22:17:54Z",
+          "updated_at": "2026-09-28T22:17:54Z",
+          "references": [
+            {
+              "task": "2a369397-edc0-4665-a4ba-0755d0477ae8",
+              "relation": "blocked_by"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "7cb277c2-75cd-43fc-a159-5d394c8e4669",
+      "title": "Review",
+      "description": "Implementation is complete and every acceptance criterion is checked off; awaiting review.",
+      "tasks": [
+        {
+          "id": "39631c69-0eaf-4556-923b-7db893cbec0d",
+          "number": 4,
+          "description": "Probe: read the chip ID and soft-reset the codec",
+          "extended_description": "Reject unknown chips early, and give the codec time to come out of reset.",
+          "requirements": [
+            "Fail with -ENODEV on a wrong chip ID",
+            "Sleep 2 ms after the soft reset"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "4d0609ac-0e8f-48cc-a581-e15c24ef6648",
+              "text": "Wrong ID returns -ENODEV with a clear log line",
+              "done": true
+            },
+            {
+              "id": "2d7c7d24-27ed-4ed8-b26f-893e31544cc1",
+              "text": "Reset delay is at least 2 ms",
+              "done": true
+            },
+            {
+              "id": "29f12b41-d209-4728-8314-3c9e37c9b61f",
+              "text": "Probe works on the dev board",
+              "done": true
+            }
+          ],
+          "artifacts": [
+            {
+              "id": "b2ebc467-5940-4d8c-a203-920255599c8f",
+              "name": "probe-sequence.md",
+              "kind": "markdown",
+              "added_at": "2026-10-30T21:17:54Z",
+              "by_agent": true
+            }
+          ],
+          "created_at": "2026-09-24T22:17:54Z",
+          "updated_at": "2026-09-24T22:17:54Z",
+          "references": [
+            {
+              "task": "dfb1ca34-8452-4054-bcee-3fa7e1dce48a",
+              "relation": "blocks"
+            }
+          ]
+        },
+        {
+          "id": "f64a47e7-7d4b-40d9-9246-34d8e5767b79",
+          "number": 5,
+          "description": "Handle the supplies and reset GPIO in probe",
+          "extended_description": "Enable AVDD and DVDD, pulse the optional reset line, and undo it all on failure.",
+          "requirements": [
+            "Use devm_regulator_bulk_get()",
+            "Reset GPIO is optional"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "5e8a36c8-b972-4891-a5fd-03a5cbe34540",
+              "text": "Both supplies are enabled before the first I2C access",
+              "done": true
+            },
+            {
+              "id": "0532123e-a2ef-40b8-b177-8328808b0b39",
+              "text": "Failed probe leaves the supplies off",
+              "done": true
+            }
+          ],
+          "artifacts": [
+            {
+              "id": "2abfdf8c-e98a-4a0d-837d-368745d40601",
+              "name": "probe-sequence.md",
+              "kind": "markdown",
+              "added_at": "2026-10-30T21:17:54Z",
+              "by_agent": true
+            }
+          ],
+          "created_at": "2026-09-25T22:17:54Z",
+          "updated_at": "2026-09-25T22:17:54Z"
+        }
+      ]
+    },
+    {
+      "id": "fb655f2c-a5f1-47ae-8fff-1249bd23180c",
+      "title": "Done",
+      "description": "Reviewed and accepted. Nothing left to do.",
+      "tasks": [
+        {
+          "id": "db4968a6-b28a-4ef9-987e-25bd6139a043",
+          "number": 1,
+          "description": "Add the Kconfig and Makefile entries for SND_SOC_ACD2300",
+          "extended_description": "Wire the driver into sound/soc/codecs so it can be built as a module.",
+          "requirements": [
+            "Symbol depends on I2C",
+            "Selects REGMAP_I2C"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "b8c358c0-d784-44f2-9829-8a68a3af3b12",
+              "text": "make menuconfig shows the option",
+              "done": true
+            },
+            {
+              "id": "053f5c8e-dd47-4ff3-ac3e-84ec9a71152c",
+              "text": "The module builds with W=1 and no warnings",
+              "done": true
+            }
+          ],
+          "created_at": "2026-09-21T22:17:54Z",
+          "updated_at": "2026-09-21T22:17:54Z"
+        },
+        {
+          "id": "925356e1-d213-4dd1-b60a-c2da0ae08c33",
+          "number": 2,
+          "description": "Document the register map",
+          "extended_description": "Capture the datasheet registers we need in a single reference for the driver.",
+          "requirements": [
+            "Every register used by the driver is listed",
+            "Reset values are recorded"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "5018c920-1c2c-4ebe-9259-7c9e6b879b78",
+              "text": "The table matches the datasheet rev B",
+              "done": true
+            }
+          ],
+          "artifacts": [
+            {
+              "id": "cd975cba-8d8f-4d63-9d3b-9a4f9d3cd07d",
+              "name": "register-map.md",
+              "kind": "markdown",
+              "added_at": "2026-09-25T22:17:54Z",
+              "by_agent": true
+            }
+          ],
+          "created_at": "2026-09-22T22:17:54Z",
+          "updated_at": "2026-09-22T22:17:54Z"
+        },
+        {
+          "id": "e27bb022-ef32-4c09-b877-49dc3abab30e",
+          "number": 3,
+          "description": "Bring up the codec on the dev board",
+          "extended_description": "Confirm the hardware responds on I2C before writing any driver code.",
+          "requirements": [
+            "Codec ACKs at its address",
+            "Chip ID reads back"
+          ],
+          "acceptance_criteria": [
+            {
+              "id": "e4ec2f5b-bef9-4d6c-a83d-d499a995fca2",
+              "text": "i2cdetect shows 0x1a",
+              "done": true
+            },
+            {
+              "id": "491a45b5-f0e3-46a9-8a9f-c83ab0a7d08d",
+              "text": "CHIP_ID reads 0x23",
+              "done": true
+            },
+            {
+              "id": "1fba9f86-bf08-4c6d-8c4a-dcc75bf7f0fc",
+              "text": "Findings are written down",
+              "done": true
+            }
+          ],
+          "artifacts": [
+            {
+              "id": "d483b5ab-8551-41aa-bc59-c849a45cee12",
+              "name": "i2c-bringup-log.md",
+              "kind": "markdown",
+              "added_at": "2026-10-18T22:17:54Z",
+              "by_agent": true
+            }
+          ],
+          "created_at": "2026-09-23T22:17:54Z",
+          "updated_at": "2026-09-23T22:17:54Z"
+        }
+      ]
+    }
+  ],
+  "next_number": 15
+}

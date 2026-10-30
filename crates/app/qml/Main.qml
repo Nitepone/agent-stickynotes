@@ -118,7 +118,7 @@ ApplicationWindow {
             Qt.callLater(() => openProjects(false))     // first run: pick a project
     }
 
-    // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]]
+    // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs[:WxH]]]
     // where scene is board (default), projects, edit, task, newtask, column, agent, project, prefs, editor, note-demo, theme-demo, theme-reset, interact, synthetic or generate
     // (generate starts a draft for the first task, using settings.json's claude_command).
     Timer {
@@ -129,6 +129,11 @@ ApplicationWindow {
             const [path, scene] = controller.screenshotRequest.split(":")
             if (!staged) {
                 staged = true
+                const size = (controller.screenshotRequest.split(":")[3] || "").split("x")
+                if (size.length === 2 && size[0] > 0 && size[1] > 0) {
+                    window.width = Number(size[0])
+                    window.height = Number(size[1])
+                }
                 const first = window.board.columns.find(c => c.tasks.length > 0)
                 if (scene === "edit") window.editMode = true
                 else if (scene === "projects") window.openProjects(false)
