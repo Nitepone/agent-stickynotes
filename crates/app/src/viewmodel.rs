@@ -1,9 +1,12 @@
 //! Conversion between core types and the JSON shapes the QML views use.
 //! Kept free of Qt so it can be unit tested.
 
+use std::path::Path;
+
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use stickynotes_core::model::SUGGESTED_DESCRIPTION_CHARS;
+use stickynotes_core::project;
 use stickynotes_core::{
     Applied, Board, CriterionDraft, Error, ReferenceDraft, Relation, Snapshot, Task, TaskDraft,
     TaskPatch, card_text,
@@ -178,12 +181,34 @@ pub fn relation_options_json() -> String {
     serde_json::Value::Array(options).to_string()
 }
 
-/// Shown in the window title, e.g. `Sprint 4 — sprint4.json •`.
+/// The projects folder and what is in it, for the project picker:
+/// `{root, projects: [{dir, title, current}]}`.
+pub fn projects_json(root: &Path, current: Option<&Path>) -> String {
+    let projects: Vec<_> = project::list_projects(root)
+        .into_iter()
+        .map(|p| {
+            json!({
+                "dir": p.dir.to_string_lossy(),
+                "title": p.title,
+                "current": current == Some(p.dir.as_path()),
+            })
+        })
+        .collect();
+    json!({ "root": root.to_string_lossy(), "projects": projects }).to_string()
+}
+
+/// Shown in the window title, e.g. `Sprint 4 — sprint-4 •`: the board's title
+/// and the project folder.
 pub fn window_title(s: &Snapshot) -> String {
-    let file = s.path.as_ref().and_then(|p| p.file_name()).map_or_else(
-        || "unsaved".to_string(),
-        |n| n.to_string_lossy().into_owned(),
-    );
+    let file = s
+        .path
+        .as_ref()
+        .and_then(|p| p.parent())
+        .and_then(|dir| dir.file_name())
+        .map_or_else(
+            || "unsaved".to_string(),
+            |n| n.to_string_lossy().into_owned(),
+        );
     let dirty = if s.dirty { " •" } else { "" };
     format!("{} — {file}{dirty}", s.board.title)
 }
@@ -400,12 +425,25 @@ mod tests {
     }
 
     #[test]
+    fn projects_json_lists_projects_and_marks_the_current_one() {
+        let root = tempfile::tempdir().unwrap();
+        let store = BoardStore::new(false);
+        let dir = root.path().join("demo");
+        store.create_project(&dir, "Demo").unwrap();
+        let value: serde_json::Value =
+            serde_json::from_str(&projects_json(root.path(), Some(&dir))).unwrap();
+        assert_eq!(value["projects"][0]["title"], "Demo");
+        assert_eq!(value["projects"][0]["current"], true);
+        assert_eq!(value["root"], root.path().to_string_lossy().as_ref());
+    }
+
+    #[test]
     fn window_title_marks_dirty() {
         let mut s = BoardStore::new(false).snapshot();
         assert_eq!(window_title(&s), "Untitled board — unsaved");
         s.dirty = true;
-        s.path = Some("/tmp/x.json".into());
-        assert_eq!(window_title(&s), "Untitled board — x.json •");
+        s.path = Some("/tmp/x/stickynotes.json".into());
+        assert_eq!(window_title(&s), "Untitled board — x •");
     }
 
     #[test]

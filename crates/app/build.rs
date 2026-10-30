@@ -12,6 +12,7 @@ fn main() {
         QmlFile::from("qml/ColumnDialog.qml"),
         QmlFile::from("qml/ConfirmDialog.qml"),
         QmlFile::from("qml/ProjectDialog.qml"),
+        QmlFile::from("qml/ProjectPicker.qml"),
         QmlFile::from("qml/PreferencesSection.qml"),
         QmlFile::from("qml/PreferencesPage.qml"),
         QmlFile::from("qml/ColorChoice.qml"),

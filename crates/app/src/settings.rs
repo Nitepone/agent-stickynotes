@@ -15,8 +15,8 @@ pub struct Settings {
     /// Whether agents may modify the board. Off until the user opts in.
     pub agent_write: bool,
     pub port: u16,
-    /// Board reopened on launch when no file is given on the command line.
-    pub last_file: Option<PathBuf>,
+    /// Project reopened on launch when none is given on the command line.
+    pub last_project: Option<PathBuf>,
     /// Executable used to draft requirements and criteria (Claude Code).
     pub claude_command: String,
     /// `"light"` or `"dark"`.
@@ -49,7 +49,7 @@ impl Default for Settings {
         Settings {
             agent_write: false,
             port: DEFAULT_PORT,
-            last_file: None,
+            last_project: None,
             claude_command: "claude".into(),
             theme_mode: crate::theme::LIGHT.into(),
             primary_color: String::new(),
@@ -68,6 +68,8 @@ impl Default for Settings {
 
 pub struct Config {
     dir: PathBuf,
+    /// Where new projects are created and listed by default.
+    projects_dir: PathBuf,
 }
 
 impl Config {
@@ -76,7 +78,12 @@ impl Config {
             .context("cannot determine the config directory")?;
         Ok(Config {
             dir: dirs.config_dir().to_path_buf(),
+            projects_dir: dirs.data_dir().join("projects"),
         })
+    }
+
+    pub fn projects_dir(&self) -> &Path {
+        &self.projects_dir
     }
 
     pub fn load_settings(&self) -> Settings {
@@ -140,6 +147,7 @@ mod tests {
     fn config_in(dir: &Path) -> Config {
         Config {
             dir: dir.to_path_buf(),
+            projects_dir: dir.join("projects"),
         }
     }
 
@@ -150,6 +158,19 @@ mod tests {
         assert_eq!(settings.theme_mode, "light");
         assert_eq!(settings.primary_color, "");
         assert_eq!(settings.secondary_color, "");
+    }
+
+    #[test]
+    fn settings_from_before_projects_still_load() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("settings.json"),
+            r#"{"agent_write": true, "last_file": "/tmp/board.json"}"#,
+        )
+        .unwrap();
+        let settings = config_in(dir.path()).load_settings();
+        assert!(settings.agent_write);
+        assert_eq!(settings.last_project, None);
     }
 
     #[test]

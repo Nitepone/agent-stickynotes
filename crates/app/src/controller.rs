@@ -48,13 +48,15 @@ pub mod qobject {
         type BoardController = super::BoardControllerRust;
 
         #[qinvokable]
-        fn new_board(self: Pin<&mut BoardController>);
+        fn projects_json(self: &BoardController) -> QString;
         #[qinvokable]
-        fn open_file(self: Pin<&mut BoardController>, url: &QUrl) -> QString;
+        fn new_project(self: Pin<&mut BoardController>, name: &QString) -> QString;
+        #[qinvokable]
+        fn open_project(self: Pin<&mut BoardController>, dir: &QString) -> QString;
+        #[qinvokable]
+        fn open_project_folder(self: Pin<&mut BoardController>, url: &QUrl) -> QString;
         #[qinvokable]
         fn save(self: Pin<&mut BoardController>, force: bool) -> QString;
-        #[qinvokable]
-        fn save_as(self: Pin<&mut BoardController>, url: &QUrl) -> QString;
         #[qinvokable]
         fn export_markdown(self: &BoardController, url: &QUrl) -> QString;
 
@@ -186,7 +188,7 @@ use std::pin::Pin;
 
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QString, QUrl};
-use stickynotes_core::{Applied, Command, Origin, Result as CoreResult};
+use stickynotes_core::{Applied, Command, Origin, Result as CoreResult, project};
 use uuid::Uuid;
 
 use crate::context;
@@ -294,29 +296,50 @@ impl qobject::BoardController {
         self.as_mut().set_agent_write(snapshot.agent_write);
     }
 
-    fn new_board(self: Pin<&mut Self>) {
-        context::get().store.new_board();
+    fn projects_json(&self) -> QString {
+        let ctx = context::get();
+        let current = ctx.store.project_dir();
+        to_qstring(viewmodel::projects_json(
+            ctx.config.projects_dir(),
+            current.as_deref(),
+        ))
     }
 
-    fn open_file(self: Pin<&mut Self>, url: &QUrl) -> QString {
-        file_op(url, |path| {
-            context::get().store.open(&path)?;
-            remember_file(path);
-            Ok(())
-        })
+    fn new_project(self: Pin<&mut Self>, name: &QString) -> QString {
+        let ctx = context::get();
+        let name = String::from(name).trim().to_string();
+        if name.is_empty() {
+            return to_qstring(viewmodel::error_json("give the project a name"));
+        }
+        let dir = project::new_project_dir(ctx.config.projects_dir(), &name);
+        let result = ctx.store.create_project(&dir, &name).map(|_| {
+            remember_project(dir);
+        });
+        to_qstring(viewmodel::result_json(result.map(|_| None::<Applied>)))
+    }
+
+    fn open_project(self: Pin<&mut Self>, dir: &QString) -> QString {
+        let dir = PathBuf::from(String::from(dir));
+        let result = context::get().store.open_project(&dir).map(|_| {
+            remember_project(dir);
+        });
+        to_qstring(viewmodel::result_json(result.map(|_| None::<Applied>)))
+    }
+
+    /// A folder picked by hand: a project is opened, an empty folder becomes one.
+    fn open_project_folder(self: Pin<&mut Self>, url: &QUrl) -> QString {
+        let Some(dir) = url.to_local_file().map(|p| PathBuf::from(String::from(&p))) else {
+            return to_qstring(viewmodel::error_json("only local folders are supported"));
+        };
+        let result = context::get().store.open_or_create_project(&dir).map(|_| {
+            remember_project(dir);
+        });
+        to_qstring(viewmodel::result_json(result.map(|_| None::<Applied>)))
     }
 
     fn save(self: Pin<&mut Self>, force: bool) -> QString {
         let result = context::get().store.save(force);
         to_qstring(viewmodel::result_json(result.map(|_| None)))
-    }
-
-    fn save_as(self: Pin<&mut Self>, url: &QUrl) -> QString {
-        file_op(url, |path| {
-            context::get().store.save_as(&path)?;
-            remember_file(path);
-            Ok(())
-        })
     }
 
     fn export_markdown(&self, url: &QUrl) -> QString {
@@ -661,8 +684,8 @@ fn file_op(url: &QUrl, op: impl FnOnce(PathBuf) -> CoreResult<()>) -> QString {
     to_qstring(viewmodel::result_json(op(path).map(|_| None::<Applied>)))
 }
 
-fn remember_file(path: PathBuf) {
-    context::get().update_settings(|s| s.last_file = Some(path));
+fn remember_project(dir: PathBuf) {
+    context::get().update_settings(|s| s.last_project = Some(dir));
 }
 
 fn parse_id(id: &QString) -> Option<Uuid> {

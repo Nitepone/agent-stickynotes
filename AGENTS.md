@@ -88,11 +88,12 @@ columns, the board title or project settings. Those rules live in
 ## Checking UI work without a display
 
 `QT_QPA_PLATFORM=offscreen` works. Set `STICKYNOTES_SCREENSHOT=out.png:<scene>[:delayMs]`
-and run `cargo run -p stickynotes -- board.json`: it renders to a PNG and exits.
-Scenes: `board`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`,
+and run `cargo run -p stickynotes -- <project-folder>`: it renders to a PNG and exits.
+Scenes: `board`, `projects`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`,
 `editor`, `note-demo`, `theme-demo`, `theme-reset`, `generate`, `interact`, `synthetic`. Always point
 `XDG_CONFIG_HOME` at a scratch directory (settings, the API token and
-`last_file` live there) and use a copy of the board, never the user's real files.
+`last_project` live there) and set `XDG_DATA_HOME` too (the projects folder is under it); use a copy of
+a project, never the user's real ones.
 Read the PNG to check the result. `STICKYNOTES_REDUCE_MOTION=1` forces reduced motion.
 Screenshots and view tests do not prove a drag or click feels right on a real
 desktop; say so when that is what you could not check.

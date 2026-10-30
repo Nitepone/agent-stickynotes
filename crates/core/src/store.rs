@@ -12,6 +12,7 @@ use crate::error::{Error, Result};
 use crate::model::Board;
 use crate::ops;
 use crate::persist::{self, FileStamp};
+use crate::project;
 use crate::{agent_guide, export_md};
 
 /// Emitted after any change to the board or session state.
@@ -127,16 +128,61 @@ impl BoardStore {
         })
     }
 
-    /// Replace the board with a fresh default board.
-    pub fn new_board(&self) {
+    /// The open project's directory, if the board has been saved in one.
+    pub fn project_dir(&self) -> Option<PathBuf> {
+        let s = self.lock();
+        s.path
+            .as_ref()
+            .and_then(|p| p.parent())
+            .map(Path::to_path_buf)
+    }
+
+    /// Open the project in `dir`, which must hold a `stickynotes.json`.
+    pub fn open_project(&self, dir: &Path) -> Result<()> {
+        if !project::is_project(dir) {
+            return Err(Error::NotAProject(dir.to_path_buf()));
+        }
+        project::ensure_dirs(dir)?;
+        self.open(&project::board_path(dir))
+    }
+
+    /// Create a project in `dir` (new or empty) and open it. With nothing
+    /// open yet and unsaved edits, the project adopts the board as it is;
+    /// otherwise it starts from a fresh board titled `title`.
+    pub fn create_project(&self, dir: &Path, title: &str) -> Result<()> {
+        if project::is_project(dir) || !project::is_empty_dir(dir) {
+            return Err(Error::Validation(format!(
+                "{} already has files in it",
+                dir.display()
+            )));
+        }
+        project::ensure_dirs(dir)?;
         self.mutate(Origin::User, |s| {
-            s.board = Board::new_default();
-            s.path = None;
-            s.stamp = None;
+            if !(s.path.is_none() && s.dirty) {
+                s.board = Board::new_default();
+                s.board.title = title.to_string();
+            }
+            let path = project::board_path(dir);
+            s.stamp = persist::save(&path, &s.board)?;
+            s.path = Some(path);
             s.dirty = false;
             Ok(())
         })
-        .expect("infallible");
+    }
+
+    /// Open `dir` if it is a project, or turn a new or empty folder into one
+    /// named after the folder.
+    pub fn open_or_create_project(&self, dir: &Path) -> Result<()> {
+        if project::is_project(dir) {
+            self.open_project(dir)
+        } else if project::is_empty_dir(dir) {
+            let title = dir
+                .file_name()
+                .map_or_else(|| "Untitled board".into(), |n| n.to_string_lossy());
+            self.create_project(dir, &title)
+        } else {
+            Err(Error::NotAProject(dir.to_path_buf()))
+        }
     }
 
     pub fn open(&self, path: &Path) -> Result<()> {
@@ -295,6 +341,61 @@ mod tests {
         let other = BoardStore::new(false);
         other.open(&path).unwrap();
         assert_eq!(other.snapshot().board, store.snapshot().board);
+    }
+
+    #[test]
+    fn creating_a_project_makes_the_folders_and_opens_it() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("demo");
+        let store = BoardStore::new(false);
+        store.create_project(&dir, "Demo").unwrap();
+
+        assert!(project::is_project(&dir));
+        assert!(project::artifacts_dir(&dir).is_dir());
+        assert_eq!(store.project_dir(), Some(dir.clone()));
+        let snap = store.snapshot();
+        assert_eq!(snap.board.title, "Demo");
+        assert!(!snap.dirty);
+
+        let other = BoardStore::new(false);
+        other.open_project(&dir).unwrap();
+        assert_eq!(other.snapshot().board.title, "Demo");
+        assert!(matches!(
+            other.create_project(&dir, "Again"),
+            Err(Error::Validation(_))
+        ));
+    }
+
+    #[test]
+    fn an_unsaved_untitled_board_is_adopted_by_the_first_project() {
+        let root = tempfile::tempdir().unwrap();
+        let store = BoardStore::new(false);
+        store.apply(Origin::User, create(), None).unwrap();
+        store.create_project(&root.path().join("p"), "P").unwrap();
+        let snap = store.snapshot();
+        assert_eq!(snap.board.tasks().count(), 1);
+        assert_eq!(snap.board.title, "Untitled board");
+    }
+
+    #[test]
+    fn open_or_create_refuses_folders_with_other_files() {
+        let root = tempfile::tempdir().unwrap();
+        let store = BoardStore::new(false);
+        let missing = root.path().join("new");
+        store.open_or_create_project(&missing).unwrap();
+        assert_eq!(store.snapshot().board.title, "new");
+
+        let busy = root.path().join("busy");
+        std::fs::create_dir(&busy).unwrap();
+        std::fs::write(busy.join("notes.txt"), "x").unwrap();
+        assert!(matches!(
+            store.open_or_create_project(&busy),
+            Err(Error::NotAProject(_))
+        ));
+        assert!(matches!(
+            store.open_project(&busy),
+            Err(Error::NotAProject(_))
+        ));
     }
 
     #[test]

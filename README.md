@@ -4,7 +4,9 @@ A local, Trello-style kanban board for humans and AI agents. One Rust binary
 with a QML UI; while it runs it also serves an MCP server and a REST API on
 loopback so Claude Code (or any agent) can read and update the board.
 
-- Boards are JSON files; **File ▸ Export to Markdown** produces a readable copy.
+- A board lives in a project folder: `stickynotes.json` plus an `artifacts/` folder
+  (for the Markdown and images agents attach to tasks). **File ▸ Export to Markdown**
+  produces a readable copy.
 - Columns are an ordered pipeline. Each column's description says what a task
   must satisfy to be there.
 - You can drag tasks anywhere. Agents can only create tasks in the first column
@@ -22,11 +24,16 @@ sudo apt install qt6-base-dev qt6-base-dev-tools qt6-declarative-dev \
   qml6-module-qtquick-dialogs qml6-module-qtquick-controls \
   qml6-module-qtquick-layouts qml6-module-qtquick-window qml6-module-qtqml-models
 export QMAKE=/usr/lib/qt6/bin/qmake6     # if `qmake` is Qt 5
-cargo run --release -- [board.json]      # file is created if missing
+cargo run --release -- [project-folder]  # a new or empty folder becomes a project
 ```
 
-Without a file argument the last board is reopened, otherwise a new board
-with default columns is created.
+Without an argument the last project is reopened; on first run the project
+picker opens. Projects are kept by default in your user data folder
+(`~/.local/share/agent-stickynotes/projects` on Linux, `~/Library/Application
+Support/agent-stickynotes/projects` on macOS, `%APPDATA%\agent-stickynotes\data\projects`
+on Windows). The picker lists them, creates new ones, and has **Browse…** for a
+folder anywhere else. Boards from before projects are not opened directly: put
+the file in a project folder as `stickynotes.json`.
 
 ## Using it
 
@@ -45,7 +52,7 @@ with default columns is created.
 | Spell check and the draft agent | Preferences ▸ Editor: turn the red underlines for misspelled words in the task editor on or off, and choose how the draft agent runs (agent type, an extra system prompt, and for Claude Code the model and thinking level). |
 | Edit a column | Click the column title |
 | Reorder / add / delete columns | the pencil icon (toolbar) or **Board ▸ Edit Columns** |
-| Save / open / new | **File** menu. A floppy-disk icon appears in the toolbar while there are unsaved changes. You are warned before unsaved changes are lost. |
+| Save / open / new | **File ▸ New Project… / Open Project…** (the picker), **File ▸ Save**. A floppy-disk icon appears in the toolbar while there are unsaved changes. You are warned before unsaved changes are lost. |
 
 ### Spell check
 
@@ -126,7 +133,7 @@ cargo test -p stickynotes real_claude -- --ignored   # optional: one real Claude
 ```
 
 Headless screenshots for UI checks:
-`STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]] QT_QPA_PLATFORM=offscreen cargo run -- board.json`,
+`STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]] QT_QPA_PLATFORM=offscreen cargo run -- <project-folder>`,
 where `scene` is `board`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`, `editor`, `note-demo`, `theme-demo`, `theme-reset`, `interact`, `synthetic` or `generate`.
 
 ### Layout

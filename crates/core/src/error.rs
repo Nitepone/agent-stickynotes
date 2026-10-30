@@ -27,8 +27,11 @@ pub enum Error {
     #[error("{0} was modified by another program since it was loaded")]
     ModifiedOnDisk(PathBuf),
 
-    #[error("the board has never been saved; choose a file first")]
+    #[error("the board has never been saved; create or open a project first")]
     NoPath,
+
+    #[error("{0} is not a project folder: it has no stickynotes.json and is not empty")]
+    NotAProject(PathBuf),
 
     #[error("unsupported board schema version {0}")]
     UnsupportedSchema(u32),

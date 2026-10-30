@@ -23,8 +23,8 @@ use crate::settings::Config;
 #[derive(Parser)]
 #[command(version)]
 struct Cli {
-    /// Board file to open (created if it does not exist).
-    file: Option<PathBuf>,
+    /// Project folder to open (created if it is new or empty).
+    project: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
     let token = config.token()?;
     let claude_command = settings.claude_command.clone();
     let store = BoardStore::new(settings.agent_write);
-    open_initial_board(&store, cli.file, settings.last_file.clone());
+    open_initial_project(&store, cli.project, settings.last_project.clone());
 
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
@@ -82,21 +82,16 @@ fn main() -> Result<()> {
     std::process::exit(code);
 }
 
-/// Open the file from the command line, else the last file used, else start
-/// with a new board.
-fn open_initial_board(store: &BoardStore, cli_file: Option<PathBuf>, last: Option<PathBuf>) {
-    if let Some(path) = cli_file {
-        let result = if path.exists() {
-            store.open(&path)
-        } else {
-            store.save_as(&path)
-        };
-        if let Err(e) = result {
+/// Open the project from the command line, else the last one used, else start
+/// with an unsaved board (the window then offers the project picker).
+fn open_initial_project(store: &BoardStore, cli_dir: Option<PathBuf>, last: Option<PathBuf>) {
+    if let Some(dir) = cli_dir {
+        if let Err(e) = store.open_or_create_project(&dir) {
             eprintln!("error: {e}");
         }
-    } else if let Some(path) = last.filter(|p| p.exists())
-        && let Err(e) = store.open(&path)
+    } else if let Some(dir) = last.filter(|d| d.exists())
+        && let Err(e) = store.open_project(&dir)
     {
-        eprintln!("warning: could not reopen {}: {e}", path.display());
+        eprintln!("warning: could not reopen {}: {e}", dir.display());
     }
 }

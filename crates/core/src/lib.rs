@@ -10,6 +10,7 @@ pub mod export_md;
 pub mod model;
 pub mod ops;
 pub mod persist;
+pub mod project;
 pub mod store;
 
 pub use command::{Applied, Command, CriterionDraft, Origin, ReferenceDraft, TaskDraft, TaskPatch};

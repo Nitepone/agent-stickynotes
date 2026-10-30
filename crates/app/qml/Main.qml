@@ -111,10 +111,12 @@ ApplicationWindow {
         refresh()
         if (controller.screenshotRequest !== "")
             screenshotTimer.start()
+        else if (!controller.hasPath)
+            Qt.callLater(() => openProjects(false))     // first run: pick a project
     }
 
     // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]]
-    // where scene is board (default), edit, task, newtask, column, agent, project, prefs, editor, note-demo, theme-demo, theme-reset, interact, synthetic or generate
+    // where scene is board (default), projects, edit, task, newtask, column, agent, project, prefs, editor, note-demo, theme-demo, theme-reset, interact, synthetic or generate
     // (generate starts a draft for the first task, using settings.json's claude_command).
     Timer {
         id: screenshotTimer
@@ -126,6 +128,7 @@ ApplicationWindow {
                 staged = true
                 const first = window.board.columns.find(c => c.tasks.length > 0)
                 if (scene === "edit") window.editMode = true
+                else if (scene === "projects") window.openProjects(false)
                 else if (scene === "task" && first) boardView.taskClicked(first.tasks[0].id)
                 else if (scene === "newtask") taskDialog.openNew(window.board.columns[0])
                 else if (scene === "column") columnDialog.openColumn(window.board.columns[0])
@@ -246,7 +249,7 @@ ApplicationWindow {
 
     function save(then) {
         if (!controller.hasPath) {
-            saveAs(then)
+            openProjects(true, then)
             return
         }
         const r = result(controller.save(false), true)
@@ -262,33 +265,38 @@ ApplicationWindow {
         }
     }
 
-    function saveAs(then) {
-        saveAsDialog.then = then
-        saveAsDialog.open()
+    // The project picker. With `forSaving` the board has no project yet and
+    // creating one saves it; `then` runs afterwards.
+    function openProjects(forSaving, then) {
+        projectPicker.then = then || null
+        projectPicker.openPicker(controller.projectsJson(), forSaving === true)
     }
 
-    FileDialog {
-        id: openDialog
-        title: qsTr("Open board")
-        fileMode: FileDialog.OpenFile
-        nameFilters: [qsTr("Board files (*.json)"), qsTr("All files (*)")]
-        onAccepted: window.result(controller.openFile(selectedFile))
-    }
-
-    FileDialog {
-        id: saveAsDialog
+    ProjectPicker {
+        id: projectPicker
         property var then: null
-        title: qsTr("Save board as")
-        fileMode: FileDialog.SaveFile
-        defaultSuffix: "json"
-        nameFilters: [qsTr("Board files (*.json)")]
-        onAccepted: {
-            const next = then
-            then = null
-            if (window.result(controller.saveAs(selectedFile)).ok && next)
-                next()
+        onOpenRequested: (dir) => {
+            if (window.result(controller.openProject(dir)).ok)
+                close()
         }
-        onRejected: then = null
+        onCreateRequested: (name) => {
+            if (window.result(controller.newProject(name)).ok) {
+                const next = then
+                then = null
+                close()
+                if (next) next()
+            }
+        }
+        onBrowseRequested: projectFolderDialog.open()
+    }
+
+    FolderDialog {
+        id: projectFolderDialog
+        title: qsTr("Choose a project folder (an empty folder becomes a new project)")
+        onAccepted: {
+            if (window.result(controller.openProjectFolder(selectedFolder)).ok)
+                projectPicker.close()
+        }
     }
 
     FileDialog {
@@ -329,15 +337,15 @@ ApplicationWindow {
 
     Action {
         id: newAction
-        text: qsTr("&New Board")
+        text: qsTr("&New Project…")
         shortcut: StandardKey.New
-        onTriggered: window.guardUnsaved(() => controller.newBoard())
+        onTriggered: window.guardUnsaved(() => window.openProjects(false))
     }
     Action {
         id: openAction
-        text: qsTr("&Open…")
+        text: qsTr("&Open Project…")
         shortcut: StandardKey.Open
-        onTriggered: window.guardUnsaved(() => openDialog.open())
+        onTriggered: window.guardUnsaved(() => window.openProjects(false))
     }
     Action {
         id: preferencesAction
@@ -380,11 +388,6 @@ ApplicationWindow {
             MenuItem { action: openAction }
             MenuSeparator {}
             MenuItem { action: saveAction }
-            Action {
-                text: qsTr("Save &As…")
-                shortcut: StandardKey.SaveAs
-                onTriggered: window.saveAs(null)
-            }
             Action {
                 text: qsTr("&Export to Markdown…")
                 shortcut: "Ctrl+E"
