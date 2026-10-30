@@ -14,6 +14,7 @@ fn main() {
         QmlFile::from("qml/ProjectDialog.qml"),
         QmlFile::from("qml/ProjectPicker.qml"),
         QmlFile::from("qml/ArtifactViewer.qml"),
+        QmlFile::from("qml/ArtifactsPage.qml"),
         QmlFile::from("qml/PreferencesSection.qml"),
         QmlFile::from("qml/PreferencesPage.qml"),
         QmlFile::from("qml/ColorChoice.qml"),

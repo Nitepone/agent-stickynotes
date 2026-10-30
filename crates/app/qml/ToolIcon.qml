@@ -3,7 +3,7 @@ import StickyNotes
 
 // A small line icon drawn in code, so it takes its color from the theme and
 // needs no image files. `kind` is one of "save" (floppy disk), "gear",
-// "pencil" or "robot"; add another by adding a case to `draw`.
+// "pencil", "robot", "folder", "document" or "image"; add another by adding a case to `draw`.
 Canvas {
     id: icon
 
@@ -70,6 +70,27 @@ Canvas {
         case "pencil":      // a pencil lying diagonally, tip at the lower left
             polygon(ctx, [[16, 3], [21, 8], [8, 21], [3, 21], [3, 16]])
             line(ctx, 13, 6, 18, 11)
+            break
+        case "folder":
+            polygon(ctx, [[3, 6], [9, 6], [11, 8], [21, 8], [21, 19], [3, 19]])
+            break
+        case "document":    // a page with a folded corner and two lines of text
+            polygon(ctx, [[6, 3], [14, 3], [19, 8], [19, 21], [6, 21]])
+            line(ctx, 14, 3, 14, 8)
+            line(ctx, 14, 8, 19, 8)
+            line(ctx, 9, 13, 16, 13)
+            line(ctx, 9, 17, 16, 17)
+            break
+        case "image":       // a framed picture: a sun and two hills
+            polygon(ctx, [[3, 5], [21, 5], [21, 19], [3, 19]])
+            circle(ctx, 8.5, 10, 1.8, false)
+            ctx.beginPath()
+            ctx.moveTo(3, 17)
+            ctx.lineTo(9, 12)
+            ctx.lineTo(13, 16)
+            ctx.lineTo(16, 13)
+            ctx.lineTo(21, 17.5)
+            ctx.stroke()
             break
         case "robot":       // a head with an antenna, ears, eyes and a mouth
             polygon(ctx, [[5, 8], [19, 8], [19, 20], [5, 20]])

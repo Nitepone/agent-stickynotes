@@ -38,6 +38,9 @@ pub struct ArtifactFile {
     pub file: artifact::StoredFile,
     /// `(task id, task number, artifact id)` for each task it is attached to.
     pub tasks: Vec<(TaskId, u64, ArtifactId)>,
+    /// When it was added (ms since the epoch): the earliest time a task
+    /// recorded it, or the file's modification time if none did.
+    pub at_ms: i64,
 }
 
 type Listener = Box<dyn Fn(Change) + Send + Sync>;
@@ -299,16 +302,18 @@ impl BoardStore {
             stored
                 .into_iter()
                 .map(|file| {
+                    let mut added = Vec::new();
                     let tasks = board
                         .tasks()
                         .filter_map(|(_, t)| {
-                            t.artifacts
-                                .iter()
-                                .find(|a| a.name == file.name)
-                                .map(|a| (t.id, t.number, a.id))
+                            t.artifacts.iter().find(|a| a.name == file.name).map(|a| {
+                                added.push(a.added_at.timestamp_millis());
+                                (t.id, t.number, a.id)
+                            })
                         })
                         .collect();
-                    ArtifactFile { file, tasks }
+                    let at_ms = added.into_iter().min().unwrap_or(file.modified_ms);
+                    ArtifactFile { file, tasks, at_ms }
                 })
                 .collect()
         })

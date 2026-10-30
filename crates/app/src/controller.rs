@@ -101,6 +101,9 @@ pub mod qobject {
         fn rename_board(self: &BoardController, title: &QString) -> QString;
         #[qinvokable]
         fn project_json(self: &BoardController) -> QString;
+        /// Every file in the project's `artifacts/` folder, newest first.
+        #[qinvokable]
+        fn artifacts_json(self: &BoardController) -> QString;
         #[qinvokable]
         fn artifact_json(self: &BoardController, name: &QString) -> QString;
         #[qinvokable]
@@ -445,6 +448,12 @@ impl qobject::BoardController {
         // Listed first: the store is locked while `read` runs.
         let files = store.artifact_files();
         to_qstring(store.read(|board, _| viewmodel::project_json(board, &files)))
+    }
+
+    fn artifacts_json(&self) -> QString {
+        to_qstring(viewmodel::artifacts_json(
+            &context::get().store.artifact_files(),
+        ))
     }
 
     fn artifact_json(&self, name: &QString) -> QString {

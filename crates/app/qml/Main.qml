@@ -49,6 +49,7 @@ ApplicationWindow {
     property bool editMode: false
     property bool refreshPending: false
     property bool preferencesOpen: false
+    property bool artifactsOpen: false
     // Misspelled words in the task editor, or null with spell check off.
     readonly property var spellRanges: controller.spellCheck
         ? (text) => JSON.parse(controller.misspelledRanges(text)) : null
@@ -104,6 +105,8 @@ ApplicationWindow {
         glow.sync(board)
         if (taskDialog.visible && taskDialog.taskId !== "")
             taskDialog.boardChanged(controller.taskJson(taskDialog.taskId))
+        if (artifactsOpen)
+            artifactsPage.artifacts = JSON.parse(controller.artifactsJson())
     }
 
     onDraggingChanged: if (!dragging && refreshPending) refresh()
@@ -129,6 +132,7 @@ ApplicationWindow {
                 const first = window.board.columns.find(c => c.tasks.length > 0)
                 if (scene === "edit") window.editMode = true
                 else if (scene === "projects") window.openProjects(false)
+                else if (scene === "artifacts") window.openArtifactsPage()
                 else if (scene === "task" && first) boardView.taskClicked(first.tasks[0].id)
                 else if (scene === "newtask") taskDialog.openNew(window.board.columns[0])
                 else if (scene === "column") columnDialog.openColumn(window.board.columns[0])
@@ -229,8 +233,16 @@ ApplicationWindow {
         return ""
     }
 
+    function openArtifactsPage() {
+        artifactsPage.artifacts = JSON.parse(controller.artifactsJson())
+        artifactsPage.now = Date.now()
+        artifactsOpen = true
+        artifactsPage.forceActiveFocus()
+    }
+
     function openPreferences() {
         preferencesPage.currentIndex = 0          // Personalization first
+        artifactsOpen = false
         preferencesOpen = true
         Qt.callLater(preferencesPage.focusSidebar)
     }
@@ -490,6 +502,18 @@ ApplicationWindow {
             Item { Layout.fillWidth: true }
 
             IconButton {
+                objectName: "artifactsButton"
+                glyph: "folder"
+                tip: qsTr("All artifacts in this project")
+                checkable: true
+                checked: window.artifactsOpen
+                onClicked: {
+                    if (window.artifactsOpen) window.artifactsOpen = false
+                    else window.openArtifactsPage()
+                    checked = Qt.binding(() => window.artifactsOpen)
+                }
+            }
+            IconButton {
                 objectName: "preferencesButton"
                 glyph: "gear"
                 tip: qsTr("Preferences")
@@ -529,7 +553,7 @@ ApplicationWindow {
     BoardView {
         id: boardView
         anchors.fill: parent
-        enabled: !window.preferencesOpen
+        enabled: !window.preferencesOpen && !window.artifactsOpen
         glowTracker: glow
         reducedMotion: controller.reduceMotion
         board: window.board
@@ -560,7 +584,7 @@ ApplicationWindow {
     }
 
     footer: ToolBar {
-        visible: !window.preferencesOpen
+        visible: !window.preferencesOpen && !window.artifactsOpen
         implicitHeight: 60
 
         RowLayout {
@@ -585,6 +609,18 @@ ApplicationWindow {
                 dragInProgress: window.dragging
                 onTaskDropped: (taskId) => window.confirmDeleteTask(taskId)
             }
+        }
+    }
+
+    ArtifactsPage {
+        id: artifactsPage
+        anchors.fill: parent
+        visible: window.artifactsOpen
+        onBackRequested: window.artifactsOpen = false
+        onArtifactClicked: (name) => window.openArtifact(name)
+        onTaskClicked: (taskId) => {
+            const json = controller.taskJson(taskId)
+            taskDialog.openTask(json, window.columnTitle(JSON.parse(json).columnId))
         }
     }
 

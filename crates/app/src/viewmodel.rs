@@ -207,6 +207,35 @@ pub fn project_json(board: &Board, files: &[ArtifactFile]) -> String {
     .to_string()
 }
 
+/// Every file in `artifacts/` for the artifacts page, newest first:
+/// `[{name, kind, size, at (ms), tasks: [{id, number}]}]`.
+pub fn artifacts_json(files: &[ArtifactFile]) -> String {
+    let mut sorted: Vec<&ArtifactFile> = files.iter().collect();
+    sorted.sort_by(|a, b| {
+        b.at_ms
+            .cmp(&a.at_ms)
+            .then_with(|| a.file.name.cmp(&b.file.name))
+    });
+    let list: Vec<_> = sorted
+        .into_iter()
+        .map(|f| {
+            let mut tasks: Vec<_> = f.tasks.iter().collect();
+            tasks.sort_by_key(|(_, number, _)| *number);
+            json!({
+                "name": f.file.name,
+                "kind": f.file.kind.as_str(),
+                "size": f.file.size,
+                "at": f.at_ms,
+                "tasks": tasks
+                    .iter()
+                    .map(|(id, number, _)| json!({ "id": id.to_string(), "number": number }))
+                    .collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    serde_json::Value::Array(list).to_string()
+}
+
 /// What `ArtifactViewer.qml` shows for a file in `artifacts/`: Markdown comes
 /// with its text, images with the path of the file.
 pub fn artifact_json(store: &BoardStore, name: &str) -> String {
@@ -645,6 +674,56 @@ mod tests {
                 ("x.png", json!([1]))
             ]
         );
+    }
+
+    #[test]
+    fn artifacts_json_lists_newest_first_with_task_ids() {
+        let (_root, store, _) = store_with_artifacts();
+        std::fs::write(store.project_dir().unwrap().join("artifacts/loose.md"), "x").unwrap();
+        let mut files = store.artifact_files();
+        // Pin the times: attached files use the moment they were attached.
+        for f in &mut files {
+            f.at_ms = match f.file.name.as_str() {
+                "loose.md" => 3_000,
+                "plan.md" => 1_000,
+                _ => 2_000,
+            };
+        }
+        let v: serde_json::Value = serde_json::from_str(&artifacts_json(&files)).unwrap();
+        let names: Vec<_> = v
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| a["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(names, ["loose.md", "x.png", "plan.md"]);
+        assert_eq!(v[0]["tasks"], json!([]));
+        assert_eq!(v[2]["at"], 1_000);
+        assert_eq!(v[2]["kind"], "markdown");
+        assert_eq!(v[2]["tasks"][0]["number"], 1);
+        let id = v[2]["tasks"][0]["id"].as_str().unwrap();
+        assert!(store.read(|b, _| b.tasks().any(|(_, t)| t.id.to_string() == id)));
+    }
+
+    #[test]
+    fn attached_files_are_dated_by_the_attachment_and_loose_ones_by_the_file() {
+        let (_root, store, _) = store_with_artifacts();
+        std::fs::write(store.project_dir().unwrap().join("artifacts/loose.md"), "x").unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        for f in store.artifact_files() {
+            assert!(
+                (now - f.at_ms).abs() < 60_000,
+                "{} is dated {}",
+                f.file.name,
+                f.at_ms
+            );
+            if f.tasks.is_empty() {
+                assert_eq!(f.at_ms, f.file.modified_ms);
+            }
+        }
     }
 
     #[test]

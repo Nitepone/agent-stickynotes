@@ -200,6 +200,8 @@ pub struct StoredFile {
     pub name: String,
     pub kind: ArtifactKind,
     pub size: u64,
+    /// When the file was last written (ms since the epoch); 0 if unknown.
+    pub modified_ms: i64,
 }
 
 /// The accepted files in `artifacts/`, sorted by name.
@@ -219,6 +221,11 @@ pub fn list_files(project_dir: &Path) -> Vec<StoredFile> {
                 kind: kind_of(&name)?,
                 name,
                 size: meta.len(),
+                modified_ms: meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map_or(0, |d| d.as_millis() as i64),
             })
         })
         .collect();

@@ -89,7 +89,7 @@ columns, the board title or project settings. Those rules live in
 
 `QT_QPA_PLATFORM=offscreen` works. Set `STICKYNOTES_SCREENSHOT=out.png:<scene>[:delayMs]`
 and run `cargo run -p stickynotes -- <project-folder>`: it renders to a PNG and exits.
-Scenes: `board`, `projects`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`,
+Scenes: `board`, `projects`, `artifacts`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`,
 `editor`, `note-demo`, `theme-demo`, `theme-reset`, `generate`, `interact`, `synthetic`. Always point
 `XDG_CONFIG_HOME` at a scratch directory (settings, the API token and
 `last_project` live there) and set `XDG_DATA_HOME` too (the projects folder is under it); use a copy of

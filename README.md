@@ -65,6 +65,7 @@ the file in a project folder as `stickynotes.json`.
 | Delete a task | Drag it onto the trash can (bottom right), or **Delete** in its dialog |
 | Draft requirements and criteria | In a task's dialog, **Draft requirements & criteria**. Claude Code proposes new items from the descriptions; review them, then **Save**. Needs `claude` on your PATH. |
 | Link tasks | In a task's dialog, **References**: pick a relation and a task, **Add**, then **Save**. The other task shows the matching reverse link. |
+| See every artifact | The folder icon in the toolbar (left of the gear) lists all files in `artifacts/`, newest first, under Today / This week (last 7 days) / This month (last 30 days) / Earlier. Each row has the file's icon, name, a `#12` pill for every task it is attached to (click to open the task) and its date; click the row to open the file. |
 | Give agents project instructions | **Board ▸ Project Settings…** (document prompt, code guidance); **Agent ▸ Export Claude Code Skill…** writes them into a `SKILL.md` |
 | See what an agent changed | Notes an agent created, moved, edited or ticked criteria on **glow green** at the edges (a highlight circles the note; an edited note also gets a sheen). The glow stays until you are back, then fades over 20 seconds. Your own changes never glow. With reduced motion (Preferences ▸ Personalization ▸ Motion, or the desktop's setting) the glow is still. |
 | Change the look | **File ▸ Preferences…** (Ctrl+,) or the gear icon in the toolbar: Personalization has Light/Dark, primary and secondary accent colors and the sticky note color (presets, a hex code, or a picker), plus resets. Text on a note adjusts to stay readable on any color. Changes apply immediately and are remembered. |
@@ -153,7 +154,7 @@ cargo test -p stickynotes real_claude -- --ignored   # optional: one real Claude
 
 Headless screenshots for UI checks:
 `STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs]] QT_QPA_PLATFORM=offscreen cargo run -- <project-folder>`,
-where `scene` is `board`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`, `editor`, `note-demo`, `theme-demo`, `theme-reset`, `interact`, `synthetic` or `generate`.
+where `scene` is `board`, `artifacts`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`, `editor`, `note-demo`, `theme-demo`, `theme-reset`, `interact`, `synthetic` or `generate`.
 
 ### Layout
 
