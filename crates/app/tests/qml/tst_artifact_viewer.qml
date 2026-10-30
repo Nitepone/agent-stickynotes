@@ -27,17 +27,19 @@ Item {
         function cleanup() { viewer.close() }
 
         function test_shows_markdown_as_text() {
-            viewer.showArtifact({ name: "notes.md", kind: "markdown", text: "# Title\n\nSome **bold** text." })
+            viewer.showArtifact({ name: "notes.md", kind: "markdown", text: "# Title\n\nSome **bold** text.",
+                                  html: "<h1>Title</h1>\n<p>Some <strong>bold</strong> text.</p>\n" })
             tryCompare(viewer, "visible", true)
             compare(viewer.title, "notes.md \u2014 Sticky Notes")
             compare(child(viewer.contentItem, "markdownView").visible, true)
             compare(child(viewer.contentItem, "imageView").visible, false)
             const text = child(viewer.contentItem, "markdownText")
-            compare(text.textFormat, TextEdit.MarkdownText)
+            compare(text.textFormat, TextEdit.RichText)
             compare(text.readOnly, true)
             verify(text.text.indexOf("Title") >= 0)
             // Rendered, not raw: the heading marker is not in the displayed text.
             verify(text.getText(0, text.length).indexOf("#") < 0)
+            verify(text.getText(0, text.length).indexOf("bold") >= 0)
         }
 
         function test_shows_an_image_and_toggles_fit() {
@@ -69,8 +71,12 @@ Item {
         readonly property string doc: "# Alpha\n\nFirst section about cats.\n\n```\n# not a heading\n```\n\n"
             + "## Beta *beta*\n\n" + "filler\n\n".repeat(60) + "# Gamma\n\nLast section about Cats."
 
+        readonly property string docHtml: "<h1>Alpha</h1><p>First section about cats.</p>"
+            + "<pre><code># not a heading\n</code></pre><h2>Beta <em>beta</em></h2>"
+            + "<p>filler</p>".repeat(60) + "<h1>Gamma</h1><p>Last section about Cats.</p>"
+
         function open_doc() {
-            viewer.showArtifact({ name: "doc.md", kind: "markdown", text: doc })
+            viewer.showArtifact({ name: "doc.md", kind: "markdown", text: doc, html: docHtml })
             tryCompare(viewer, "visible", true)
             tryCompare(viewer.headings, "length", 3)
         }
@@ -177,6 +183,7 @@ Item {
             viewer.styleId = "reading"
             verify(text.font.pixelSize > base)
             verify(text.width <= 680)
+            verify(text.font.pixelSize === 18)
             compare(box.currentValue, "reading")
             viewer.styleId = "nonsense"
             compare(text.font.pixelSize, base, "an unknown style falls back to the default")
@@ -184,6 +191,29 @@ Item {
         }
 
         Component { id: spyComponent; SignalSpy { signalName: "styleChosen" } }
+
+        function test_paragraph_spacing_and_line_height_follow_the_style() {
+            open_doc()
+            const css = viewer.stylesheet()
+            verify(css.indexOf("line-height:120%") >= 0, "default body leading")
+            verify(css.indexOf("margin-bottom:16px") >= 0, "a paragraph of space between blocks")
+            viewer.zoom = 2
+            verify(viewer.stylesheet().indexOf("margin-bottom:32px") >= 0, "spacing scales with zoom")
+            viewer.zoom = 1
+            viewer.styleId = "reading"
+            verify(viewer.stylesheet().indexOf("line-height:132%") >= 0)
+            viewer.styleId = "default"
+        }
+
+        function test_code_blocks_are_tinted_blocks_and_theme_colors_are_used() {
+            open_doc()
+            const page = viewer.page()
+            verify(page.indexOf("<pre><code") < 0, "no code tint inside blocks")
+            verify(page.indexOf("# not a heading</pre>") >= 0, "no trailing blank line")
+            verify(viewer.stylesheet().indexOf("pre{") >= 0)
+            verify(viewer.stylesheet().indexOf("background-color:" + Theme.controlHover) >= 0)
+            verify(page.indexOf("color:" + Theme.link) >= 0)
+        }
 
         function test_the_markdown_toolbar_is_hidden_for_images() {
             viewer.showArtifact({ name: "shot.png", kind: "image", text: null,

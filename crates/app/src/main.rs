@@ -2,6 +2,7 @@ mod context;
 mod controller;
 mod drafting;
 mod editor;
+mod markdown;
 mod motion;
 mod settings;
 mod theme;

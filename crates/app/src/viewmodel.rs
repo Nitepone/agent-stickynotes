@@ -249,11 +249,13 @@ pub fn artifact_json(store: &BoardStore, name: &str) -> String {
             }
             ArtifactKind::Image => None,
         };
+        let html = text.as_deref().map(crate::markdown::to_html);
         Ok(json!({
             "ok": true,
             "name": name,
             "kind": kind.as_str(),
             "text": text,
+            "html": html,
             "path": path.to_string_lossy(),
         }))
     });
@@ -734,6 +736,7 @@ mod tests {
         assert_eq!(md["ok"], true);
         assert_eq!(md["kind"], "markdown");
         assert_eq!(md["text"], "# Plan\n\ntext");
+        assert!(md["html"].as_str().unwrap().contains("<h1>Plan</h1>"));
 
         let img: serde_json::Value = serde_json::from_str(&artifact_json(&store, "x.png")).unwrap();
         assert_eq!(img["kind"], "image");

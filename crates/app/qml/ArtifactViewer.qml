@@ -14,7 +14,8 @@ ApplicationWindow {
 
     property string name: ""
     property string kind: ""            // "markdown" or "image"
-    property string text: ""
+    property string text: ""            // the Markdown source
+    property string html: ""            // the same, rendered to HTML by Rust
     property string source: ""
     property bool fit: true
 
@@ -33,16 +34,29 @@ ApplicationWindow {
     readonly property real minZoom: 0.5
     readonly property real maxZoom: 3
 
+    // `size` is the body text in px at 100% zoom; `leading` the line height in
+    // percent of the font's own (Qt measures from it, about 1.25em, so 120 reads
+    // like GitHub's 1.5); `gap` the space after a paragraph in px; `maxWidth` the
+    // text column (0 = the whole window). Headings, code and quotes scale from `size`.
     readonly property var styles: [
-        { id: "default", label: qsTr("Default"), families: [], size: 15, maxWidth: 0 },
+        { id: "default", label: qsTr("Default"),
+          families: ["Inter", "Segoe UI", "Helvetica Neue", "Noto Sans", "Cantarell", "IBM Plex Sans",
+                     "Liberation Sans", "DejaVu Sans"],
+          size: 16, leading: 120, gap: 16, maxWidth: 820 },
         { id: "reading", label: qsTr("Reading"),
-          families: ["Georgia", "Charter", "Noto Serif", "DejaVu Serif", "serif"],
-          size: 17, maxWidth: 680 },
-        { id: "compact", label: qsTr("Compact"), families: [], size: 13, maxWidth: 0 },
+          families: ["Charter", "Iowan Old Style", "Georgia", "Noto Serif", "IBM Plex Serif", "DejaVu Serif"],
+          size: 18, leading: 132, gap: 20, maxWidth: 680 },
+        { id: "compact", label: qsTr("Compact"),
+          families: ["Inter", "Segoe UI", "Helvetica Neue", "Noto Sans", "IBM Plex Sans", "Liberation Sans",
+                     "DejaVu Sans"],
+          size: 14, leading: 108, gap: 10, maxWidth: 0 },
         { id: "mono", label: qsTr("Monospace"),
-          families: ["Menlo", "Consolas", "DejaVu Sans Mono", "monospace"],
-          size: 14, maxWidth: 0 },
+          families: ["JetBrains Mono", "SF Mono", "Menlo", "Consolas", "IBM Plex Mono", "Liberation Mono",
+                     "DejaVu Sans Mono"],
+          size: 14, leading: 120, gap: 16, maxWidth: 820 },
     ]
+    readonly property var monoFamilies: ["JetBrains Mono", "SF Mono", "Menlo", "Consolas", "IBM Plex Mono",
+                                         "Liberation Mono", "DejaVu Sans Mono"]
     readonly property var displayStyle: {
         for (const s of styles)
             if (s.id === styleId) return s
@@ -63,6 +77,46 @@ ApplicationWindow {
     function zoomIn() { setZoom(zoom + 0.1) }
     function zoomOut() { setZoom(zoom - 0.1) }
     function zoomReset() { setZoom(1) }
+
+    // The stylesheet for the rendered HTML (Qt reads a subset of CSS). The
+    // spacing follows GitHub's Markdown: body 1.5 line height, a paragraph's
+    // worth of space between blocks, headings with more space above than below.
+    function stylesheet() {
+        const st = displayStyle
+        const px = (n) => (Math.round(n * zoom * 10) / 10) + "px"
+        const mono = pickFamily(monoFamilies)
+        const monoFamily = mono !== "" ? "font-family:'" + mono + "';" : ""
+        const lead = "line-height:" + st.leading + "%;"
+        const heading = (tag, scale, top) =>
+            tag + "{font-size:" + px(st.size * scale) + ";font-weight:600;line-height:100%;margin-top:"
+            + px(top) + ";margin-bottom:" + px(st.gap * 0.6) + ";}"
+        return "p{margin-top:0;margin-bottom:" + px(st.gap) + ";" + lead + "}"
+            + "li{margin-top:0;margin-bottom:" + px(st.size * 0.3) + ";" + lead + "}"
+            + "ul,ol{margin-top:0;margin-bottom:" + px(st.gap) + ";}"
+            + heading("h1", 2, st.gap * 1.5) + heading("h2", 1.5, st.gap * 1.5)
+            + heading("h3", 1.25, st.gap * 1.25) + heading("h4", 1, st.gap * 1.25)
+            + heading("h5", 0.875, st.gap * 1.25) + heading("h6", 0.85, st.gap * 1.25)
+            + "a{color:" + Theme.link + ";}"
+            + "code{" + monoFamily + "font-size:" + px(st.size * 0.88) + ";background-color:"
+            + Theme.controlHover + ";}"
+            + "pre{" + monoFamily + "font-size:" + px(st.size * 0.88) + ";line-height:110%;background-color:"
+            + Theme.controlHover + ";margin-top:0;margin-bottom:" + px(st.gap) + ";}"
+            + "blockquote{margin-top:0;margin-bottom:" + px(st.gap) + ";margin-left:" + px(st.size)
+            + ";color:" + Theme.subtleText + ";" + lead + "}"
+            + "th{font-weight:600;}"
+    }
+
+    // The page Qt shows. Tables get space below; inside a code block the
+    // `code` tint would stripe each line and the final newline would add an
+    // empty one, so the block is a bare `pre` with its own background.
+    function page() {
+        const after = 'style="margin-bottom:' + Math.round(displayStyle.gap * zoom) + 'px"'
+        const body = html
+            .replace(/<pre><code[^>]*>/g, "<pre>")
+            .replace(/\n?<\/code><\/pre>/g, "</pre>")
+            .replace(/<table border/g, "<table " + after + " border")
+        return "<html><head><style>" + stylesheet() + "</style></head><body>" + body + "</body></html>"
+    }
 
     // The visible scroll area of the Markdown view.
     readonly property var scroller: textScroll.contentItem
@@ -173,6 +227,7 @@ ApplicationWindow {
         name = info.name
         kind = info.kind
         text = info.text || ""
+        html = info.html !== undefined && info.html !== null ? info.html : "<pre>" + text + "</pre>"
         query = ""
         zoom = 1
         source = info.kind === "image" ? fileUrl(info.path) : ""
@@ -394,13 +449,13 @@ ApplicationWindow {
                     : textScroll.availableWidth
                 width: column
                 x: Math.max(0, (textScroll.availableWidth - column) / 2)
-                padding: 20
+                padding: 28
                 readOnly: true
                 selectByMouse: true
                 persistentSelection: true
                 wrapMode: TextEdit.Wrap
-                textFormat: TextEdit.MarkdownText
-                text: viewer.text
+                textFormat: TextEdit.RichText
+                text: viewer.page()
                 color: Theme.text
                 selectionColor: Theme.primary
                 selectedTextColor: Theme.textOnPrimary
