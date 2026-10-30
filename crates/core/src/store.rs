@@ -276,6 +276,12 @@ impl BoardStore {
         }
     }
 
+    /// Where a file in the project's `artifacts/` folder is on disk.
+    pub fn artifact_path(&self, file_name: &str) -> Result<PathBuf> {
+        let dir = self.project_dir().ok_or(Error::NoPath)?;
+        artifact::locate(&dir, file_name)
+    }
+
     /// The bytes of a file in the project's `artifacts/` folder.
     pub fn read_artifact(&self, file_name: &str) -> Result<Vec<u8>> {
         let dir = self.project_dir().ok_or(Error::NoPath)?;

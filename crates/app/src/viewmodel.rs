@@ -8,8 +8,8 @@ use serde_json::json;
 use stickynotes_core::model::SUGGESTED_DESCRIPTION_CHARS;
 use stickynotes_core::project;
 use stickynotes_core::{
-    Applied, Board, CriterionDraft, Error, ReferenceDraft, Relation, Snapshot, Task, TaskDraft,
-    TaskPatch, card_text,
+    Applied, ArtifactFile, ArtifactKind, Board, BoardStore, CriterionDraft, Error, ReferenceDraft,
+    Relation, Snapshot, Task, TaskDraft, TaskPatch, artifact, card_text,
 };
 use uuid::Uuid;
 
@@ -44,6 +44,7 @@ struct CardVm {
     card_text: String,
     done: usize,
     total: usize,
+    artifact_count: usize,
 }
 
 #[derive(Serialize)]
@@ -63,7 +64,17 @@ struct TaskVm<'a> {
     requirements: &'a [String],
     criteria: Vec<CriterionVm<'a>>,
     references: Vec<ReferenceVm<'a>>,
+    artifacts: Vec<ArtifactVm<'a>>,
     updated_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ArtifactVm<'a> {
+    id: Uuid,
+    name: &'a str,
+    kind: &'static str,
+    by_agent: bool,
 }
 
 #[derive(Serialize)]
@@ -118,6 +129,7 @@ fn card(task: &Task) -> CardVm {
         ),
         done: p.done,
         total: p.total,
+        artifact_count: task.artifacts.len(),
     }
 }
 
@@ -157,19 +169,69 @@ pub fn task_json(board: &Board, id: Uuid) -> String {
                 })
             })
             .collect(),
+        artifacts: t
+            .artifacts
+            .iter()
+            .map(|a| ArtifactVm {
+                id: a.id,
+                name: &a.name,
+                kind: a.kind.as_str(),
+                by_agent: a.by_agent,
+            })
+            .collect(),
         updated_at: t.updated_at.to_rfc3339(),
     };
     serde_json::to_string(&vm).expect("view model serializes")
 }
 
-/// Project settings for `ProjectDialog.qml`.
-pub fn project_json(board: &Board) -> String {
+/// Project settings for `ProjectDialog.qml`, with every file in the
+/// project's `artifacts/` folder and the tasks each is attached to.
+pub fn project_json(board: &Board, files: &[ArtifactFile]) -> String {
+    let artifacts: Vec<_> = files
+        .iter()
+        .map(|f| {
+            json!({
+                "name": f.file.name,
+                "kind": f.file.kind.as_str(),
+                "size": f.file.size,
+                "tasks": f.tasks.iter().map(|(_, number, _)| number).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
     json!({
         "title": board.title,
         "documentPrompt": board.project.document_prompt,
         "codeGuidance": board.project.code_guidance,
+        "artifacts": artifacts,
     })
     .to_string()
+}
+
+/// What `ArtifactViewer.qml` shows for a file in `artifacts/`: Markdown comes
+/// with its text, images with the path of the file.
+pub fn artifact_json(store: &BoardStore, name: &str) -> String {
+    let shown = store.artifact_path(name).and_then(|path| {
+        let kind = artifact::kind_of(name).ok_or_else(|| {
+            Error::Validation(format!("'{name}' is not a Markdown or image file"))
+        })?;
+        let text = match kind {
+            ArtifactKind::Markdown => {
+                Some(String::from_utf8_lossy(&store.read_artifact(name)?).into_owned())
+            }
+            ArtifactKind::Image => None,
+        };
+        Ok(json!({
+            "ok": true,
+            "name": name,
+            "kind": kind.as_str(),
+            "text": text,
+            "path": path.to_string_lossy(),
+        }))
+    });
+    match shown {
+        Ok(value) => value.to_string(),
+        Err(e) => error_json(&e.to_string()),
+    }
 }
 
 /// The relations a user can pick from: `[{value, label}]`.
@@ -373,7 +435,7 @@ fn error_code(e: &Error) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stickynotes_core::{BoardStore, Command, Origin};
+    use stickynotes_core::{Applied, BoardStore, Command, Origin, TaskDraft};
 
     #[test]
     fn board_json_has_card_text_and_progress() {
@@ -517,12 +579,100 @@ mod tests {
         );
     }
 
+    /// A project store with one task that has a Markdown and a PNG artifact.
+    fn store_with_artifacts() -> (tempfile::TempDir, std::sync::Arc<BoardStore>, Uuid) {
+        let root = tempfile::tempdir().unwrap();
+        let store = BoardStore::new(true);
+        store.create_project(&root.path().join("p"), "P").unwrap();
+        let (applied, _) = store
+            .apply(
+                Origin::User,
+                Command::CreateTask {
+                    column: None,
+                    position: None,
+                    draft: TaskDraft {
+                        description: "T".into(),
+                        ..Default::default()
+                    },
+                },
+                None,
+            )
+            .unwrap();
+        let Applied::Task(id) = applied else { panic!() };
+        store
+            .add_artifact(Origin::Agent, id, "plan.md", b"# Plan\n\ntext", None)
+            .unwrap();
+        store
+            .add_artifact(Origin::User, id, "x.png", b"\x89PNG\r\n\x1a\n..", None)
+            .unwrap();
+        (root, store, id)
+    }
+
+    #[test]
+    fn cards_and_the_task_dialog_know_the_artifacts() {
+        let (_root, store, id) = store_with_artifacts();
+        let snap = store.snapshot();
+        let board: serde_json::Value = serde_json::from_str(&board_json(&snap.board)).unwrap();
+        assert_eq!(board["columns"][0]["tasks"][0]["artifactCount"], 2);
+
+        let task: serde_json::Value = serde_json::from_str(&task_json(&snap.board, id)).unwrap();
+        assert_eq!(task["artifacts"][0]["name"], "plan.md");
+        assert_eq!(task["artifacts"][0]["kind"], "markdown");
+        assert_eq!(task["artifacts"][0]["byAgent"], true);
+        assert_eq!(task["artifacts"][1]["kind"], "image");
+        assert_eq!(task["artifacts"][1]["byAgent"], false);
+    }
+
+    #[test]
+    fn project_json_lists_files_and_where_they_are_attached() {
+        let (_root, store, _) = store_with_artifacts();
+        // A file nothing points at.
+        std::fs::write(store.project_dir().unwrap().join("artifacts/loose.md"), "x").unwrap();
+        let files = store.artifact_files();
+        let v: serde_json::Value =
+            serde_json::from_str(&store.read(|b, _| project_json(b, &files))).unwrap();
+        let names: Vec<_> = v["artifacts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|a| (a["name"].as_str().unwrap(), a["tasks"].clone()))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("loose.md", json!([])),
+                ("plan.md", json!([1])),
+                ("x.png", json!([1]))
+            ]
+        );
+    }
+
+    #[test]
+    fn viewer_gets_text_for_markdown_and_a_path_for_images() {
+        let (_root, store, _) = store_with_artifacts();
+        let md: serde_json::Value =
+            serde_json::from_str(&artifact_json(&store, "plan.md")).unwrap();
+        assert_eq!(md["ok"], true);
+        assert_eq!(md["kind"], "markdown");
+        assert_eq!(md["text"], "# Plan\n\ntext");
+
+        let img: serde_json::Value = serde_json::from_str(&artifact_json(&store, "x.png")).unwrap();
+        assert_eq!(img["kind"], "image");
+        assert!(img["text"].is_null());
+        assert!(img["path"].as_str().unwrap().ends_with("artifacts/x.png"));
+
+        for bad in ["../stickynotes.json", "missing.md", "stickynotes.json", ""] {
+            let v: serde_json::Value = serde_json::from_str(&artifact_json(&store, bad)).unwrap();
+            assert_eq!(v["ok"], false, "{bad}");
+        }
+    }
+
     #[test]
     fn project_json_carries_both_instructions() {
         let mut board = Board::new_default();
         board.project.document_prompt = "Be brief.".into();
         board.project.code_guidance = "Use Rust.".into();
-        let v: serde_json::Value = serde_json::from_str(&project_json(&board)).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&project_json(&board, &[])).unwrap();
         assert_eq!(v["documentPrompt"], "Be brief.");
         assert_eq!(v["codeGuidance"], "Use Rust.");
         assert_eq!(v["title"], "Untitled board");

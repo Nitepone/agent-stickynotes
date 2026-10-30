@@ -14,7 +14,7 @@ Item {
         columns: [
             { id: "c0", title: "Backlog", description: "Unscoped", tasks: [
                 { id: "t0", number: 1, cardText: "first", done: 0, total: 0 },
-                { id: "t1", number: 2, cardText: "second", done: 1, total: 2 },
+                { id: "t1", number: 2, cardText: "second", done: 1, total: 2, artifactCount: 2 },
             ] },
             { id: "c1", title: "Doing", description: "", tasks: [] },
             { id: "c2", title: "Done", description: "", tasks: [
@@ -79,6 +79,14 @@ Item {
             for (let i = 1; i <= steps; i++)
                 mouseMove(scene, from.x + (to.x - from.x) * i / steps, from.y + (to.y - from.y) * i / steps)
             mouseRelease(scene, to.x, to.y)
+        }
+
+        function test_cards_show_how_many_files_are_attached() {
+            const withFiles = findChild(item("card-t1"), "cardArtifacts")
+            const without = findChild(item("card-t0"), "cardArtifacts")
+            compare(withFiles.visible, true)
+            compare(withFiles.text, "2 files")
+            compare(without.visible, false)
         }
 
         function test_drag_task_to_empty_column() {

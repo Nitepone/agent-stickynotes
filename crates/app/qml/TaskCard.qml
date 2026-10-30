@@ -100,6 +100,14 @@ Item {
                     color: Theme.noteNumber
                 }
 
+                Label {
+                    objectName: "cardArtifacts"
+                    visible: (root.task.artifactCount || 0) > 0
+                    text: root.task.artifactCount === 1 ? qsTr("1 file") : qsTr("%1 files").arg(root.task.artifactCount)
+                    font.pixelSize: 11
+                    color: Theme.noteSubtleText
+                }
+
                 Rectangle {
                     Layout.fillWidth: true
                     visible: parent.hasProgress

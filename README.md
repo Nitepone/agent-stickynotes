@@ -10,6 +10,8 @@ loopback so Claude Code (or any agent) can read and update the board.
 - Agents can attach Markdown and image files to tasks (see
   [docs/claude-code-setup.md](docs/claude-code-setup.md#artifacts)); they can add and
   detach artifacts but never delete files.
+  Click a task's file in the task editor to open it in a viewer window; **Board ▸ Project
+  Settings…** lists every file in the project's `artifacts/` folder.
 - Columns are an ordered pipeline. Each column's description says what a task
   must satisfy to be there.
 - You can drag tasks anywhere. Agents can only create tasks in the first column

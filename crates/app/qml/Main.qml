@@ -265,6 +265,23 @@ ApplicationWindow {
         }
     }
 
+    // ---- Artifacts -----------------------------------------------------
+
+    // Each artifact opens in a window of its own, so several can be open
+    // side by side while the board stays usable.
+    Component {
+        id: viewerComponent
+        ArtifactViewer {
+            onClosing: Qt.callLater(destroy)
+        }
+    }
+
+    function openArtifact(name) {
+        const r = result(controller.artifactJson(name))
+        if (r.ok)
+            viewerComponent.createObject(null).showArtifact(r)
+    }
+
     // The project picker. With `forSaving` the board has no project yet and
     // creating one saves it; `then` runs afterwards.
     function openProjects(forSaving, then) {
@@ -638,6 +655,7 @@ ApplicationWindow {
         onCancelGenerationRequested: controller.cancelGeneration()
         linkCandidates: window.linkCandidates
         relationOptions: JSON.parse(controller.relationOptions())
+        onArtifactClicked: (name) => window.openArtifact(name)
         onOpenTaskRequested: (taskId) => {
             const go = () => {
                 const json = controller.taskJson(taskId)
@@ -683,6 +701,7 @@ ApplicationWindow {
 
     ProjectDialog {
         id: projectDialog
+        onArtifactClicked: (name) => window.openArtifact(name)
         onSaveRequested: (documentPrompt, codeGuidance) => {
             const r = window.result(controller.updateProject(documentPrompt, codeGuidance), true)
             if (r.ok)

@@ -24,6 +24,7 @@ Item {
         ]
     }
     SignalSpy { id: openSpy; target: dialog; signalName: "openTaskRequested" }
+    SignalSpy { id: artifactSpy; target: dialog; signalName: "artifactClicked" }
     SignalSpy { id: generateSpy; target: dialog; signalName: "generateRequested" }
     SignalSpy { id: cancelSpy; target: dialog; signalName: "cancelGenerationRequested" }
 
@@ -48,6 +49,7 @@ Item {
 
         function init() {
             openSpy.clear()
+            artifactSpy.clear()
             generateSpy.clear()
             cancelSpy.clear()
             dialog.generating = false
@@ -67,6 +69,37 @@ Item {
         }
 
         function form() { return JSON.parse(dialog.formJson()) }
+
+        function openWithArtifacts(artifacts) {
+            dialog.openTask(JSON.stringify({
+                id: "t1", number: 7, columnId: "c0", description: "d", extendedDescription: "",
+                requirements: [], criteria: [], references: [], artifacts: artifacts,
+                updatedAt: "2026-01-01T00:00:00Z",
+            }), "Backlog")
+            waitForRendering(dialog.contentItem)
+        }
+
+        function test_artifacts_are_listed_and_open_on_click() {
+            openWithArtifacts([
+                { id: "a1", name: "plan.md", kind: "markdown", byAgent: true },
+                { id: "a2", name: "flow.png", kind: "image", byAgent: false },
+            ])
+            const links = fields("artifactLink")
+            compare(links.length, 2)
+            compare(links[0].text, "plan.md")
+            compare(fields("noArtifacts")[0].visible, false)
+            mouseClick(links[1])
+            compare(artifactSpy.count, 1)
+            compare(artifactSpy.signalArguments[0][0], "flow.png")
+        }
+
+        function test_no_artifacts_says_so_and_artifacts_are_not_part_of_the_form() {
+            openWithArtifacts([])
+            compare(fields("artifactLink").length, 0)
+            compare(fields("noArtifacts")[0].visible, true)
+            openWithArtifacts([{ id: "a1", name: "plan.md", kind: "markdown", byAgent: false }])
+            verify(!("artifacts" in form()), "saving the form must not touch artifacts")
+        }
 
         function test_long_requirement_wraps_and_grows() {
             open(["short", scene.longText], [])

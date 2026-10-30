@@ -7,7 +7,7 @@
 
 use std::fs;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::error::{Error, Result};
 use crate::model::ArtifactKind;
@@ -171,23 +171,26 @@ fn is_plain_name(name: &str) -> bool {
             .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
 
-/// Read an artifact's file. Only plain file names in `artifacts/` are read,
-/// and symlinks are not followed out of the folder.
-pub fn read(project_dir: &Path, file_name: &str) -> Result<Vec<u8>> {
+/// The path of an artifact's file. Only plain file names that are regular
+/// files in `artifacts/` are found; symlinks are not followed out of the folder.
+pub fn locate(project_dir: &Path, file_name: &str) -> Result<PathBuf> {
     if !is_plain_name(file_name) {
         return Err(invalid(format!(
             "'{file_name}' is not an artifact file name"
         )));
     }
     let path = project::artifacts_dir(project_dir).join(file_name);
-    let missing = || Error::NotFound {
-        kind: "artifact file",
-        id: file_name.to_string(),
-    };
-    let meta = fs::symlink_metadata(&path).map_err(|_| missing())?;
-    if !meta.is_file() {
-        return Err(missing());
+    match fs::symlink_metadata(&path) {
+        Ok(meta) if meta.is_file() => Ok(path),
+        _ => Err(Error::NotFound {
+            kind: "artifact file",
+            id: file_name.to_string(),
+        }),
     }
+}
+
+pub fn read(project_dir: &Path, file_name: &str) -> Result<Vec<u8>> {
+    let path = locate(project_dir, file_name)?;
     fs::read(&path).map_err(|source| Error::Io { path, source })
 }
 

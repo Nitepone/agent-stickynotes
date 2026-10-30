@@ -101,6 +101,8 @@ pub mod qobject {
         #[qinvokable]
         fn project_json(self: &BoardController) -> QString;
         #[qinvokable]
+        fn artifact_json(self: &BoardController, name: &QString) -> QString;
+        #[qinvokable]
         fn update_project(
             self: &BoardController,
             document_prompt: &QString,
@@ -432,11 +434,17 @@ impl qobject::BoardController {
     }
 
     fn project_json(&self) -> QString {
-        to_qstring(
-            context::get()
-                .store
-                .read(|board, _| viewmodel::project_json(board)),
-        )
+        let store = &context::get().store;
+        // Listed first: the store is locked while `read` runs.
+        let files = store.artifact_files();
+        to_qstring(store.read(|board, _| viewmodel::project_json(board, &files)))
+    }
+
+    fn artifact_json(&self, name: &QString) -> QString {
+        to_qstring(viewmodel::artifact_json(
+            &context::get().store,
+            &String::from(name),
+        ))
     }
 
     fn update_project(&self, document_prompt: &QString, code_guidance: &QString) -> QString {

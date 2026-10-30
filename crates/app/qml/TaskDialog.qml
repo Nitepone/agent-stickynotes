@@ -48,6 +48,7 @@ Dialog {
     signal deleteRequested(string taskId)
     signal reloadRequested(string taskId)
     signal openTaskRequested(string taskId)
+    signal artifactClicked(string name)
     signal generateRequested(string formJson)
     signal cancelGenerationRequested()
 
@@ -126,6 +127,7 @@ Dialog {
         requirementsModel.clear()
         criteriaModel.clear()
         referencesModel.clear()
+        artifactsModel.clear()
     }
 
     function load(task) {
@@ -147,6 +149,9 @@ Dialog {
             referencesModel.append({
                 tid: r.taskId, relation: r.relation, relationLabel: r.relationLabel,
                 description: r.description, columnTitle: r.columnTitle })
+        artifactsModel.clear()
+        for (const a of task.artifacts || [])
+            artifactsModel.append({ aname: a.name, akind: a.kind, byAgent: a.byAgent })
         targetBox.currentIndex = -1
         loadedForm = formJson()
     }
@@ -201,6 +206,7 @@ Dialog {
     ListModel { id: requirementsModel }
     ListModel { id: criteriaModel }
     ListModel { id: referencesModel }
+    ListModel { id: artifactsModel }
 
     contentItem: ScrollView {
         id: scroll
@@ -407,6 +413,50 @@ Dialog {
                 text: qsTr("+ Add criterion")
                 flat: true
                 onClicked: criteriaModel.append({ cid: "", text: "", done: false })
+            }
+
+            SectionLabel { text: qsTr("Artifacts"); visible: !dialog.creating }
+            Label {
+                objectName: "noArtifacts"
+                Layout.fillWidth: true
+                visible: !dialog.creating && artifactsModel.count === 0
+                text: qsTr("No files attached. Agents can attach Markdown and images.")
+                color: Theme.subtleText
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
+            }
+            Repeater {
+                model: artifactsModel
+                delegate: RowLayout {
+                    required property string aname
+                    required property string akind
+                    required property bool byAgent
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Button {
+                        objectName: "artifactLink"
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        flat: true
+                        text: parent.aname
+                        contentItem: Label {
+                            text: parent.text
+                            elide: Text.ElideRight
+                            color: Theme.link
+                            font.underline: parent.hovered
+                        }
+                        ToolTip.visible: hovered
+                        ToolTip.text: qsTr("Open in a viewer")
+                        onClicked: dialog.artifactClicked(parent.aname)
+                    }
+                    Label {
+                        text: (parent.akind === "image" ? qsTr("Image") : qsTr("Markdown"))
+                              + (parent.byAgent ? qsTr(" \u00b7 by agent") : "")
+                        color: Theme.subtleText
+                        font.pixelSize: 12
+                    }
+                }
             }
 
             SectionLabel { text: qsTr("References") }

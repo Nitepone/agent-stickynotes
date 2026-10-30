@@ -9,13 +9,17 @@ Dialog {
     id: dialog
 
     property string errorText: ""
+    // Every file in the project's artifacts folder: [{ name, kind, size, tasks: [numbers] }].
+    property var artifacts: []
 
     signal saveRequested(string documentPrompt, string codeGuidance)
+    signal artifactClicked(string name)
 
     function openProject(projectJson) {
         const project = JSON.parse(projectJson)
         documentField.text = project.documentPrompt
         codeField.text = project.codeGuidance
+        artifacts = project.artifacts || []
         errorText = ""
         open()
         documentField.forceActiveFocus()
@@ -75,6 +79,48 @@ Dialog {
                 Layout.fillWidth: true
                 Layout.minimumHeight: 150
                 placeholderText: qsTr("e.g. Rust 2024. Keep functions small. Every change needs a test.")
+            }
+
+            SectionLabel { text: qsTr("Artifacts") }
+            Label {
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                color: Theme.subtleText
+                font.pixelSize: 12
+                text: dialog.artifacts.length === 0
+                    ? qsTr("No files in this project's artifacts folder yet.")
+                    : qsTr("Every file in this project's artifacts folder. Detached files stay here until you delete them from the folder.")
+            }
+            Repeater {
+                model: dialog.artifacts
+                delegate: RowLayout {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    spacing: 6
+
+                    Button {
+                        objectName: "artifactLink"
+                        Layout.fillWidth: true
+                        Layout.preferredWidth: 1
+                        flat: true
+                        text: modelData.name
+                        contentItem: Label {
+                            text: parent.text
+                            elide: Text.ElideRight
+                            color: Theme.link
+                            font.underline: parent.hovered
+                        }
+                        onClicked: dialog.artifactClicked(modelData.name)
+                    }
+                    Label {
+                        objectName: "artifactTasks"
+                        text: modelData.tasks.length > 0
+                            ? modelData.tasks.map(n => "#" + n).join(", ")
+                            : qsTr("not attached")
+                        color: Theme.subtleText
+                        font.pixelSize: 12
+                    }
+                }
             }
 
             Label {
