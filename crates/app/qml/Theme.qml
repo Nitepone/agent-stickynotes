@@ -58,6 +58,15 @@ QtObject {
     readonly property color controlHover: dark ? "#363e4a" : "#cdd3dd"
     readonly property color controlDown: dark ? "#424c5a" : "#bcc4d1"
 
+    // Shading roles of the standard controls' palette (bevels, outlines,
+    // scroll bar handles and tracks). Main.qml applies them on Windows only,
+    // where the system palette would otherwise leak into them in dark mode.
+    readonly property color shadeLight: dark ? "#4a5361" : "#ffffff"
+    readonly property color shadeMidlight: dark ? "#3b4350" : "#f3f5f8"
+    readonly property color shadeMid: dark ? "#363e4a" : "#c4cad4"
+    readonly property color shadeDark: dark ? "#14171c" : "#9aa2ae"
+    readonly property color shadeShadow: dark ? "#0b0d10" : "#6b7280"
+
     // ---- Sticky notes (a note keeps its color in both modes) ---------------
 
     readonly property color defaultNote: dark ? "#e8d572" : "#fff1a6"

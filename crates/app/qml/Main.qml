@@ -36,6 +36,16 @@ ApplicationWindow {
         link: Theme.link
     }
 
+    // Windows only: the Fusion style also draws bevels, outlines and scroll
+    // bar handles from the palette's shading roles, which keep the (light)
+    // system values there. Set them from the theme too. Other platforms are
+    // left exactly as they were.
+    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "light"; value: Theme.shadeLight }
+    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "midlight"; value: Theme.shadeMidlight }
+    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "mid"; value: Theme.shadeMid }
+    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "dark"; value: Theme.shadeDark }
+    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "shadow"; value: Theme.shadeShadow }
+
     // The user's theme settings, from the controller.
     Binding { target: Theme; property: "mode"; value: controller.themeMode }
     Binding { target: Theme; property: "primaryColor"; value: controller.primaryColor }

@@ -41,6 +41,15 @@ TestCase {
         verify(Theme.luminance(Theme.background) > 0.5)
     }
 
+    function test_palette_shading_tokens_follow_the_mode() {
+        const tokens = ["shadeLight", "shadeMidlight", "shadeMid", "shadeDark", "shadeShadow"]
+        Theme.mode = "dark"
+        for (const t of tokens)
+            verify(Theme.luminance(Theme[t]) < 0.2, t + " should be dark in dark mode")
+        Theme.mode = "light"
+        verify(Theme.luminance(Theme.shadeLight) > 0.5)
+    }
+
     // ---- custom colors ---------------------------------------------------
 
     function test_custom_primary_drives_primary_accents() {
