@@ -54,6 +54,14 @@ def write_icns(path: Path) -> None:
     path.write_bytes(b"icns" + struct.pack(">I", len(body) + 8) + body)
 
 
+def write_window_pngs(folder: Path) -> None:
+    """The PNGs the app embeds and sets as its window icon (title bar, taskbar, Dock)."""
+    folder.mkdir(exist_ok=True)
+    for s in (16, 32, 48, 256):
+        (folder / f"window-{s}.png").write_bytes(render(s))
+
+
 if __name__ == "__main__":
     write_ico(pk / "icon.ico")
     write_icns(pk / "icon.icns")
+    write_window_pngs(pk.parent.parent / "crates" / "app" / "icons")

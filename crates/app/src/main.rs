@@ -70,6 +70,7 @@ fn main() -> Result<()> {
 
     let mut app = QGuiApplication::new();
     controller::qobject::install_activity_filter();
+    set_window_icon();
     let mut engine = QQmlApplicationEngine::new();
     if let Some(engine) = engine.as_mut() {
         engine.load(&QUrl::from("qrc:/qt/qml/StickyNotes/qml/Main.qml"));
@@ -81,6 +82,18 @@ fn main() -> Result<()> {
     drop(app);
     runtime.shutdown_timeout(std::time::Duration::from_secs(1));
     std::process::exit(code);
+}
+
+/// The icon of the window (title bar, taskbar, Dock), in the sizes the system picks from.
+fn set_window_icon() {
+    for png in [
+        &include_bytes!("../icons/window-16.png")[..],
+        &include_bytes!("../icons/window-32.png")[..],
+        &include_bytes!("../icons/window-48.png")[..],
+        &include_bytes!("../icons/window-256.png")[..],
+    ] {
+        controller::qobject::add_window_icon(png);
+    }
 }
 
 /// Open the project from the command line, else the last one used, else start

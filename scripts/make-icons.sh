@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate scripts/packaging/icon.ico and icon.icns from the SVGs.
+# Regenerate scripts/packaging/icon.ico, icon.icns and crates/app/icons/*.png from the SVGs.
 # The results are committed; run this only when the artwork changes.
 # Needs python3 with venv and the cairo library (cairosvg renders the SVG).
 set -euo pipefail

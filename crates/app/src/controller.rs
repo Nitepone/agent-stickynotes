@@ -17,6 +17,8 @@ pub mod qobject {
         fn last_activity_ms() -> i64;
         fn simulate_user_activity();
         fn simulate_synthetic_activity();
+        include!("stickynotes/cpp/window_icon.h");
+        fn add_window_icon(png: &[u8]);
     }
 
     #[auto_cxx_name]

@@ -67,15 +67,20 @@ artwork blurs the notes together at that size. Everything else is the same artwo
 
 `scripts/make-icons.sh` renders both into the committed
 `scripts/packaging/icon.ico` (16, 24, 32, 48, 64, 128 and 256 px) and
-`scripts/packaging/icon.icns` (16 to 1024 px, with the @2x entries). It needs
+`scripts/packaging/icon.icns` (16 to 1024 px, with the @2x entries), and the PNGs
+in `crates/app/icons/` that the app embeds for its window icon. It needs
 python3 with `venv` and the cairo library, and installs cairosvg and Pillow in a
 temporary venv. Run it only when the artwork changes, and commit the results.
 
 - **Windows:** `crates/app/build.rs` compiles `crates/app/windows/stickynotes.rc`
   with the `embed-resource` crate (Windows hosts only, so Linux builds are
-  unaffected), which embeds `icon.ico` as the executable's icon. Explorer, the
-  title bar and the taskbar use it. The installer, its uninstaller entry and the
-  Start menu shortcut use the same icon (`SetupIconFile`, `UninstallDisplayIcon`).
+  unaffected), which embeds `icon.ico` as the executable's icon, under the name
+  `IDI_ICON1` that Qt looks for. Explorer uses it. The installer, its uninstaller
+  entry and the Start menu shortcut use the same icon (`SetupIconFile`,
+  `UninstallDisplayIcon`).
+- **Window icon (all platforms):** `main.rs` embeds the PNGs and `cpp/window_icon.h`
+  sets them with `QGuiApplication::setWindowIcon`, so the title bar, taskbar and
+  Dock do not depend on the executable's icon resource.
 - **macOS:** `scripts/package-macos.sh` copies `icon.icns` into the bundle's
   `Contents/Resources` and sets `CFBundleIconFile` in `Info.plist`, for the Dock and
   Finder.
