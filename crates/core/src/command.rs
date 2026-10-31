@@ -1,8 +1,6 @@
 //! Commands are the only way to mutate a board. Both the UI controller and the
 //! agent API build commands and hand them to [`crate::BoardStore::apply`].
 
-use serde::Deserialize;
-
 use crate::model::{Artifact, ArtifactId, ColumnId, CriterionId, Relation, TaskId};
 
 /// Who issued a command. Agents are subject to extra rules.
@@ -13,37 +11,32 @@ pub enum Origin {
 }
 
 /// Content for a new task.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct TaskDraft {
     pub description: String,
-    #[serde(default)]
     pub extended_description: String,
-    #[serde(default)]
     pub requirements: Vec<String>,
-    #[serde(default)]
     pub acceptance_criteria: Vec<CriterionDraft>,
 }
 
 /// An acceptance criterion as supplied by a client. An `id` matching an
 /// existing criterion keeps that criterion's identity.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct CriterionDraft {
-    #[serde(default)]
     pub id: Option<CriterionId>,
     pub text: String,
-    #[serde(default)]
     pub done: bool,
 }
 
 /// A requested link from the task being edited to another task.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ReferenceDraft {
     pub task: TaskId,
     pub relation: Relation,
 }
 
 /// Partial task update; `None` fields are left untouched.
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default)]
 pub struct TaskPatch {
     pub description: Option<String>,
     pub extended_description: Option<String>,

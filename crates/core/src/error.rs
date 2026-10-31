@@ -51,4 +51,13 @@ pub enum Error {
     },
 }
 
+impl Error {
+    pub fn not_found(kind: &'static str, id: impl std::fmt::Display) -> Self {
+        Error::NotFound {
+            kind,
+            id: id.to_string(),
+        }
+    }
+}
+
 pub type Result<T, E = Error> = std::result::Result<T, E>;

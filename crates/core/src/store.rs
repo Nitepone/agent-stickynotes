@@ -5,7 +5,7 @@
 //! [`BoardStore::apply`]; listeners are notified after each change.
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::command::{Applied, Command, Origin};
 use crate::error::{Error, Result};
@@ -76,7 +76,7 @@ impl BoardStore {
 
     /// Register a callback run (on the mutating thread) after every change.
     pub fn subscribe(&self, listener: impl Fn(Change) + Send + Sync + 'static) {
-        self.listeners.lock().unwrap().push(Box::new(listener));
+        relock(&self.listeners).push(Box::new(listener));
     }
 
     pub fn snapshot(&self) -> Snapshot {
@@ -252,10 +252,7 @@ impl BoardStore {
         artifact::validate_content(&file_name, kind, data)?;
         let dir = self.project_dir().ok_or(Error::NoPath)?;
         if self.read(|board, _| board.task(task).is_none()) {
-            return Err(Error::NotFound {
-                kind: "task",
-                id: task.to_string(),
-            });
+            return Err(Error::not_found("task", task));
         }
         let stored = artifact::write_new(&dir, &file_name, data)?;
         let record = Artifact {
@@ -344,11 +341,15 @@ impl BoardStore {
     }
 
     fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap()
+        relock(&self.state)
     }
 
     /// Run `f` under the lock; on success bump the revision and notify
     /// listeners (after releasing the lock, so listeners may read the store).
+    ///
+    /// A panic in `f` does not poison the store: `relock` recovers the lock.
+    /// For the state to stay consistent afterwards, commands must validate
+    /// before they mutate, so `f` never panics half-way through a change.
     fn mutate<R>(&self, origin: Origin, f: impl FnOnce(&mut State) -> Result<R>) -> Result<R> {
         let (result, change) = {
             let mut s = self.lock();
@@ -362,11 +363,16 @@ impl BoardStore {
                 },
             )
         };
-        for listener in self.listeners.lock().unwrap().iter() {
+        for listener in relock(&self.listeners).iter() {
             listener(change);
         }
         Ok(result)
     }
+}
+
+/// Lock a mutex, recovering the data if another thread panicked while holding it.
+pub fn relock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[cfg(test)]
@@ -375,6 +381,22 @@ mod tests {
 
     use super::*;
     use crate::command::TaskDraft;
+
+    #[test]
+    fn a_panic_inside_mutate_does_not_brick_the_store() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = BoardStore::new(true);
+        store.save_as(&dir.path().join("board.json")).unwrap();
+        let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = store.mutate::<()>(Origin::User, |_| panic!("boom"));
+        }));
+        assert!(caught.is_err());
+        assert!(store.state.is_poisoned());
+        let rev = store.snapshot().revision;
+        store.apply(Origin::User, create(), None).unwrap();
+        assert_eq!(store.snapshot().revision, rev + 1);
+        store.save(true).unwrap();
+    }
 
     fn create() -> Command {
         Command::CreateTask {

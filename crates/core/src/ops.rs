@@ -456,10 +456,7 @@ fn clamp(position: Option<usize>, len: usize) -> usize {
 }
 
 fn not_found(kind: &'static str, id: Uuid) -> Error {
-    Error::NotFound {
-        kind,
-        id: id.to_string(),
-    }
+    Error::not_found(kind, id)
 }
 
 fn locate(board: &Board, id: TaskId) -> Result<(usize, usize)> {

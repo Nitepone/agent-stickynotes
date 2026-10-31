@@ -182,10 +182,7 @@ pub fn locate(project_dir: &Path, file_name: &str) -> Result<PathBuf> {
     let path = project::artifacts_dir(project_dir).join(file_name);
     match fs::symlink_metadata(&path) {
         Ok(meta) if meta.is_file() => Ok(path),
-        _ => Err(Error::NotFound {
-            kind: "artifact file",
-            id: file_name.to_string(),
-        }),
+        _ => Err(Error::not_found("artifact file", file_name)),
     }
 }
 
