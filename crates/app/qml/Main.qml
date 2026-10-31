@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import QtQuick.Dialogs
 import StickyNotes
@@ -34,17 +34,19 @@ ApplicationWindow {
         toolTipBase: Theme.surface
         toolTipText: Theme.text
         link: Theme.link
+        // Fusion draws bevels, outlines and scroll bar handles from these.
+        light: Theme.shadeLight
+        midlight: Theme.shadeMidlight
+        mid: Theme.shadeMid
+        dark: Theme.shadeDark
+        shadow: Theme.shadeShadow
     }
 
-    // Windows only: the Fusion style also draws bevels, outlines and scroll
-    // bar handles from the palette's shading roles, which keep the (light)
-    // system values there. Set them from the theme too. Other platforms are
-    // left exactly as they were.
-    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "light"; value: Theme.shadeLight }
-    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "midlight"; value: Theme.shadeMidlight }
-    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "mid"; value: Theme.shadeMid }
-    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "dark"; value: Theme.shadeDark }
-    Binding { when: Qt.platform.os === "windows"; target: window.palette; property: "shadow"; value: Theme.shadeShadow }
+
+    // Tell Qt the color scheme too, so what the platform draws itself (the
+    // Windows title bar, native dialogs) matches instead of following the
+    // system setting. Needs Qt 6.8.
+    Binding { target: Qt.styleHints; property: "colorScheme"; value: Theme.dark ? Qt.Dark : Qt.Light }
 
     // The user's theme settings, from the controller.
     Binding { target: Theme; property: "mode"; value: controller.themeMode }

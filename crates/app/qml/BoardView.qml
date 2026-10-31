@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import StickyNotes
 
 // The horizontally scrolling row of columns. Emits user intents; it does not

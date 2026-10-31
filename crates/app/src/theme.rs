@@ -95,6 +95,38 @@ mod tests {
         );
     }
 
+    /// The style must not depend on the platform default or on the
+    /// `QT_QUICK_CONTROLS_STYLE` variable: a plain `import QtQuick.Controls`
+    /// lets Windows pick its own (light) style, and windeployqt only ships
+    /// the style modules that some QML file imports.
+    #[test]
+    fn views_import_the_fusion_style_explicitly() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("qml");
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "qml") {
+                let text = std::fs::read_to_string(&path).unwrap();
+                assert!(
+                    !text.lines().any(|l| l.trim() == "import QtQuick.Controls"),
+                    "{} imports the platform-default style; use QtQuick.Controls.Fusion",
+                    path.display()
+                );
+            }
+        }
+    }
+
+    /// A `Binding` whose target is `window.palette` re-evaluates its own
+    /// target when it writes (a binding loop), so it never applies.
+    #[test]
+    fn the_window_palette_is_set_in_its_palette_group() {
+        let main = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("qml/Main.qml"),
+        )
+        .unwrap();
+        assert!(!main.contains("target: window.palette"));
+        assert!(main.contains("shadow: Theme.shadeShadow"));
+    }
+
     #[test]
     fn the_scan_would_catch_a_hard_coded_color() {
         // Guard against the scan above silently matching nothing.

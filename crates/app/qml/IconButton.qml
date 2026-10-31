@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import StickyNotes
 
 // A toolbar button that shows an icon (see ToolIcon for the kinds). `tip` is

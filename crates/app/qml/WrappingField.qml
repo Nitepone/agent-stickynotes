@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import StickyNotes
 
 // A single list item (requirement, criterion) that wraps onto extra lines and

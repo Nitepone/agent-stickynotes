@@ -1,5 +1,5 @@
 import QtQuick
-import QtQuick.Controls
+import QtQuick.Controls.Fusion
 import StickyNotes
 
 // Drop target for deleting tasks. Emits `taskDropped`; the caller confirms.
