@@ -321,6 +321,27 @@ async fn validation_errors() {
 }
 
 #[tokio::test]
+async fn patching_a_criterion_with_a_malformed_id_is_a_bad_request() {
+    let api = Api::new(true);
+    let (_, t) = api
+        .call("POST", "/tasks", Some(json!({"description": "t"})))
+        .await;
+    let id = t["id"].as_str().unwrap();
+    let (status, err) = api
+        .call(
+            "PATCH",
+            &format!("/tasks/{id}"),
+            Some(json!({"acceptance_criteria": [{"id": "nope", "text": "x"}]})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        err,
+        json!({"error": "bad_request", "message": "'nope' is not a valid criterion id"})
+    );
+}
+
+#[tokio::test]
 async fn mcp_end_to_end() {
     let store = BoardStore::new(true);
     let handle = stickynotes_server::start(store.clone(), TOKEN.into(), 0)

@@ -12,9 +12,7 @@ use rmcp::{ErrorData, RoleServer, ServerHandler, schemars, tool, tool_handler, t
 use serde::{Deserialize, Serialize};
 use stickynotes_core::agent_guide;
 
-use crate::service::{
-    AgentService, CriterionInput, NewArtifact, NewTask, ReferenceInput, ServiceResult, TaskUpdate,
-};
+use crate::service::{AgentService, NewArtifact, NewTask, ServiceResult, TaskUpdate};
 
 const BOARD_URI: &str = "stickynotes://board";
 const BOARD_MD_URI: &str = "stickynotes://board.md";
@@ -35,53 +33,18 @@ pub struct TaskIdArgs {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct TaskCreateArgs {
-    /// Short, sticky-note sized summary (about 200 characters suggested). Required.
-    pub description: String,
-    /// Longer free-form details.
-    #[serde(default)]
-    pub extended_description: String,
-    #[serde(default)]
-    pub requirements: Vec<String>,
-    /// Acceptance criteria texts; they start unchecked.
-    #[serde(default)]
-    pub acceptance_criteria: Vec<String>,
+    #[serde(flatten)]
+    pub body: NewTask,
     pub expected_revision: Option<u64>,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct CriterionArg {
-    /// Id of an existing criterion to keep (omit to add a new one).
-    pub id: Option<String>,
-    pub text: String,
-    #[serde(default)]
-    pub done: bool,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct TaskUpdateArgs {
     /// Task id, or its number such as #12.
     pub id: String,
-    /// New short description (about 200 characters suggested).
-    pub description: Option<String>,
-    pub extended_description: Option<String>,
-    /// Replaces the whole requirements list.
-    pub requirements: Option<Vec<String>>,
-    /// Replaces the whole criteria list. Pass existing ids to keep criteria.
-    pub acceptance_criteria: Option<Vec<CriterionArg>>,
-    /// Replaces all links to other tasks (pass the existing ones to keep
-    /// them; omit the field to leave links alone). The other task gets the
-    /// mirrored relation automatically.
-    pub references: Option<Vec<ReferenceArg>>,
+    #[serde(flatten)]
+    pub body: TaskUpdate,
     pub expected_revision: Option<u64>,
-}
-
-#[derive(Debug, Deserialize, schemars::JsonSchema)]
-pub struct ReferenceArg {
-    /// Id (or number such as #12) of the other task.
-    pub task_id: String,
-    /// What this task does to the other: blocks, blocked_by, relates_to,
-    /// duplicates or duplicated_by.
-    pub relation: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -97,15 +60,8 @@ pub struct CriterionSetArgs {
 pub struct ArtifactAddArgs {
     /// Task id, or its number such as #12.
     pub task_id: String,
-    /// File name with extension: .md for Markdown, or .png .jpg .jpeg .gif
-    /// .webp .svg for images. It is cleaned up and made unique, so check the
-    /// returned name.
-    pub name: String,
-    /// The text, for .md and .svg files. Give this or content_base64.
-    pub content: Option<String>,
-    /// The file's bytes, base64 encoded (needed for raster images). Limits:
-    /// 1 MiB for Markdown and SVG, 5 MiB for other images.
-    pub content_base64: Option<String>,
+    #[serde(flatten)]
+    pub body: NewArtifact,
     pub expected_revision: Option<u64>,
 }
 
@@ -173,54 +129,14 @@ impl BoardMcp {
         description = "Create a task in the first column. Keep description short (~200 chars); put detail in extended_description, requirements and acceptance_criteria."
     )]
     fn task_create(&self, Parameters(a): Parameters<TaskCreateArgs>) -> ToolResult {
-        let new = NewTask {
-            description: a.description,
-            extended_description: a.extended_description,
-            requirements: a.requirements,
-            acceptance_criteria: a.acceptance_criteria,
-        };
-        json(self.service.create_task(new, a.expected_revision))
+        json(self.service.create_task(a.body, a.expected_revision))
     }
 
     #[tool(
         description = "Update a task. Omitted fields are unchanged; lists (requirements, acceptance_criteria, references) replace the existing list. Keep description short (~200 chars). To link tasks, pass references like [{\"task_id\": \"...\", \"relation\": \"blocks\"}]; the other task is updated to match."
     )]
     fn task_update(&self, Parameters(a): Parameters<TaskUpdateArgs>) -> ToolResult {
-        let criteria = match a.acceptance_criteria {
-            None => None,
-            Some(cs) => Some(
-                cs.into_iter()
-                    .map(|c| {
-                        let id =
-                            c.id.map(|id| {
-                                id.parse()
-                                    .map_err(|_| format!("'{id}' is not a valid criterion id"))
-                            })
-                            .transpose()?;
-                        Ok(CriterionInput {
-                            id,
-                            text: c.text,
-                            done: c.done,
-                        })
-                    })
-                    .collect::<Result<Vec<_>, String>>()?,
-            ),
-        };
-        let update = TaskUpdate {
-            description: a.description,
-            extended_description: a.extended_description,
-            requirements: a.requirements,
-            acceptance_criteria: criteria,
-            references: a.references.map(|refs| {
-                refs.into_iter()
-                    .map(|r| ReferenceInput {
-                        task_id: r.task_id,
-                        relation: r.relation,
-                    })
-                    .collect()
-            }),
-        };
-        json(self.service.update_task(&a.id, update, a.expected_revision))
+        json(self.service.update_task(&a.id, a.body, a.expected_revision))
     }
 
     #[tool(
@@ -239,14 +155,9 @@ impl BoardMcp {
         description = "Attach a file to a task: Markdown (.md) or an image (.png .jpg .gif .webp .svg), for example a design note, a report or a diagram. Pass text as content, or bytes as content_base64. The file is stored in the project's artifacts folder and shown to the user on the task. You cannot replace an existing artifact; add a new one and detach the old."
     )]
     fn artifact_add(&self, Parameters(a): Parameters<ArtifactAddArgs>) -> ToolResult {
-        let new = NewArtifact {
-            name: a.name,
-            content: a.content,
-            content_base64: a.content_base64,
-        };
         json(
             self.service
-                .add_artifact(&a.task_id, new, a.expected_revision),
+                .add_artifact(&a.task_id, a.body, a.expected_revision),
         )
     }
 

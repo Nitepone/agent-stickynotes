@@ -6,6 +6,7 @@ use std::sync::Arc;
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use chrono::{DateTime, Utc};
+use rmcp::schemars::{self, JsonSchema};
 use serde::{Deserialize, Serialize};
 use stickynotes_core::{
     Applied, Artifact, ArtifactKind, Board, BoardStore, Column, Command, Criterion, CriterionDraft,
@@ -142,13 +143,21 @@ pub struct ArtifactAdded {
     pub revision: u64,
 }
 
-/// Body of an add-artifact request. Give `content` for text, or
-/// `content_base64` for any file (needed for raster images).
-#[derive(Debug, Deserialize)]
+// Body of an add-artifact request. Give `content` for text, or
+// `content_base64` for any file (needed for raster images).
+//
+// The input structs below also supply the MCP tool schemas, so their field doc
+// comments are what agents read: keep them agent-facing.
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct NewArtifact {
-    /// File name with extension, e.g. `design.md` or `login.png`.
+    /// File name with extension: .md for Markdown, or .png .jpg .jpeg .gif
+    /// .webp .svg for images. It is cleaned up and made unique, so check the
+    /// returned name.
     pub name: String,
+    /// The text, for .md and .svg files. Give this or content_base64.
     pub content: Option<String>,
+    /// The file's bytes, base64 encoded (needed for raster images). Limits:
+    /// 1 MiB for Markdown and SVG, 5 MiB for other images.
     pub content_base64: Option<String>,
 }
 
@@ -165,43 +174,52 @@ pub struct Deleted {
     pub revision: u64,
 }
 
-/// Body of a create request. Tasks always start in the first column.
-#[derive(Debug, Deserialize)]
+// Body of a create request. Tasks always start in the first column.
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct NewTask {
+    /// Short, sticky-note sized summary (about 200 characters suggested). Required.
     pub description: String,
+    /// Longer free-form details.
     #[serde(default)]
     pub extended_description: String,
     #[serde(default)]
     pub requirements: Vec<String>,
-    /// Plain criterion texts; new criteria start unchecked.
+    /// Acceptance criteria texts; they start unchecked.
     #[serde(default)]
     pub acceptance_criteria: Vec<String>,
 }
 
-/// Body of an update request; omitted fields are unchanged.
-#[derive(Debug, Default, Deserialize)]
+// Body of an update request; omitted fields are unchanged.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct TaskUpdate {
+    /// New short description (about 200 characters suggested).
     pub description: Option<String>,
     pub extended_description: Option<String>,
+    /// Replaces the whole requirements list.
     pub requirements: Option<Vec<String>>,
+    /// Replaces the whole criteria list. Pass existing ids to keep criteria.
     pub acceptance_criteria: Option<Vec<CriterionInput>>,
-    /// Replaces all of the task's references; the other tasks get the
+    /// Replaces all links to other tasks (pass the existing ones to keep
+    /// them; omit the field to leave links alone). The other task gets the
     /// mirrored relation automatically.
     pub references: Option<Vec<ReferenceInput>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
+#[schemars(rename = "ReferenceArg")]
 pub struct ReferenceInput {
-    /// The other task.
+    /// Id (or number such as #12) of the other task.
     pub task_id: String,
-    /// One of blocks, blocked_by, relates_to, duplicates, duplicated_by.
+    /// What this task does to the other: blocks, blocked_by, relates_to,
+    /// duplicates or duplicated_by.
     pub relation: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
+#[schemars(rename = "CriterionArg")]
 pub struct CriterionInput {
-    /// Id of an existing criterion to keep; omit for a new one.
-    pub id: Option<Uuid>,
+    /// Id of an existing criterion to keep (omit to add a new one).
+    pub id: Option<String>,
     pub text: String,
     #[serde(default)]
     pub done: bool,
@@ -254,12 +272,7 @@ impl AgentService {
             return self
                 .store
                 .read(|board, _| board.find_by_number(number).map(|t| t.id))
-                .ok_or_else(|| {
-                    ServiceError::Core(Error::NotFound {
-                        kind: "task",
-                        id: format!("#{number}"),
-                    })
-                });
+                .ok_or_else(|| Error::not_found("task", format!("#{number}")).into());
         }
         parse_id(reference, "task").map_err(|_| {
             ServiceError::BadRequest(format!(
@@ -320,6 +333,24 @@ impl AgentService {
         update: TaskUpdate,
         expected: Option<u64>,
     ) -> ServiceResult<TaskView> {
+        let criteria = update
+            .acceptance_criteria
+            .map(|cs| {
+                cs.into_iter()
+                    .map(|c| {
+                        Ok(CriterionDraft {
+                            id: c
+                                .id
+                                .as_deref()
+                                .map(|id| parse_id(id, "criterion"))
+                                .transpose()?,
+                            text: c.text,
+                            done: c.done,
+                        })
+                    })
+                    .collect::<ServiceResult<Vec<_>>>()
+            })
+            .transpose()?;
         let id = self.resolve_task(id)?;
         let references = update
             .references
@@ -338,15 +369,7 @@ impl AgentService {
             description: update.description,
             extended_description: update.extended_description,
             requirements: update.requirements,
-            acceptance_criteria: update.acceptance_criteria.map(|cs| {
-                cs.into_iter()
-                    .map(|c| CriterionDraft {
-                        id: c.id,
-                        text: c.text,
-                        done: c.done,
-                    })
-                    .collect()
-            }),
+            acceptance_criteria: criteria,
             references,
         };
         self.apply_to_task(Command::UpdateTask { id, patch }, expected)
@@ -429,20 +452,14 @@ impl AgentService {
         let reference = reference.trim();
         let id = Uuid::parse_str(reference).ok();
         self.store.read(|board, _| {
-            let t = board.task(task).ok_or_else(|| Error::NotFound {
-                kind: "task",
-                id: task.to_string(),
-            })?;
+            let t = board
+                .task(task)
+                .ok_or_else(|| Error::not_found("task", task))?;
             t.artifacts
                 .iter()
                 .find(|a| Some(a.id) == id || a.name == reference)
                 .cloned()
-                .ok_or_else(|| {
-                    ServiceError::Core(Error::NotFound {
-                        kind: "artifact",
-                        id: reference.to_string(),
-                    })
-                })
+                .ok_or_else(|| Error::not_found("artifact", reference).into())
         })
     }
 
@@ -511,10 +528,9 @@ fn criterion_view(c: &Criterion) -> CriterionView {
 }
 
 fn task_view(board: &Board, id: TaskId, revision: u64) -> ServiceResult<TaskView> {
-    let (ci, ti) = board.locate_task(id).ok_or_else(|| Error::NotFound {
-        kind: "task",
-        id: id.to_string(),
-    })?;
+    let (ci, ti) = board
+        .locate_task(id)
+        .ok_or_else(|| Error::not_found("task", id))?;
     let column = &board.columns[ci];
     let t = &column.tasks[ti];
     Ok(TaskView {
