@@ -10,7 +10,7 @@ release.
 | Platform | Artifact | Built on |
 |---|---|---|
 | Linux x86_64 | `.AppImage` | the pinned build container below |
-| Windows x86_64 | `.zip` holding `stickynotes.exe` and the Qt DLLs it needs | a Windows runner (MSVC) |
+| Windows x86_64 | `-setup.exe` installer, and a `.zip` holding `stickynotes.exe` and the Qt DLLs it needs | a Windows runner (MSVC, Inno Setup) |
 | macOS arm64 | `.dmg` | a macOS runner (`macdeployqt`) |
 
 The Linux build runs in the [`Dockerfile`](Dockerfile) image: Rust 1.93.0 and
@@ -32,6 +32,23 @@ cross build would need a MinGW Qt plus host and target Qt kept in step, which
 is fragile; on a Windows runner the official MSVC Qt build just works. The
 `.exe` is linked as a GUI program (no console window); build with
 `WINDOWS_CONSOLE=1` to keep one.
+
+The Windows installer is built with [Inno Setup 6](https://jrsoftware.org/isinfo.php)
+from [`scripts/packaging/windows/installer.iss`](scripts/packaging/windows/installer.iss).
+It was chosen over NSIS because it is preinstalled on GitHub's Windows runners
+(the workflow installs it with Chocolatey if not), has a built-in directory page
+and Settings > Apps uninstaller registration, and needs no plugins. It installs
+the `windeployqt` folder (64-bit Windows 10+ only) to a directory the user picks,
+default `C:\Program Files\Agent Stickynotes` (all users) or
+`%LOCALAPPDATA%\Programs\Agent Stickynotes` (current user), chosen at the first
+prompt. It adds a Start menu shortcut and an uninstaller that removes the files
+and the shortcut; boards and settings in the user's data folders are kept. The
+version comes from `scripts/version.sh` (Cargo.toml). To build locally from Git
+Bash with Inno Setup installed, run `scripts/package-windows.sh` (set
+`SKIP_INSTALLER=1` for the zip only). Run
+`stickynotes-<version>-windows-x86_64-setup.exe` to install; uninstall from
+Settings > Apps. The installer is unsigned, so SmartScreen shows a first-run
+warning.
 
 The packaging steps are scripts you can run on the matching OS, with Qt 6
 (`qmake`, plus `windeployqt` or `macdeployqt`) on `PATH`:

@@ -1,6 +1,6 @@
 name: Build
 
-# Builds a Linux AppImage, a Windows zip (exe + Qt runtime) and a macOS dmg.
+# Builds a Linux AppImage, a Windows installer and zip (exe + Qt runtime) and a macOS dmg.
 # Each platform is an independent job, so one failing does not stop the others.
 # A version tag (v*) additionally publishes all three on a GitHub release.
 on:
@@ -78,7 +78,7 @@ jobs:
           if-no-files-found: error
 
   windows-exe:
-    name: Windows exe
+    name: Windows installer
     runs-on: windows-2022
     defaults:
       run:
@@ -106,6 +106,14 @@ jobs:
           arch: win64_msvc2022_64
           cache: true
 
+      # Inno Setup is preinstalled on GitHub's Windows runners; install it only
+      # if an image ever drops it.
+      - name: Ensure Inno Setup
+        run: |
+          if [ ! -f "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" ]; then
+            choco install innosetup --no-progress -y
+          fi
+
       - name: Build and package
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -114,7 +122,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: stickynotes-${{ steps.version.outputs.version }}-windows-x86_64
-          path: target/dist/*.zip
+          path: |
+            target/dist/*.zip
+            target/dist/*-setup.exe
           if-no-files-found: error
 
   macos-dmg:

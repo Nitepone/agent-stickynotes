@@ -35,7 +35,7 @@ cargo install --locked --git https://github.com/Nitepone/agent-stickynotes stick
 scripts/install-linux.sh                 # --uninstall removes it again
 ```
 
-Prebuilt AppImage, Windows and macOS builds are attached to each
+Prebuilt AppImage, Windows (installer or zip) and macOS builds are attached to each
 [release](https://github.com/Nitepone/agent-stickynotes/releases).
 
 ## Run
