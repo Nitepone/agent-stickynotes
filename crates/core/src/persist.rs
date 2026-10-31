@@ -3,6 +3,7 @@
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 use crate::error::{Error, Result};
@@ -44,14 +45,19 @@ pub fn save(path: &Path, board: &Board) -> Result<Option<FileStamp>> {
     Ok(FileStamp::of(path))
 }
 
-/// Write to a temp file in the same directory, fsync, then rename over `path`.
+/// Write to a uniquely named temp file in the same directory, fsync, rename
+/// over `path`, then (on Unix) fsync the directory so the rename is durable.
+/// The temp file is created with `create_new`, so it never follows a symlink
+/// or reuses another writer's file.
 pub fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
-    let tmp = temp_path(path);
+    let (tmp, mut f) = create_temp(path).map_err(|e| io_err(path, e))?;
     let result = (|| {
-        let mut f = fs::File::create(&tmp)?;
         f.write_all(contents)?;
         f.sync_all()?;
-        fs::rename(&tmp, path)
+        drop(f);
+        fs::rename(&tmp, path)?;
+        sync_parent(path);
+        Ok(())
     })();
     if result.is_err() {
         let _ = fs::remove_file(&tmp);
@@ -59,13 +65,42 @@ pub fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
     result.map_err(|e| io_err(path, e))
 }
 
-fn temp_path(path: &Path) -> PathBuf {
+fn create_temp(path: &Path) -> std::io::Result<(PathBuf, fs::File)> {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
-    path.with_file_name(format!(".{name}.tmp-{}", std::process::id()))
+    let mut last = None;
+    for _ in 0..100 {
+        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+        let tmp = path.with_file_name(format!(".{name}.tmp-{}-{n}", std::process::id()));
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
+            Ok(f) => return Ok((tmp, f)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => last = Some(e),
+            Err(e) => return Err(e),
+        }
+    }
+    Err(last.unwrap())
 }
+
+#[cfg(unix)]
+fn sync_parent(path: &Path) {
+    let dir = match path.parent() {
+        Some(d) if !d.as_os_str().is_empty() => d,
+        _ => Path::new("."),
+    };
+    if let Ok(d) = fs::File::open(dir) {
+        let _ = d.sync_all();
+    }
+}
+
+#[cfg(not(unix))]
+fn sync_parent(_path: &Path) {}
 
 fn io_err(path: &Path, source: std::io::Error) -> Error {
     Error::Io {
@@ -118,5 +153,42 @@ mod tests {
         write_atomic(&path, b"two").unwrap();
         assert_eq!(fs::read(&path).unwrap(), b"two");
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn concurrent_writes_leave_one_complete_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.json");
+        let handles: Vec<_> = (0..8)
+            .map(|i| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    let body = format!("{i}").repeat(10_000);
+                    for _ in 0..20 {
+                        write_atomic(&path, body.as_bytes()).unwrap();
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
+        let data = fs::read_to_string(&path).unwrap();
+        assert_eq!(data.len(), 10_000);
+        assert!(data.chars().all(|c| c == data.chars().next().unwrap()));
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_write_keeps_old_file_and_leaves_no_temp() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.json");
+        write_atomic(&path, b"old").unwrap();
+        // Renaming a file over a directory fails.
+        let target = dir.path().join("sub");
+        fs::create_dir(&target).unwrap();
+        assert!(write_atomic(&target, b"new").is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"old");
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 2);
     }
 }
