@@ -79,6 +79,10 @@ RUN mkdir -p /opt/appimage-tools && cd /opt/appimage-tools \
  && chmod +x ./*.AppImage
 ENV PATH=/opt/appimage-tools:${PATH}
 
+# The CI check job runs rustfmt and clippy in this image too (the official
+# image has only the minimal toolchain).
+RUN rustup component add rustfmt clippy
+
 # Builds run as an unprivileged user chosen by the caller (docker run --user),
 # so give every such user a writable HOME and keep the build caches in /cache.
 ENV HOME=/tmp/home \

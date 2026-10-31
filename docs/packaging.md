@@ -4,7 +4,9 @@
 `main`, pull requests and `v*` tags. Three independent jobs each upload an
 artifact named `stickynotes-<version>-<platform>`, where `<version>` is the tag
 without its `v`, or the Cargo version plus the short commit (`0.1.0-7ee8067`).
-A version tag also attaches all three, with a `SHA256SUMS.txt`, to a GitHub
+A `check` job first runs the same four checks as AGENTS.md (`cargo fmt`, clippy,
+`cargo test`, `scripts/qml-tests.sh`) in the Linux build container; the package
+jobs and the release wait for it. A version tag also attaches all three, with a `SHA256SUMS.txt`, to a GitHub
 release.
 
 | Platform | Artifact | Built on |

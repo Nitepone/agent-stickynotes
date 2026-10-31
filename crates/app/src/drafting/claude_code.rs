@@ -173,8 +173,28 @@ mod tests {
 
     use super::*;
 
+    /// Tests here write a script and then run it. If another test forks while
+    /// the script is still open for writing, the forked child holds it open and
+    /// the exec fails with "Text file busy" (ETXTBSY). So tests that spawn
+    /// processes run one at a time: the lock is held until the test's thread ends.
+    fn serial() {
+        use std::cell::RefCell;
+        use std::sync::{Mutex, MutexGuard};
+        static LOCK: Mutex<()> = Mutex::new(());
+        thread_local! {
+            static HELD: RefCell<Option<MutexGuard<'static, ()>>> = const { RefCell::new(None) };
+        }
+        HELD.with(|held| {
+            let mut held = held.borrow_mut();
+            if held.is_none() {
+                *held = Some(LOCK.lock().unwrap_or_else(|e| e.into_inner()));
+            }
+        });
+    }
+
     /// Writes an executable shell script that stands in for `claude`.
     fn fake_claude(dir: &Path, body: &str) -> PathBuf {
+        serial();
         let path = dir.join("claude");
         fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -269,6 +289,7 @@ mod tests {
 
     #[test]
     fn a_missing_executable_is_reported_as_unavailable() {
+        serial();
         let err = ClaudeCodeBackend::new("/nonexistent/claude")
             .generate(&request(), &CancelToken::new())
             .unwrap_err();

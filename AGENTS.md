@@ -17,7 +17,8 @@ cargo test --workspace                      # core, server (REST + real MCP clie
 ./scripts/qml-tests.sh                      # QML view tests, headless, real mouse events
 ```
 
-Run all four before committing; they are fast. The app crate rebuilds C++ glue, so
+Run all four before committing; they are fast. CI (`check` job in
+`.github/workflows/build.yml`) runs the same four and gates packaging and releases. The app crate rebuilds C++ glue, so
 the first build after touching `controller.rs` or `cpp/` takes about a minute.
 
 `cargo test -p stickynotes real_claude -- --ignored` makes one real call to the
@@ -62,7 +63,7 @@ columns, the board title or project settings. Those rules live in
   (`theme::tests::views_do_not_hard_code_colors`) fails on hex colors, named colors
   or `Qt.rgba`/`Qt.color` in any other QML file. Text/background pairs are
   contrast-tested (WCAG AA) in both modes; add new pairs to `tst_theme.qml`.
-- **New QML files** must be listed in `crates/app/build.rs`.
+- **New QML files** go in `crates/app/qml/`; `build.rs` picks up every `*.qml` there (`Theme.qml` is the singleton). Keep test-only QML under `crates/app/tests/qml`.
 - **Settings** (`~/.config/agent-stickynotes/settings.json`) are validated on load and
   fall back to defaults; keep it that way.
 

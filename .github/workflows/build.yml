@@ -3,6 +3,12 @@ name: Build
 # Builds a Linux AppImage, a Windows installer and zip (exe + Qt runtime) and a macOS dmg.
 # Each platform is an independent job, so one failing does not stop the others.
 # A version tag (v*) additionally publishes all three on a GitHub release.
+#
+# The `check` job runs the four checks AGENTS.md asks for (fmt, clippy, tests, QML
+# tests). Every package job and the release job `needs: check`: a release can never
+# ship from a red commit, and a red push or pull request does not spend the (much
+# slower) Windows and macOS runners or leave artifacts of a broken build around.
+# The cost is that packaging starts after the check instead of alongside it.
 on:
   push:
     branches: [main]
@@ -23,8 +29,55 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-24.04
+    env:
+      DOCKER_BUILD_RECORD_UPLOAD: "false"
+      DOCKER_BUILD_SUMMARY: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same pinned toolchain as the AppImage job (Rust with fmt and clippy, Qt
+      # 6.8.2 from Debian trixie, qmltestrunner); the layer cache is shared.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the build container
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: agent-stickynotes-build:ci
+          build-args: RUST_VERSION=${{ env.RUST_VERSION }}
+          cache-from: type=gha,scope=build-container
+          cache-to: type=gha,scope=build-container,mode=max
+
+      - name: Cache cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/container-cache/cargo/registry
+            target/container-cache/cargo/git
+            target/container-cache/target
+          key: check-cargo-${{ hashFiles('Cargo.lock', 'Dockerfile') }}
+          restore-keys: check-cargo-
+
+      # scripts/qml-tests.sh defaults to QT_QPA_PLATFORM=offscreen.
+      - name: fmt, clippy, tests, QML tests
+        env:
+          IMAGE: agent-stickynotes-build:ci
+          SKIP_IMAGE_BUILD: "1"
+        run: |
+          scripts/build-linux-container.sh bash -euxc '
+            cargo fmt --all --check
+            cargo clippy --workspace --all-targets --locked -- -D warnings
+            cargo test --workspace --locked
+            ./scripts/qml-tests.sh
+          '
+
   linux-appimage:
     name: Linux AppImage
+    needs: check
     runs-on: ubuntu-24.04
     env:
       # buildx would upload a ".dockerbuild" record as an extra artifact, which
@@ -79,6 +132,7 @@ jobs:
 
   windows-exe:
     name: Windows installer
+    needs: check
     runs-on: windows-2022
     defaults:
       run:
@@ -129,6 +183,7 @@ jobs:
 
   macos-dmg:
     name: macOS dmg
+    needs: check
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
@@ -164,11 +219,11 @@ jobs:
           path: target/dist/*.dmg
           if-no-files-found: error
 
-  # Only on a version tag, and only when all three platforms built.
+  # Only on a version tag, and only when the checks passed and all three platforms built.
   release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux-appimage, windows-exe, macos-dmg]
+    needs: [check, linux-appimage, windows-exe, macos-dmg]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
