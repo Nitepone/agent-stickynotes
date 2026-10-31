@@ -1,8 +1,11 @@
 ; Inno Setup script for the Windows installer. Built by scripts/package-windows.sh,
 ; which passes: AppVersion, NumericVersion, SourceDir (the windeployqt folder),
-; OutputDir and OutputName.
+; OutputDir, OutputName and IconFile (path of icon.ico).
 #ifndef AppVersion
   #error AppVersion is not defined; build through scripts/package-windows.sh
+#endif
+#ifndef IconFile
+  #define IconFile "icon.ico"
 #endif
 
 [Setup]
@@ -29,6 +32,8 @@ PrivilegesRequiredOverridesAllowed=dialog
 ; Registers the uninstaller under Settings > Apps.
 UninstallDisplayName=Agent Stickynotes
 UninstallDisplayIcon={app}\stickynotes.exe
+; The installer's own icon (the app icon is embedded in stickynotes.exe).
+SetupIconFile={#IconFile}
 OutputDir={#OutputDir}
 OutputBaseFilename={#OutputName}
 Compression=lzma2
@@ -40,7 +45,7 @@ CloseApplications=yes
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Agent Stickynotes"; Filename: "{app}\stickynotes.exe"; WorkingDir: "{app}"
+Name: "{autoprograms}\Agent Stickynotes"; Filename: "{app}\stickynotes.exe"; WorkingDir: "{app}"; IconFilename: "{app}\stickynotes.exe"; IconIndex: 0
 
 [Run]
 Filename: "{app}\stickynotes.exe"; Description: "Launch Agent Stickynotes"; Flags: nowait postinstall skipifsilent

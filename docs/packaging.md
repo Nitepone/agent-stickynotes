@@ -56,3 +56,26 @@ The packaging steps are scripts you can run on the matching OS, with Qt 6
 write to `target/dist/`. The macOS app is ad hoc signed, not notarized, and the
 Windows `.exe` is unsigned, so both trigger a first-run warning.
 
+
+## Icons
+
+The artwork is [`scripts/packaging/agent-stickynotes.svg`](scripts/packaging/agent-stickynotes.svg)
+(also the AppImage icon). The 16 px size uses a simplified variant,
+[`agent-stickynotes-16.svg`](scripts/packaging/agent-stickynotes-16.svg): the column
+and its title are dropped and the three notes sit on whole pixels, because the full
+artwork blurs the notes together at that size. Everything else is the same artwork.
+
+`scripts/make-icons.sh` renders both into the committed
+`scripts/packaging/icon.ico` (16, 24, 32, 48, 64, 128 and 256 px) and
+`scripts/packaging/icon.icns` (16 to 1024 px, with the @2x entries). It needs
+python3 with `venv` and the cairo library, and installs cairosvg and Pillow in a
+temporary venv. Run it only when the artwork changes, and commit the results.
+
+- **Windows:** `crates/app/build.rs` compiles `crates/app/windows/stickynotes.rc`
+  with the `embed-resource` crate (Windows hosts only, so Linux builds are
+  unaffected), which embeds `icon.ico` as the executable's icon. Explorer, the
+  title bar and the taskbar use it. The installer, its uninstaller entry and the
+  Start menu shortcut use the same icon (`SetupIconFile`, `UninstallDisplayIcon`).
+- **macOS:** `scripts/package-macos.sh` copies `icon.icns` into the bundle's
+  `Contents/Resources` and sets `CFBundleIconFile` in `Info.plist`, for the Dock and
+  Finder.

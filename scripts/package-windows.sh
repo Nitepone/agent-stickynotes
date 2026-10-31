@@ -86,5 +86,6 @@ MSYS2_ARG_CONV_EXCL="*" "$iscc" /Qp \
     "/DAppVersion=$version" "/DNumericVersion=$numeric" \
     "/DSourceDir=$(cygpath -w "$stage")" "/DOutputDir=$(cygpath -w "$dist")" \
     "/DOutputName=$name-setup" \
+    "/DIconFile=$(cygpath -w "$root/scripts/packaging/icon.ico")" \
     "$(cygpath -w "$root/scripts/packaging/windows/installer.iss")"
 echo "Built $dist/$name-setup.exe"

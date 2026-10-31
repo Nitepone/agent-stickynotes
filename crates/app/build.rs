@@ -1,6 +1,7 @@
 use cxx_qt_build::{CxxQtBuilder, QmlFile, QmlModule};
 
 fn main() {
+    embed_windows_icon();
     let qml_files = [
         QmlFile::from("qml/Main.qml"),
         QmlFile::from("qml/Theme.qml").singleton(true),
@@ -34,3 +35,19 @@ fn main() {
         .files(["src/controller.rs"])
         .build();
 }
+
+/// Embed the application icon into the Windows executable. The build script runs on
+/// the host, so the target check uses the variable cargo sets, not `cfg!`.
+#[cfg(windows)]
+fn embed_windows_icon() {
+    println!("cargo:rerun-if-changed=windows/stickynotes.rc");
+    println!("cargo:rerun-if-changed=../../scripts/packaging/icon.ico");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        embed_resource::compile("windows/stickynotes.rc", embed_resource::NONE)
+            .manifest_required()
+            .expect("failed to embed the Windows icon resource");
+    }
+}
+
+#[cfg(not(windows))]
+fn embed_windows_icon() {}

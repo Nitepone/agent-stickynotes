@@ -1,0 +1,3 @@
+// Windows resources linked into stickynotes.exe (see build.rs). Resource id 1 is the
+// icon Explorer shows and the one Qt uses for the title bar and taskbar.
+1 ICON "../../scripts/packaging/icon.ico"

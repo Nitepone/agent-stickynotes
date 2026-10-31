@@ -40,6 +40,8 @@ rm -rf "$work"
 rm -f "$dist"/*.dmg     # packages left in a cached target directory
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$dist"
 cp "$bin" "$app/Contents/MacOS/stickynotes"
+# Dock and Finder icon (CFBundleIconFile below); regenerate with scripts/make-icons.sh.
+cp "$root/scripts/packaging/icon.icns" "$app/Contents/Resources/icon.icns"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -49,6 +51,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>CFBundleDisplayName</key><string>Agent Sticky Notes</string>
     <key>CFBundleIdentifier</key><string>io.github.agent-stickynotes</string>
     <key>CFBundleExecutable</key><string>stickynotes</string>
+    <key>CFBundleIconFile</key><string>icon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>${plist_version}</string>
     <key>CFBundleVersion</key><string>${plist_version}</string>

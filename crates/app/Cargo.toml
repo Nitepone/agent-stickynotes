@@ -31,3 +31,7 @@ cxx-qt-build = "=0.10.0"
 
 [dev-dependencies]
 tempfile = "3.27.0"
+
+# Compiles the .rc file that embeds the icon into the Windows executable.
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "3.0.12"

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Simplified 16x16 variant of agent-stickynotes.svg: the same board and note
+       colours, but the column and its title are dropped and the three notes are
+       aligned to whole pixels so they stay separate at this size. -->
+  <defs>
+    <linearGradient id="board" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a4f58"/>
+      <stop offset="1" stop-color="#1c1e23"/>
+    </linearGradient>
+    <linearGradient id="note" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe680"/>
+      <stop offset="1" stop-color="#f0b723"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="16" height="16" rx="4" fill="url(#board)"/>
+  <g fill="url(#note)">
+    <rect x="3" y="3" width="10" height="3" rx="1"/>
+    <rect x="3" y="7" width="10" height="3" rx="1"/>
+    <rect x="3" y="11" width="10" height="3" rx="1"/>
+  </g>
+</svg>
