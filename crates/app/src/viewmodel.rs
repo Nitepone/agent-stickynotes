@@ -290,20 +290,11 @@ pub fn projects_json(root: &Path, current: Option<&Path>) -> String {
     json!({ "root": root.to_string_lossy(), "projects": projects }).to_string()
 }
 
-/// Shown in the window title, e.g. `Sprint 4 — sprint-4 •`: the board's title
-/// and the project folder.
+/// Shown in the window title, e.g. `Agent Stickynotes - Sprint 4 •`: the
+/// board's title, and a dot while there are unsaved changes.
 pub fn window_title(s: &Snapshot) -> String {
-    let file = s
-        .path
-        .as_ref()
-        .and_then(|p| p.parent())
-        .and_then(|dir| dir.file_name())
-        .map_or_else(
-            || "unsaved".to_string(),
-            |n| n.to_string_lossy().into_owned(),
-        );
     let dirty = if s.dirty { " •" } else { "" };
-    format!("{} — {file}{dirty}", s.board.title)
+    format!("Agent Stickynotes - {}{dirty}", s.board.title)
 }
 
 /// What `TaskDialog.qml` submits.
@@ -533,10 +524,9 @@ mod tests {
     #[test]
     fn window_title_marks_dirty() {
         let mut s = BoardStore::new(false).snapshot();
-        assert_eq!(window_title(&s), "Untitled board — unsaved");
+        assert_eq!(window_title(&s), "Agent Stickynotes - Untitled board");
         s.dirty = true;
-        s.path = Some("/tmp/x/stickynotes.json".into());
-        assert_eq!(window_title(&s), "Untitled board — x •");
+        assert_eq!(window_title(&s), "Agent Stickynotes - Untitled board •");
     }
 
     #[test]

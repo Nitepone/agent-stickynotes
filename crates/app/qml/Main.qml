@@ -15,7 +15,7 @@ ApplicationWindow {
     minimumWidth: 640
     minimumHeight: 420
     visible: true
-    title: controller.windowTitle + " — Sticky Notes"
+    title: controller.windowTitle
     color: Theme.background
 
     // Standard controls (buttons, menus, text fields, dialogs) take their
