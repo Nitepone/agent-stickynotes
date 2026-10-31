@@ -34,6 +34,7 @@ pub mod qobject {
         #[qproperty(i64, last_interaction_ms)]
         #[qproperty(QString, prefs_json)]
         #[qproperty(bool, spell_available)]
+        #[qproperty(QString, app_version)]
         #[qproperty(bool, generating)]
         #[qproperty(QString, generator_name)]
         #[qproperty(QString, screenshot_request)]
@@ -177,6 +178,8 @@ pub struct BoardControllerRust {
     /// The preferences as JSON (see `Settings::prefs_json`).
     prefs_json: QString,
     spell_available: bool,
+    /// The Cargo package version, shown in Preferences > About.
+    app_version: QString,
     generating: bool,
     generator_name: QString,
     /// Set while a generation runs, so it can be cancelled.
@@ -191,6 +194,8 @@ impl cxx_qt::Initialize for qobject::BoardController {
         let ctx = context::get();
         self.as_mut()
             .set_endpoint(QString::from(ctx.endpoint.as_str()));
+        self.as_mut()
+            .set_app_version(QString::from(env!("CARGO_PKG_VERSION")));
         self.as_mut()
             .set_generator_name(QString::from(ctx.drafter.name()));
         {

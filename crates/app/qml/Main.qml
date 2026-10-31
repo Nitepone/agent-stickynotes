@@ -692,6 +692,10 @@ ApplicationWindow {
             draftEffort: prefs.draft_effort
             onDraftEffortChosen: (effort) => controller.choosePref("draft_effort", effort)
         }
+
+        AboutSection {
+            version: controller.appVersion
+        }
     }
 
     // Items being dragged are reparented here so they float above everything.
