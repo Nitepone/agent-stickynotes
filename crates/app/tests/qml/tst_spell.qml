@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtTest
 import StickyNotes
+import TestSupport
 
 Item {
     id: scene
@@ -38,13 +39,7 @@ Item {
         }
 
         function underlines() {
-            const found = []
-            ;(function walk(item) {
-                for (const child of item.children) {
-                    if (child.objectName === "spellUnderline" && child.visible) found.push(child)
-                    walk(child)
-                }
-            })(field)
+            const found = TestHelpers.findWhere(field, c => c.objectName === "spellUnderline" && c.visible)
             return found.sort((a, b) => a.x - b.x)
         }
 

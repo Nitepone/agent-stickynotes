@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtTest
 import StickyNotes
+import TestSupport
 
 Item {
     id: scene
@@ -58,14 +59,7 @@ Item {
         function cleanup() { dialog.close() }
 
         function fields(name) {
-            const found = []
-            ;(function walk(item) {
-                for (const child of item.children) {
-                    if (child.objectName === name) found.push(child)
-                    walk(child)
-                }
-            })(dialog.contentItem)
-            return found
+            return TestHelpers.findAllByName(dialog.contentItem, name)
         }
 
         function form() { return JSON.parse(dialog.formJson()) }
@@ -255,15 +249,8 @@ Item {
             open([], [])
             const [button] = fields("generateButton")
             verify(button.enabled)
-            const description = (function find(item) {
-                for (const child of item.children) {
-                    if (child.hasOwnProperty("placeholderText") && child.placeholderText.indexOf("sticky-note") >= 0)
-                        return child
-                    const r = find(child)
-                    if (r) return r
-                }
-                return null
-            })(dialog.contentItem)
+            const [description] = TestHelpers.findWhere(dialog.contentItem, c =>
+                c.hasOwnProperty("placeholderText") && c.placeholderText.indexOf("sticky-note") >= 0)
             description.text = "   "
             verify(!button.enabled, "needs a description")
         }

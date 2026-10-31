@@ -23,6 +23,12 @@ cp "$qml_dir"/*.qml "$stage/StickyNotes/"
     done
 } > "$stage/StickyNotes/qmldir"
 
+# Test-only helpers (findByName, sample boards) live in their own module so they
+# are never part of the app's StickyNotes module.
+mkdir -p "$stage/TestSupport"
+cp "$root/crates/app/tests/qml/TestHelpers.qml" "$stage/TestSupport/"
+printf 'module TestSupport\nsingleton TestHelpers 1.0 TestHelpers.qml\n' > "$stage/TestSupport/qmldir"
+
 runner="${QMLTESTRUNNER:-/usr/lib/qt6/bin/qmltestrunner}"
 QT_QPA_PLATFORM="${QT_QPA_PLATFORM:-offscreen}" QT_QUICK_CONTROLS_STYLE=Fusion \
     "$runner" -import "$stage" -input "$root/crates/app/tests/qml" "$@"

@@ -28,7 +28,7 @@ pub struct AppContext {
 impl AppContext {
     /// Update settings in memory and on disk.
     pub fn update_settings(&self, f: impl FnOnce(&mut Settings)) {
-        let mut settings = self.settings.lock().unwrap();
+        let mut settings = stickynotes_core::store::relock(&self.settings);
         f(&mut settings);
         if let Err(e) = self.config.save_settings(&settings) {
             eprintln!("warning: could not save settings: {e:#}");

@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import StickyNotes
+import TestSupport
 
 Item {
     id: scene
@@ -235,14 +236,9 @@ Item {
         }
 
         function flickable() {
-            let found = null
-            ;(function walk(item) {
-                for (const child of item.children) {
-                    if (child.hasOwnProperty("contentY") && child.hasOwnProperty("flickableDirection")) found = child
-                    walk(child)
-                }
-            })(longColumn)
-            return found
+            const found = TestHelpers.findWhere(longColumn, c =>
+                c.hasOwnProperty("contentY") && c.hasOwnProperty("flickableDirection"))
+            return found.length ? found[found.length - 1] : null
         }
 
         function comet(i) {
@@ -295,16 +291,7 @@ Item {
         }
 
         function find(root, name) {
-            const found = []
-            ;(function walk(item) {
-                for (const child of item.children) {
-                    if (child.objectName === name) found.push(child)
-                    walk(child)
-                }
-                for (const child of item.data)
-                    if (child.objectName === name && found.indexOf(child) < 0) found.push(child)
-            })(root)
-            return found
+            return TestHelpers.findAllByName(root, name, true)
         }
 
         function test_nothing_is_drawn_or_animated_without_glow() {

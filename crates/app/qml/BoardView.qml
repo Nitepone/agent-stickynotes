@@ -21,6 +21,59 @@ Item {
     signal taskMoved(string taskId, string columnId, int position)
     signal columnMoved(string columnId, int position)
 
+    // ---- Keeping the view steady across a board refresh --------------------
+    // Replacing `board` rebuilds every column and card. The owner takes
+    // scrollState() first and hands it to restoreScroll() afterwards.
+
+    // The task card that has keyboard focus, or "".
+    function focusedTaskId() {
+        for (const col of columnItems("")) {
+            for (const card of col.cardItems("")) {
+                if (card.activeFocus)
+                    return card.task.id
+            }
+        }
+        return ""
+    }
+
+    function scrollState() {
+        const columns = {}
+        for (const col of columnItems(""))
+            columns[col.column.id] = col.scrollY
+        return { x: flick.contentX, columns: columns, focus: focusedTaskId() }
+    }
+
+    function restoreScroll(state) {
+        keeper.restore(state.x)
+        // A column or task that is gone leaves nothing to restore: clamped to 0 / content.
+        for (const col of columnItems(""))
+            col.restoreScroll(state.columns[col.column.id] || 0)
+        if (state.focus !== "") {
+            for (const col of columnItems("")) {
+                for (const card of col.cardItems("")) {
+                    if (card.task.id === state.focus)
+                        card.forceActiveFocus()
+                }
+            }
+        }
+    }
+
+    // Ctrl+Left / Ctrl+Right on a focused card: the same move as a drop,
+    // into the neighbouring column at the same row (or the end).
+    function moveTaskByColumns(taskId, direction) {
+        const columns = board.columns
+        for (let i = 0; i < columns.length; i++) {
+            const index = columns[i].tasks.findIndex(t => t.id === taskId)
+            if (index < 0)
+                continue
+            const target = i + direction
+            if (target < 0 || target >= columns.length)
+                return
+            taskMoved(taskId, columns[target].id, Math.min(index, columns[target].tasks.length))
+            return
+        }
+    }
+
     function columnItems(excludeId) {
         const result = []
         for (let i = 0; i < row.children.length; i++) {
@@ -102,19 +155,34 @@ Item {
                     onAddTaskClicked: root.addTaskClicked(modelData)
                     onDeleteClicked: root.deleteColumnClicked(modelData)
                     onTaskClicked: (taskId) => root.taskClicked(taskId)
+                    onTaskMoveRequested: (taskId, direction) => root.moveTaskByColumns(taskId, direction)
                     onTaskDropped: (taskId, position) => root.taskMoved(taskId, modelData.id, position)
                 }
             }
 
             // "Add column" placeholder, edit mode only.
             Rectangle {
+                id: addColumn
+                objectName: "addColumn"
                 visible: root.editMode
                 width: Theme.columnWidth
                 height: 96
                 radius: Theme.radius
                 color: addColumnMouse.containsMouse ? Theme.columnEditBackground : "transparent"
-                border.color: Theme.secondary
+                border.color: addColumn.activeFocus ? Theme.focusRing : Theme.secondary
                 border.width: 2
+
+                activeFocusOnTab: true
+                Accessible.role: Accessible.Button
+                Accessible.name: qsTr("Add column")
+                Accessible.focusable: true
+                Accessible.onPressAction: root.addColumnClicked()
+                Keys.onPressed: (event) => {
+                    if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                        event.accepted = true
+                        root.addColumnClicked()
+                    }
+                }
 
                 Label {
                     anchors.centerIn: parent
@@ -166,5 +234,11 @@ Item {
             else if (p.x > root.width - edge)
                 flick.contentX = Math.min(maxX, flick.contentX + 14)
         }
+    }
+
+    ScrollKeeper {
+        id: keeper
+        flickable: flick
+        horizontal: true
     }
 }

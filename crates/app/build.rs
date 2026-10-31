@@ -2,38 +2,36 @@ use cxx_qt_build::{CxxQtBuilder, QmlFile, QmlModule};
 
 fn main() {
     embed_windows_icon();
-    let qml_files = [
-        QmlFile::from("qml/Main.qml"),
-        QmlFile::from("qml/Theme.qml").singleton(true),
-        QmlFile::from("qml/BoardView.qml"),
-        QmlFile::from("qml/ColumnView.qml"),
-        QmlFile::from("qml/TaskCard.qml"),
-        QmlFile::from("qml/TrashCan.qml"),
-        QmlFile::from("qml/TaskDialog.qml"),
-        QmlFile::from("qml/ColumnDialog.qml"),
-        QmlFile::from("qml/ConfirmDialog.qml"),
-        QmlFile::from("qml/ProjectDialog.qml"),
-        QmlFile::from("qml/ProjectPicker.qml"),
-        QmlFile::from("qml/ArtifactViewer.qml"),
-        QmlFile::from("qml/ArtifactsPage.qml"),
-        QmlFile::from("qml/PreferencesSection.qml"),
-        QmlFile::from("qml/PreferencesPage.qml"),
-        QmlFile::from("qml/ColorChoice.qml"),
-        QmlFile::from("qml/GlowTracker.qml"),
-        QmlFile::from("qml/GlowEdge.qml"),
-        QmlFile::from("qml/PersonalizationSection.qml"),
-        QmlFile::from("qml/SectionLabel.qml"),
-        QmlFile::from("qml/FormTextArea.qml"),
-        QmlFile::from("qml/WrappingField.qml"),
-        QmlFile::from("qml/EditorSection.qml"),
-        QmlFile::from("qml/ToolIcon.qml"),
-        QmlFile::from("qml/IconButton.qml"),
-        QmlFile::from("qml/SpellUnderline.qml"),
-    ];
+    let qml_files = qml_files();
     CxxQtBuilder::new_qml_module(QmlModule::new("StickyNotes").qml_files(qml_files))
         .qt_module("Quick")
         .files(["src/controller.rs"])
         .build();
+}
+
+/// Every `*.qml` file in `qml/`, sorted so the module is stable; `Theme.qml` is the
+/// singleton. Adding a view means adding the file: no list to maintain. Test helpers
+/// live under `tests/qml`, never here.
+fn qml_files() -> Vec<QmlFile> {
+    println!("cargo:rerun-if-changed=qml");
+    let mut names: Vec<String> = std::fs::read_dir("qml")
+        .expect("failed to read the qml directory")
+        .map(|entry| entry.expect("failed to read a qml directory entry").path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "qml"))
+        .map(|path| path.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+        .into_iter()
+        .map(|name| {
+            let file = QmlFile::from(format!("qml/{name}"));
+            if name == "Theme.qml" {
+                file.singleton(true)
+            } else {
+                file
+            }
+        })
+        .collect()
 }
 
 /// Embed the application icon into the Windows executable. The build script runs on

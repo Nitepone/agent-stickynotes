@@ -23,6 +23,23 @@ Item {
     signal deleteClicked()
     signal taskClicked(string taskId)
     signal taskDropped(string taskId, int position)
+    signal taskMoveRequested(string taskId, int direction)
+
+    // Vertical scroll of the cards, kept across board refreshes (see restoreScroll).
+    property alias scrollY: flick.contentY
+    ScrollKeeper {
+        id: keeper
+        flickable: flick
+    }
+
+    function maxScrollY() {
+        return keeper.maxOffset()
+    }
+
+    // Scroll to `y`, clamped to the content.
+    function restoreScroll(y) {
+        keeper.restore(y)
+    }
 
     objectName: "column-" + column.id
     width: Theme.columnWidth
@@ -104,7 +121,7 @@ Item {
                     }
                 }
 
-                Label {
+                FocusLabel {
                     id: titleLabel
                     objectName: "title"
                     Layout.fillWidth: true
@@ -113,13 +130,8 @@ Item {
                     font.bold: true
                     color: Theme.text
                     elide: Text.ElideRight
+                    onClicked: root.titleClicked()
 
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.titleClicked()
-                    }
                     ToolTip.visible: titleHover.hovered && root.column.description.length > 0
                     ToolTip.text: root.column.description
                     ToolTip.delay: 600
@@ -157,9 +169,11 @@ Item {
 
                 Column {
                     id: cards
-                    width: flick.width
+                    // Inset so a focused note's ring is not clipped.
+                    x: 3
+                    width: flick.width - 6
                     spacing: Theme.cardSpacing
-                    topPadding: 2
+                    topPadding: 4
 
                     Repeater {
                         model: root.column.tasks
@@ -176,6 +190,7 @@ Item {
                             glowActive: y + height > flick.contentY - 80
                                         && y < flick.contentY + flick.height + 80
                             onClicked: root.taskClicked(modelData.id)
+                            onMoveRequested: (direction) => root.taskMoveRequested(modelData.id, direction)
                         }
                     }
                 }
@@ -183,7 +198,7 @@ Item {
                 Rectangle {
                     parent: flick.contentItem
                     visible: taskDrop.containsDrag && taskDrop.hoverIndex >= 0
-                    x: 0
+                    x: cards.x
                     y: root.indicatorY(taskDrop.hoverIndex, taskDrop.draggedId)
                     width: cards.width
                     height: 3
@@ -202,8 +217,10 @@ Item {
                 background: Rectangle {
                     radius: 6
                     color: addButton.down ? Theme.controlDown : addButton.hovered ? Theme.controlHover : "transparent"
-                    border.color: Theme.fieldBorder
+                    border.color: addButton.visualFocus ? Theme.focusRing : Theme.fieldBorder
+                    border.width: addButton.visualFocus ? 2 : 1
                 }
+                Accessible.name: qsTr("Add a task to %1").arg(root.column.title)
                 onClicked: root.addTaskClicked()
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("Add a task to %1").arg(root.column.title)

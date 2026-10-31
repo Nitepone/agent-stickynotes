@@ -4,7 +4,7 @@ import QtQuick.Layouts
 import StickyNotes
 
 // Reusable confirmation / message dialog driven by `ask()` and `inform()`.
-Dialog {
+StickyDialog {
     id: dialog
 
     property string message: ""
@@ -33,36 +33,16 @@ Dialog {
         open()
     }
 
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(460, (parent ? parent.width : 460) - 40)
-    padding: 16
+    maxWidth: 460
+    acceptText: confirmText
+    acceptDanger: destructive
+    acceptCloses: true
+    rejectText: informational ? "" : qsTr("Cancel")
 
     contentItem: Label {
         text: dialog.message
         wrapMode: Text.Wrap
         textFormat: Text.PlainText
-    }
-
-    footer: DialogButtonBox {
-        Button {
-            text: qsTr("Cancel")
-            visible: !dialog.informational
-            DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-        }
-        Button {
-            text: dialog.confirmText
-            visible: !dialog.destructive
-            highlighted: true
-            DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-        }
-        Button {
-            text: dialog.confirmText
-            visible: dialog.destructive
-            palette.button: Theme.danger
-            palette.buttonText: Theme.textOnDanger
-            DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
-        }
     }
 
     onAccepted: {

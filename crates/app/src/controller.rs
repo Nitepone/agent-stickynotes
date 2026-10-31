@@ -31,20 +31,9 @@ pub mod qobject {
         #[qproperty(bool, has_path)]
         #[qproperty(bool, agent_write)]
         #[qproperty(QString, endpoint)]
-        #[qproperty(bool, reduce_motion)]
-        #[qproperty(QString, motion_setting)]
         #[qproperty(i64, last_interaction_ms)]
-        #[qproperty(QString, theme_mode)]
-        #[qproperty(QString, primary_color)]
-        #[qproperty(QString, secondary_color)]
-        #[qproperty(QString, note_color)]
-        #[qproperty(QString, markdown_style)]
-        #[qproperty(bool, spell_check)]
+        #[qproperty(QString, prefs_json)]
         #[qproperty(bool, spell_available)]
-        #[qproperty(QString, draft_agent)]
-        #[qproperty(QString, draft_system_prompt)]
-        #[qproperty(QString, draft_model)]
-        #[qproperty(QString, draft_effort)]
         #[qproperty(bool, generating)]
         #[qproperty(QString, generator_name)]
         #[qproperty(QString, screenshot_request)]
@@ -122,46 +111,15 @@ pub mod qobject {
         #[qinvokable]
         fn claude_setup_command(self: &BoardController) -> QString;
 
-        /// "system", "on" or "off". Returns false for anything else.
-        #[qinvokable]
-        fn choose_motion_setting(self: Pin<&mut BoardController>, setting: &QString) -> bool;
         /// Remember when the user last used the app (ms since the epoch).
         #[qinvokable]
         fn record_interaction(self: Pin<&mut BoardController>, ms: i64);
 
-        /// Theme choices. They apply immediately and are saved. These return false if the value is not valid and was ignored.
+        /// Change one preference (keys: see `settings::PREFS`), save it and
+        /// republish `prefsJson`. The empty text resets a color. Returns
+        /// false and changes nothing if the key or value is not valid.
         #[qinvokable]
-        fn choose_theme_mode(self: Pin<&mut BoardController>, mode: &QString) -> bool;
-        #[qinvokable]
-        fn choose_primary_color(self: Pin<&mut BoardController>, color: &QString) -> bool;
-        #[qinvokable]
-        fn choose_secondary_color(self: Pin<&mut BoardController>, color: &QString) -> bool;
-        /// Back to the theme's default primary and secondary colors.
-        #[qinvokable]
-        fn reset_theme_colors(self: Pin<&mut BoardController>);
-        /// The sticky note color (`#rrggbb`); false if it is not a color.
-        #[qinvokable]
-        fn choose_note_color(self: Pin<&mut BoardController>, color: &QString) -> bool;
-        /// Back to the theme's yellow note.
-        #[qinvokable]
-        fn reset_note_color(self: Pin<&mut BoardController>);
-        /// The Markdown viewer's display style, remembered across runs.
-        #[qinvokable]
-        fn choose_markdown_style(self: Pin<&mut BoardController>, style: &QString);
-
-        /// Editor preferences. They are saved at once. The `choose_draft_*`
-        /// calls that take a fixed set of values return false and change
-        /// nothing for anything else.
-        #[qinvokable]
-        fn choose_spell_check(self: Pin<&mut BoardController>, enabled: bool);
-        #[qinvokable]
-        fn choose_draft_agent(self: Pin<&mut BoardController>, agent: &QString) -> bool;
-        #[qinvokable]
-        fn choose_draft_system_prompt(self: Pin<&mut BoardController>, prompt: &QString);
-        #[qinvokable]
-        fn choose_draft_model(self: Pin<&mut BoardController>, model: &QString) -> bool;
-        #[qinvokable]
-        fn choose_draft_effort(self: Pin<&mut BoardController>, effort: &QString) -> bool;
+        fn choose_pref(self: Pin<&mut BoardController>, key: &QString, value: &QString) -> bool;
         /// Misspelled words in `text`, as JSON `[[start, length], ...]` in
         /// UTF-16 units. Empty while spell check is off.
         #[qinvokable]
@@ -204,8 +162,8 @@ use uuid::Uuid;
 
 use crate::context;
 use crate::drafting::{CancelToken, DraftOptions};
+use crate::settings;
 use crate::viewmodel::{self, TaskForm};
-use crate::{editor, motion, theme};
 
 #[derive(Default)]
 pub struct BoardControllerRust {
@@ -215,20 +173,10 @@ pub struct BoardControllerRust {
     has_path: bool,
     agent_write: bool,
     endpoint: QString,
-    reduce_motion: bool,
-    motion_setting: QString,
     last_interaction_ms: i64,
-    theme_mode: QString,
-    primary_color: QString,
-    secondary_color: QString,
-    note_color: QString,
-    markdown_style: QString,
-    spell_check: bool,
+    /// The preferences as JSON (see `Settings::prefs_json`).
+    prefs_json: QString,
     spell_available: bool,
-    draft_agent: QString,
-    draft_system_prompt: QString,
-    draft_model: QString,
-    draft_effort: QString,
     generating: bool,
     generator_name: QString,
     /// Set while a generation runs, so it can be cancelled.
@@ -246,40 +194,11 @@ impl cxx_qt::Initialize for qobject::BoardController {
         self.as_mut()
             .set_generator_name(QString::from(ctx.drafter.name()));
         {
-            let settings = ctx.settings.lock().unwrap().clone();
-            let motion = motion::normalize_setting(&settings.reduce_motion);
-            self.as_mut().set_motion_setting(QString::from(motion));
-            self.as_mut()
-                .set_reduce_motion(motion::effective(motion, ctx.system_reduced_motion));
+            let settings = stickynotes_core::store::relock(&ctx.settings).clone();
+            self.as_mut().publish_prefs();
             self.as_mut()
                 .set_last_interaction_ms(settings.last_interaction_ms);
-            self.as_mut()
-                .set_theme_mode(QString::from(theme::normalize_mode(&settings.theme_mode)));
-            // Stored colors that are no longer valid fall back to the default.
-            let color = |c: &str| theme::normalize_color(c).unwrap_or_default();
-            self.as_mut()
-                .set_primary_color(QString::from(color(&settings.primary_color).as_str()));
-            self.as_mut()
-                .set_secondary_color(QString::from(color(&settings.secondary_color).as_str()));
-            self.as_mut()
-                .set_note_color(QString::from(color(&settings.note_color).as_str()));
-            self.as_mut()
-                .set_markdown_style(QString::from(settings.markdown_style.as_str()));
-            // Stored editor choices that are no longer valid fall back to the default.
-            self.as_mut().set_spell_check(settings.spell_check);
             self.as_mut().set_spell_available(ctx.spell.available());
-            self.as_mut()
-                .set_draft_agent(QString::from(editor::normalize_agent(
-                    &settings.draft_agent,
-                )));
-            self.as_mut()
-                .set_draft_system_prompt(QString::from(settings.draft_system_prompt.as_str()));
-            self.as_mut().set_draft_model(QString::from(
-                editor::model(&settings.draft_model).unwrap_or_default(),
-            ));
-            self.as_mut().set_draft_effort(QString::from(
-                editor::effort(&settings.draft_effort).unwrap_or_default(),
-            ));
         }
         if let Ok(request) = std::env::var("STICKYNOTES_SCREENSHOT") {
             self.as_mut()
@@ -296,6 +215,14 @@ impl cxx_qt::Initialize for qobject::BoardController {
 }
 
 impl qobject::BoardController {
+    /// Republish the preferences, so QML bindings on `prefsJson` update.
+    fn publish_prefs(self: Pin<&mut Self>) {
+        let ctx = context::get();
+        let json =
+            stickynotes_core::store::relock(&ctx.settings).prefs_json(ctx.system_reduced_motion);
+        self.set_prefs_json(to_qstring(json));
+    }
+
     /// Republish the store's state as properties.
     fn refresh(mut self: Pin<&mut Self>) {
         let snapshot = context::get().store.snapshot();
@@ -476,120 +403,24 @@ impl qobject::BoardController {
         file_op(url, |path| context::get().store.export_skill(&path))
     }
 
-    fn choose_theme_mode(mut self: Pin<&mut Self>, mode: &QString) -> bool {
-        let text = String::from(mode);
-        let mode = theme::normalize_mode(&text);
-        // Only "light" and "dark" are modes; unknown text is not silently "light".
-        if !text.trim().eq_ignore_ascii_case(mode) {
-            return false;
-        }
-        self.as_mut().set_theme_mode(QString::from(mode));
-        context::get().update_settings(|s| s.theme_mode = mode.into());
-        true
-    }
-
-    fn choose_primary_color(mut self: Pin<&mut Self>, color: &QString) -> bool {
-        let Some(color) = theme::normalize_color(&String::from(color)) else {
+    fn choose_pref(mut self: Pin<&mut Self>, key: &QString, value: &QString) -> bool {
+        let Some(pref) = settings::pref(&String::from(key)) else {
             return false;
         };
-        self.as_mut()
-            .set_primary_color(QString::from(color.as_str()));
-        context::get().update_settings(|s| s.primary_color = color);
-        true
-    }
-
-    fn choose_secondary_color(mut self: Pin<&mut Self>, color: &QString) -> bool {
-        let Some(color) = theme::normalize_color(&String::from(color)) else {
+        let Some(value) = (pref.validate)(&String::from(value)) else {
             return false;
         };
-        self.as_mut()
-            .set_secondary_color(QString::from(color.as_str()));
-        context::get().update_settings(|s| s.secondary_color = color);
-        true
-    }
-
-    fn choose_note_color(mut self: Pin<&mut Self>, color: &QString) -> bool {
-        let Some(color) = theme::normalize_color(&String::from(color)) else {
-            return false;
-        };
-        self.as_mut().set_note_color(QString::from(color.as_str()));
-        context::get().update_settings(|s| s.note_color = color);
-        true
-    }
-
-    fn reset_note_color(mut self: Pin<&mut Self>) {
-        self.as_mut().set_note_color(QString::default());
-        context::get().update_settings(|s| s.note_color.clear());
-    }
-
-    fn choose_markdown_style(mut self: Pin<&mut Self>, style: &QString) {
-        let style = String::from(style);
-        self.as_mut()
-            .set_markdown_style(QString::from(style.as_str()));
-        context::get().update_settings(|s| s.markdown_style = style);
-    }
-
-    fn choose_spell_check(mut self: Pin<&mut Self>, enabled: bool) {
-        self.as_mut().set_spell_check(enabled);
-        context::get().update_settings(|s| s.spell_check = enabled);
-    }
-
-    fn choose_draft_agent(mut self: Pin<&mut Self>, agent: &QString) -> bool {
-        let text = String::from(agent);
-        let agent = editor::normalize_agent(&text);
-        if !text.trim().eq_ignore_ascii_case(agent) {
-            return false;
-        }
-        self.as_mut().set_draft_agent(QString::from(agent));
-        context::get().update_settings(|s| s.draft_agent = agent.into());
-        true
-    }
-
-    fn choose_draft_system_prompt(mut self: Pin<&mut Self>, prompt: &QString) {
-        let prompt = String::from(prompt);
-        self.as_mut()
-            .set_draft_system_prompt(QString::from(prompt.as_str()));
-        context::get().update_settings(|s| s.draft_system_prompt = prompt);
-    }
-
-    fn choose_draft_model(mut self: Pin<&mut Self>, model: &QString) -> bool {
-        let Some(model) = editor::model(&String::from(model)) else {
-            return false;
-        };
-        self.as_mut().set_draft_model(QString::from(model));
-        context::get().update_settings(|s| s.draft_model = model.into());
-        true
-    }
-
-    fn choose_draft_effort(mut self: Pin<&mut Self>, effort: &QString) -> bool {
-        let Some(effort) = editor::effort(&String::from(effort)) else {
-            return false;
-        };
-        self.as_mut().set_draft_effort(QString::from(effort));
-        context::get().update_settings(|s| s.draft_effort = effort.into());
+        context::get().update_settings(|s| (pref.set)(s, value));
+        self.as_mut().publish_prefs();
         true
     }
 
     fn misspelled_ranges(&self, text: &QString) -> QString {
-        if !*self.spell_check() {
+        if !stickynotes_core::store::relock(&context::get().settings).spell_check {
             return QString::from("[]");
         }
         let ranges = context::get().spell.misspelled(&String::from(text));
         to_qstring(serde_json::to_string(&ranges).expect("ranges serialize"))
-    }
-
-    fn choose_motion_setting(mut self: Pin<&mut Self>, setting: &QString) -> bool {
-        let text = String::from(setting);
-        let setting = motion::normalize_setting(&text);
-        if !text.trim().eq_ignore_ascii_case(setting) {
-            return false;
-        }
-        let ctx = context::get();
-        self.as_mut().set_motion_setting(QString::from(setting));
-        self.as_mut()
-            .set_reduce_motion(motion::effective(setting, ctx.system_reduced_motion));
-        ctx.update_settings(|s| s.reduce_motion = setting.into());
-        true
     }
 
     fn record_interaction(mut self: Pin<&mut Self>, ms: i64) {
@@ -599,15 +430,6 @@ impl qobject::BoardController {
             self.as_mut().set_last_interaction_ms(ms);
             context::get().update_settings(|s| s.last_interaction_ms = ms);
         }
-    }
-
-    fn reset_theme_colors(mut self: Pin<&mut Self>) {
-        self.as_mut().set_primary_color(QString::default());
-        self.as_mut().set_secondary_color(QString::default());
-        context::get().update_settings(|s| {
-            s.primary_color.clear();
-            s.secondary_color.clear();
-        });
     }
 
     fn set_agent_write_enabled(&self, enabled: bool) {
@@ -650,15 +472,11 @@ impl qobject::BoardController {
                     board.project.code_guidance.clone(),
                 )
             });
-            let settings = ctx.settings.lock().unwrap();
+            let settings = stickynotes_core::store::relock(&ctx.settings);
             let options = DraftOptions {
                 system_prompt: settings.draft_system_prompt.trim().to_string(),
-                model: editor::model(&settings.draft_model)
-                    .unwrap_or_default()
-                    .into(),
-                effort: editor::effort(&settings.draft_effort)
-                    .unwrap_or_default()
-                    .into(),
+                model: settings.draft_model.clone(),
+                effort: settings.draft_effort.clone(),
             };
             form.draft_request(&document_prompt, &code_guidance, options)
         });

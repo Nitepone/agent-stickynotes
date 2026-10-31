@@ -5,7 +5,7 @@ import StickyNotes
 
 // Create or edit a task. Emits `saveRequested` with a JSON form; the caller
 // applies it and closes the dialog on success.
-Dialog {
+StickyDialog {
     id: dialog
 
     property string taskId: ""          // empty when creating
@@ -15,7 +15,6 @@ Dialog {
     property string loadedUpdatedAt: ""
     property bool changedExternally: false
     property bool deletedExternally: false
-    property string errorText: ""
     // Every task on the board as { id, columnTitle, text, label }, supplied by
     // the owner so the dialog can offer link targets.
     property var linkCandidates: []
@@ -197,11 +196,10 @@ Dialog {
     }
 
     title: creating ? qsTr("New task in %1").arg(columnTitle) : qsTr("Task in %1").arg(columnTitle)
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(640, (parent ? parent.width : 640) - 40)
+    maxWidth: 640
     height: Math.min(760, (parent ? parent.height : 760) - 40)
-    padding: 16
+    acceptEnabled: descriptionField.text.trim().length > 0 && !deletedExternally
+    onAcceptClicked: saveRequested(taskId, columnId, formJson())
 
     ListModel { id: requirementsModel }
     ListModel { id: criteriaModel }
@@ -551,33 +549,16 @@ Dialog {
                 }
             }
 
-            Label {
-                Layout.fillWidth: true
-                visible: dialog.errorText !== ""
-                text: dialog.errorText
-                color: Theme.danger
-                wrapMode: Text.Wrap
-            }
+            ErrorLabel { text: dialog.errorText }
         }
     }
 
-    footer: DialogButtonBox {
+    footerButtons: [
         Button {
             text: qsTr("Delete")
             visible: !dialog.creating
             DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole
             onClicked: dialog.deleteRequested(dialog.taskId)
         }
-        Button {
-            text: qsTr("Cancel")
-            DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-        }
-        Button {
-            text: qsTr("Save")
-            highlighted: true
-            enabled: descriptionField.text.trim().length > 0 && !dialog.deletedExternally
-            DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
-            onClicked: dialog.saveRequested(dialog.taskId, dialog.columnId, dialog.formJson())
-        }
-    }
+    ]
 }

@@ -113,6 +113,11 @@ QtObject {
     // Where things are dropped.
     readonly property color dropIndicator: primary
 
+    // Keyboard focus ring: the primary color, nudged until it reaches 3:1
+    // (WCAG non-text contrast) on every surface a focusable item sits on.
+    readonly property color focusRing: ensureContrast(
+        primary, [background, surface, columnBackground, columnEditBackground], 3)
+
     // ---- Layout constants (not colors, but shared by every view) ----------
 
     readonly property int columnWidth: 284

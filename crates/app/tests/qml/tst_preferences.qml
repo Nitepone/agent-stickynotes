@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtTest
 import StickyNotes
+import TestSupport
 
 Item {
     id: scene
@@ -52,14 +53,7 @@ Item {
         }
 
         function find(name, root) {
-            let found = null
-            ;(function walk(item) {
-                for (const child of item.children) {
-                    if (child.objectName === name) found = child
-                    walk(child)
-                }
-            })(root || page)
-            return found
+            return TestHelpers.findByName(root || page, name)
         }
 
         function entry(i) { return find("sidebarItem" + i) }

@@ -4,12 +4,11 @@ import QtQuick.Layouts
 import StickyNotes
 
 // View or edit a column's title and the meaning of its stage.
-Dialog {
+StickyDialog {
     id: dialog
 
     property string columnId: ""        // empty when creating
     property int position: -1
-    property string errorText: ""
     readonly property bool creating: columnId === ""
 
     signal saveRequested(string columnId, int position, string title, string description)
@@ -34,10 +33,9 @@ Dialog {
     }
 
     title: creating ? qsTr("New column") : qsTr("Column")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(520, (parent ? parent.width : 520) - 40)
-    padding: 16
+    maxWidth: 520
+    acceptEnabled: titleField.text.trim().length > 0
+    onAcceptClicked: saveRequested(columnId, position, titleField.text, descriptionField.text)
 
     contentItem: ColumnLayout {
         spacing: 6
@@ -64,26 +62,6 @@ Dialog {
             placeholderText: qsTr("e.g. Implementation is complete and all acceptance criteria are checked off.")
         }
 
-        Label {
-            Layout.fillWidth: true
-            visible: dialog.errorText !== ""
-            text: dialog.errorText
-            color: Theme.danger
-            wrapMode: Text.Wrap
-        }
-    }
-
-    footer: DialogButtonBox {
-        Button {
-            text: qsTr("Cancel")
-            DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-        }
-        Button {
-            text: qsTr("Save")
-            highlighted: true
-            enabled: titleField.text.trim().length > 0
-            DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
-            onClicked: dialog.saveRequested(dialog.columnId, dialog.position, titleField.text, descriptionField.text)
-        }
+        ErrorLabel { text: dialog.errorText }
     }
 }

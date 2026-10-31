@@ -226,6 +226,23 @@ TestCase {
         compare(failures, [], "pairs below 4.5:1")
     }
 
+    // Non-text pairs (focus ring) need 3:1.
+    function test_focus_ring_reaches_3_to_1_in_both_modes() {
+        const failures = []
+        for (const mode of ["light", "dark"]) {
+            Theme.mode = mode
+            for (const primary of ["", "#ca8a04", "#7c3aed", "#475569"]) {
+                Theme.primaryColor = primary
+                for (const bg of ["background", "surface", "columnBackground", "columnEditBackground"]) {
+                    const ratio = Theme.contrast(Theme.focusRing, Theme[bg])
+                    if (ratio < 3)
+                        failures.push(mode + " " + primary + ": focusRing on " + bg + " = " + ratio.toFixed(2))
+                }
+            }
+        }
+        compare(failures, [], "pairs below 3:1")
+    }
+
     function test_sameColor_ignores_notation() {
         verify(Theme.sameColor("#ff8800", "#FF8800"))
         verify(Theme.sameColor("#0af", "#00aaff"))

@@ -6,7 +6,7 @@ import StickyNotes
 // Choose a project from the projects folder, make a new one, or browse for a
 // folder. With `saving` set the board has no project yet, so only creating
 // one makes sense.
-Dialog {
+StickyDialog {
     id: dialog
 
     property bool saving: false
@@ -35,11 +35,10 @@ Dialog {
     }
 
     title: saving ? qsTr("Save as a new project") : qsTr("Projects")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(520, (parent ? parent.width : 520) - 40)
+    maxWidth: 520
     height: Math.min(520, (parent ? parent.height : 520) - 40)
-    padding: 16
+    acceptText: ""
+    rejectText: qsTr("Close")
 
     contentItem: ColumnLayout {
         spacing: 10
@@ -128,16 +127,12 @@ Dialog {
         }
     }
 
-    footer: DialogButtonBox {
+    footerButtons: [
         Button {
             objectName: "browseButton"
             visible: !dialog.saving
             text: qsTr("Browse…")
             onClicked: dialog.browseRequested()
         }
-        Button {
-            text: qsTr("Close")
-            DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-        }
-    }
+    ]
 }

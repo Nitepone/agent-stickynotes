@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtTest
 import StickyNotes
+import TestSupport
 
 Item {
     id: scene
@@ -28,14 +29,8 @@ Item {
 
         function find(name) {
             let found = null
-            const roots = [picker.contentItem, picker.footer]
-            for (const root of roots)
-                (function walk(item) {
-                    for (const child of item.children) {
-                        if (child.objectName === name) found = child
-                        walk(child)
-                    }
-                })(root)
+            for (const root of [picker.contentItem, picker.footer])
+                found = TestHelpers.findByName(root, name) || found
             return found
         }
 

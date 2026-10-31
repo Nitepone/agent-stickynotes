@@ -5,10 +5,9 @@ import StickyNotes
 
 // Project-level instructions that agents read (via the project_get tool and
 // the exported skill). Only the user can edit these.
-Dialog {
+StickyDialog {
     id: dialog
 
-    property string errorText: ""
     // Every file in the project's artifacts folder: [{ name, kind, size, tasks: [numbers] }].
     property var artifacts: []
 
@@ -26,11 +25,10 @@ Dialog {
     }
 
     title: qsTr("Project settings")
-    modal: true
-    anchors.centerIn: Overlay.overlay
-    width: Math.min(680, (parent ? parent.width : 680) - 40)
+    maxWidth: 680
     height: Math.min(640, (parent ? parent.height : 640) - 40)
-    padding: 16
+    acceptObjectName: "saveProject"
+    onAcceptClicked: saveRequested(documentField.text, codeField.text)
 
     contentItem: ScrollView {
         id: scroll
@@ -123,27 +121,7 @@ Dialog {
                 }
             }
 
-            Label {
-                Layout.fillWidth: true
-                visible: dialog.errorText !== ""
-                text: dialog.errorText
-                color: Theme.danger
-                wrapMode: Text.Wrap
-            }
-        }
-    }
-
-    footer: DialogButtonBox {
-        Button {
-            text: qsTr("Cancel")
-            DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
-        }
-        Button {
-            objectName: "saveProject"
-            text: qsTr("Save")
-            highlighted: true
-            DialogButtonBox.buttonRole: DialogButtonBox.ApplyRole
-            onClicked: dialog.saveRequested(documentField.text, codeField.text)
+            ErrorLabel { text: dialog.errorText }
         }
     }
 }

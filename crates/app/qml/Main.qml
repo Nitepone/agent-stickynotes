@@ -42,19 +42,24 @@ ApplicationWindow {
         shadow: Theme.shadeShadow
     }
 
-
     // Tell Qt the color scheme too, so what the platform draws itself (the
     // Windows title bar, native dialogs) matches instead of following the
     // system setting. Needs Qt 6.8.
     Binding { target: Qt.styleHints; property: "colorScheme"; value: Theme.dark ? Qt.Dark : Qt.Light }
 
     // The user's theme settings, from the controller.
-    Binding { target: Theme; property: "mode"; value: controller.themeMode }
-    Binding { target: Theme; property: "primaryColor"; value: controller.primaryColor }
-    Binding { target: Theme; property: "secondaryColor"; value: controller.secondaryColor }
-    Binding { target: Theme; property: "noteColor"; value: controller.noteColor }
+    Binding { target: Theme; property: "mode"; value: prefs.theme_mode }
+    Binding { target: Theme; property: "primaryColor"; value: prefs.primary_color }
+    Binding { target: Theme; property: "secondaryColor"; value: prefs.secondary_color }
+    Binding { target: Theme; property: "noteColor"; value: prefs.note_color }
 
     BoardController { id: controller }
+    // The user's preferences (see settings::PREFS); replaced whenever one changes.
+    readonly property var prefs: JSON.parse(controller.prefsJson)
+    function resetThemeColors() {
+        controller.choosePref("primary_color", "")
+        controller.choosePref("secondary_color", "")
+    }
 
     property var board: ({ title: "", columns: [] })
     property var linkCandidates: []
@@ -63,7 +68,7 @@ ApplicationWindow {
     property bool preferencesOpen: false
     property bool artifactsOpen: false
     // Misspelled words in the task editor, or null with spell check off.
-    readonly property var spellRanges: controller.spellCheck
+    readonly property var spellRanges: prefs.spell_check
         ? (text) => JSON.parse(controller.misspelledRanges(text)) : null
 
     // Notes an agent changed glow until the user has been back for a while.
@@ -112,7 +117,10 @@ ApplicationWindow {
             return
         }
         refreshPending = false
+        // The columns and cards are rebuilt: keep scroll positions and focus.
+        const view = boardView.scrollState()
         board = JSON.parse(controller.boardJson)
+        boardView.restoreScroll(view)
         linkCandidates = buildLinkCandidates(board)
         glow.sync(board)
         if (taskDialog.visible && taskDialog.taskId !== "")
@@ -162,7 +170,7 @@ ApplicationWindow {
                 }
                 else if (scene === "note-demo") {
                     // What the preferences control does, through the real controller.
-                    controller.chooseNoteColor(Theme.notePresets[4])
+                    controller.choosePref("note_color", Theme.notePresets[4])
                     window.openPreferences()
                 }
                 else if (scene === "interact") {
@@ -173,14 +181,14 @@ ApplicationWindow {
                     controller.simulateActivity(false)
                 }
                 else if (scene === "theme-reset") {
-                    controller.resetThemeColors()
+                    resetThemeColors()
                     window.openPreferences()
                 }
                 else if (scene === "theme-demo") {
                     // What the preferences controls do, through the real controller.
-                    controller.chooseThemeMode("dark")
-                    controller.choosePrimaryColor(Theme.accentPresets[5])
-                    controller.chooseSecondaryColor(Theme.accentPresets[2])
+                    controller.choosePref("theme_mode", "dark")
+                    controller.choosePref("primary_color", Theme.accentPresets[5])
+                    controller.choosePref("secondary_color", Theme.accentPresets[2])
                     window.openPreferences()
                 }
                 else if (scene === "generate" && first) {
@@ -226,6 +234,21 @@ ApplicationWindow {
         if (!r.ok && !quiet)
             messageDialog.inform(qsTr("Something went wrong"), r.message)
         return r
+    }
+
+    // Open the task dialog on a task's JSON (empty when the task is gone).
+    function openTaskFromJson(json) {
+        if (json !== "")
+            taskDialog.openTask(json, window.columnTitle(JSON.parse(json).columnId))
+    }
+
+    // Close a form dialog when its save succeeded, otherwise show the error in it.
+    function finishSave(dialog, resultJson) {
+        const r = result(resultJson, true)
+        if (r.ok)
+            dialog.close()
+        else
+            dialog.errorText = r.message
     }
 
     // Every task, for the "link to another task" picker.
@@ -301,8 +324,8 @@ ApplicationWindow {
     Component {
         id: viewerComponent
         ArtifactViewer {
-            styleId: controller.markdownStyle
-            onStyleChosen: (id) => controller.chooseMarkdownStyle(id)
+            styleId: prefs.markdown_style
+            onStyleChosen: (id) => controller.choosePref("markdown_style", id)
             onClosing: Qt.callLater(destroy)
         }
     }
@@ -490,16 +513,13 @@ ApplicationWindow {
             anchors.bottomMargin: 4
             spacing: 8
 
-            Label {
+            FocusLabel {
+                objectName: "boardTitle"
                 text: window.board.title
+                accessibleName: qsTr("Board title: %1. Rename").arg(window.board.title)
                 font.pixelSize: 24
                 font.bold: true
-                color: Theme.text
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: renameDialog.openWith(window.board.title)
-                }
+                onClicked: renameDialog.openWith(window.board.title)
             }
             Label {
                 visible: controller.dirty
@@ -572,15 +592,13 @@ ApplicationWindow {
         anchors.fill: parent
         enabled: !window.preferencesOpen && !window.artifactsOpen
         glowTracker: glow
-        reducedMotion: controller.reduceMotion
+        reducedMotion: prefs.reduce_motion
         board: window.board
         dragLayer: dragLayer
         editMode: window.editMode
 
         onTaskClicked: (taskId) => {
-            const json = controller.taskJson(taskId)
-            if (json !== "")
-                taskDialog.openTask(json, window.columnTitle(JSON.parse(json).columnId))
+            window.openTaskFromJson(controller.taskJson(taskId))
         }
         onAddTaskClicked: (column) => taskDialog.openNew(column)
         onColumnTitleClicked: (column) => columnDialog.openColumn(column)
@@ -636,8 +654,7 @@ ApplicationWindow {
         onBackRequested: window.artifactsOpen = false
         onArtifactClicked: (name) => window.openArtifact(name)
         onTaskClicked: (taskId) => {
-            const json = controller.taskJson(taskId)
-            taskDialog.openTask(json, window.columnTitle(JSON.parse(json).columnId))
+            window.openTaskFromJson(controller.taskJson(taskId))
         }
     }
 
@@ -648,32 +665,32 @@ ApplicationWindow {
         onBackRequested: window.preferencesOpen = false
 
         PersonalizationSection {
-            themeMode: controller.themeMode
-            primaryColor: controller.primaryColor
-            secondaryColor: controller.secondaryColor
-            onThemeModeChosen: (mode) => controller.chooseThemeMode(mode)
-            onPrimaryColorChosen: (color) => controller.choosePrimaryColor(color)
-            onSecondaryColorChosen: (color) => controller.chooseSecondaryColor(color)
-            onResetColorsRequested: controller.resetThemeColors()
-            noteColor: controller.noteColor
-            onNoteColorChosen: (color) => controller.chooseNoteColor(color)
-            onResetNoteColorRequested: controller.resetNoteColor()
-            motionSetting: controller.motionSetting
-            onMotionSettingChosen: (setting) => controller.chooseMotionSetting(setting)
+            themeMode: prefs.theme_mode
+            primaryColor: prefs.primary_color
+            secondaryColor: prefs.secondary_color
+            onThemeModeChosen: (mode) => controller.choosePref("theme_mode", mode)
+            onPrimaryColorChosen: (color) => controller.choosePref("primary_color", color)
+            onSecondaryColorChosen: (color) => controller.choosePref("secondary_color", color)
+            onResetColorsRequested: resetThemeColors()
+            noteColor: prefs.note_color
+            onNoteColorChosen: (color) => controller.choosePref("note_color", color)
+            onResetNoteColorRequested: controller.choosePref("note_color", "")
+            motionSetting: prefs.motion_setting
+            onMotionSettingChosen: (setting) => controller.choosePref("motion_setting", setting)
         }
 
         EditorSection {
-            spellCheck: controller.spellCheck
+            spellCheck: prefs.spell_check
             spellAvailable: controller.spellAvailable
-            onSpellCheckChosen: (enabled) => controller.chooseSpellCheck(enabled)
-            draftAgent: controller.draftAgent
-            onDraftAgentChosen: (agent) => controller.chooseDraftAgent(agent)
-            draftSystemPrompt: controller.draftSystemPrompt
-            onDraftSystemPromptChosen: (prompt) => controller.chooseDraftSystemPrompt(prompt)
-            draftModel: controller.draftModel
-            onDraftModelChosen: (model) => controller.chooseDraftModel(model)
-            draftEffort: controller.draftEffort
-            onDraftEffortChosen: (effort) => controller.chooseDraftEffort(effort)
+            onSpellCheckChosen: (enabled) => controller.choosePref("spell_check", String(enabled))
+            draftAgent: prefs.draft_agent
+            onDraftAgentChosen: (agent) => controller.choosePref("draft_agent", agent)
+            draftSystemPrompt: prefs.draft_system_prompt
+            onDraftSystemPromptChosen: (prompt) => controller.choosePref("draft_system_prompt", prompt)
+            draftModel: prefs.draft_model
+            onDraftModelChosen: (model) => controller.choosePref("draft_model", model)
+            draftEffort: prefs.draft_effort
+            onDraftEffortChosen: (effort) => controller.choosePref("draft_effort", effort)
         }
     }
 
@@ -712,11 +729,7 @@ ApplicationWindow {
         relationOptions: JSON.parse(controller.relationOptions())
         onArtifactClicked: (name) => window.openArtifact(name)
         onOpenTaskRequested: (taskId) => {
-            const go = () => {
-                const json = controller.taskJson(taskId)
-                if (json !== "")
-                    openTask(json, window.columnTitle(JSON.parse(json).columnId))
-            }
+            const go = () => window.openTaskFromJson(controller.taskJson(taskId))
             if (isEdited())
                 messageDialog.ask(qsTr("Discard changes?"),
                                   qsTr("You have unsaved edits in this task. Open the linked task and discard them?"),
@@ -724,14 +737,8 @@ ApplicationWindow {
             else
                 go()
         }
-        onSaveRequested: (taskId, columnId, form) => {
-            const r = window.result(taskId === "" ? controller.createTask(columnId, form)
-                                                  : controller.updateTask(taskId, form), true)
-            if (r.ok)
-                close()
-            else
-                errorText = r.message
-        }
+        onSaveRequested: (taskId, columnId, form) => window.finishSave(taskDialog,
+            taskId === "" ? controller.createTask(columnId, form) : controller.updateTask(taskId, form))
         onDeleteRequested: (taskId) => window.confirmDeleteTask(taskId)
         onReloadRequested: (taskId) => {
             const json = controller.taskJson(taskId)
@@ -742,14 +749,9 @@ ApplicationWindow {
 
     ColumnDialog {
         id: columnDialog
-        onSaveRequested: (columnId, position, title, description) => {
-            const r = window.result(columnId === "" ? controller.createColumn(position, title, description)
-                                                    : controller.updateColumn(columnId, title, description), true)
-            if (r.ok)
-                close()
-            else
-                errorText = r.message
-        }
+        onSaveRequested: (columnId, position, title, description) => window.finishSave(columnDialog,
+            columnId === "" ? controller.createColumn(position, title, description)
+                            : controller.updateColumn(columnId, title, description))
     }
 
     ConfirmDialog { id: messageDialog }
@@ -757,114 +759,25 @@ ApplicationWindow {
     ProjectDialog {
         id: projectDialog
         onArtifactClicked: (name) => window.openArtifact(name)
-        onSaveRequested: (documentPrompt, codeGuidance) => {
-            const r = window.result(controller.updateProject(documentPrompt, codeGuidance), true)
-            if (r.ok)
-                close()
-            else
-                errorText = r.message
-        }
+        onSaveRequested: (documentPrompt, codeGuidance) =>
+            window.finishSave(projectDialog, controller.updateProject(documentPrompt, codeGuidance))
     }
 
-    Dialog {
+    UnsavedDialog {
         id: unsavedDialog
-        property var pending: null
-        title: qsTr("Unsaved changes")
-        modal: true
-        anchors.centerIn: Overlay.overlay
-        padding: 16
-        standardButtons: Dialog.Save | Dialog.Discard | Dialog.Cancel
-
-        Label { text: qsTr("The board has unsaved changes. Save them first?") }
-
-        onAccepted: {
-            const next = pending
-            pending = null
-            window.save(next)
-        }
-        onDiscarded: {
-            const next = pending
-            pending = null
-            close()
-            if (next) next()
-        }
-        onRejected: pending = null
+        onSaveRequested: (next) => window.save(next)
+        onDiscardRequested: (next) => { if (next) next() }
     }
 
-    Dialog {
+    RenameDialog {
         id: renameDialog
-        title: qsTr("Rename board")
-        modal: true
-        anchors.centerIn: Overlay.overlay
-        width: 400
-        padding: 16
-        standardButtons: Dialog.Save | Dialog.Cancel
-
-        function openWith(title) {
-            renameField.text = title
-            open()
-            renameField.selectAll()
-            renameField.forceActiveFocus()
-        }
-
-        TextField {
-            id: renameField
-            anchors.left: parent.left
-            anchors.right: parent.right
-            onAccepted: renameDialog.accept()
-        }
-        onAccepted: window.result(controller.renameBoard(renameField.text))
+        onRenameRequested: (title) => window.result(controller.renameBoard(title))
     }
 
-    Dialog {
+    AgentConnectDialog {
         id: agentDialog
-        title: qsTr("Connect Claude Code")
-        modal: true
-        anchors.centerIn: Overlay.overlay
-        width: Math.min(720, window.width - 40)
-        padding: 16
-        standardButtons: Dialog.Close
-
-        ColumnLayout {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            spacing: 8
-
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                text: qsTr("Run this once in a terminal to register the board's MCP server with Claude Code. The server runs while this window is open.")
-            }
-            TextArea {
-                id: setupCommand
-                Layout.fillWidth: true
-                readOnly: true
-                selectByMouse: true
-                wrapMode: TextEdit.WrapAnywhere
-                font.family: "monospace"
-                text: controller.claudeSetupCommand()
-            }
-            RowLayout {
-                Button {
-                    text: qsTr("Copy command")
-                    onClicked: {
-                        setupCommand.selectAll()
-                        setupCommand.copy()
-                        setupCommand.deselect()
-                        copiedLabel.visible = true
-                    }
-                }
-                Label { id: copiedLabel; visible: false; text: qsTr("Copied"); color: Theme.agentReadWrite }
-            }
-            Label {
-                Layout.fillWidth: true
-                wrapMode: Text.Wrap
-                color: Theme.subtleText
-                text: qsTr("REST API: %1/api/v1 (same bearer token)\nAgent write access is currently %2. Toggle it from the Agent menu.")
-                      .arg(controller.endpoint)
-                      .arg(controller.agentWrite ? qsTr("enabled") : qsTr("disabled"))
-            }
-        }
-        onOpened: copiedLabel.visible = false
+        setupCommand: controller.claudeSetupCommand()
+        endpoint: controller.endpoint
+        agentWrite: controller.agentWrite
     }
 }

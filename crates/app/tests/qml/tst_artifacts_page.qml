@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtTest
 import StickyNotes
+import TestSupport
 
 Item {
     id: scene
@@ -44,13 +45,8 @@ Item {
         }
 
         function all(name) {
-            const found = []
-            ;(function walk(item) {
-                for (const c of item.children) {
-                    if (c.objectName === name && c.visible) found.push(c)
-                    walk(c)
-                }
-            })(findChild(page, "artifactList").contentItem)
+            const found = TestHelpers.findWhere(findChild(page, "artifactList").contentItem,
+                                             c => c.objectName === name && c.visible)
             return found.sort((a, b) => a.mapToItem(page, 0, 0).y - b.mapToItem(page, 0, 0).y)
         }
 

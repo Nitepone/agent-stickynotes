@@ -20,10 +20,44 @@ Item {
     readonly property bool dragging: mouse.drag.active
 
     signal clicked()
+    // Ctrl+Left / Ctrl+Right: ask for the note to move one column (-1 or +1).
+    signal moveRequested(int direction)
 
     objectName: "card-" + task.id
     implicitWidth: Theme.columnWidth - 20
     implicitHeight: note.height
+
+    // Keyboard and screen-reader access.
+    activeFocusOnTab: true
+    Accessible.role: Accessible.Button
+    Accessible.name: task.cardText
+    Accessible.description: "#" + task.number
+                            + (task.total > 0 ? ", " + qsTr("%1 of %2 criteria done").arg(task.done).arg(task.total) : "")
+    Accessible.focusable: true
+    Accessible.onPressAction: root.clicked()
+
+    Keys.onPressed: (event) => {
+        if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+            event.accepted = true
+            root.clicked()
+        } else if ((event.modifiers & Qt.ControlModifier) && root.dragEnabled
+                   && (event.key === Qt.Key_Left || event.key === Qt.Key_Right)) {
+            event.accepted = true
+            root.moveRequested(event.key === Qt.Key_Right ? 1 : -1)
+        }
+    }
+
+    // Focus ring, just outside the note (the column leaves room for it).
+    Rectangle {
+        objectName: "focusRing"
+        anchors.fill: parent
+        anchors.margins: -3
+        radius: 7
+        color: "transparent"
+        border.color: Theme.focusRing
+        border.width: 2
+        visible: root.activeFocus
+    }
 
     // Faint outline left behind while the note is being dragged.
     Rectangle {

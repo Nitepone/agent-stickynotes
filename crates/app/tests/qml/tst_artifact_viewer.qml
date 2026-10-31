@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtTest
 import StickyNotes
+import TestSupport
 
 Item {
     width: 400
@@ -14,14 +15,7 @@ Item {
         when: windowShown
 
         function child(root, name) {
-            let found = null
-            ;(function walk(item) {
-                for (const c of item.children) {
-                    if (c.objectName === name) found = c
-                    walk(c)
-                }
-            })(root)
-            return found
+            return TestHelpers.findByName(root, name)
         }
 
         function cleanup() { viewer.close() }

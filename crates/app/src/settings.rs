@@ -45,6 +45,10 @@ pub struct Settings {
     /// Display style of the Markdown viewer (`default`, `reading`, ...); the
     /// viewer falls back to the default for an id it does not know.
     pub markdown_style: String,
+    /// Fields this version does not know, kept so a newer version's settings
+    /// survive a load and save.
+    #[serde(flatten, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 impl Default for Settings {
@@ -66,8 +70,148 @@ impl Default for Settings {
             draft_model: String::new(),
             draft_effort: String::new(),
             markdown_style: "default".into(),
+            extra: serde_json::Map::new(),
         }
     }
+}
+
+impl Settings {
+    /// Replace every preference that is not valid with its default, so the
+    /// rest of the app can trust the values.
+    pub fn sanitized(mut self) -> Self {
+        self.theme_mode = crate::theme::normalize_mode(&self.theme_mode).into();
+        self.reduce_motion = crate::motion::normalize_setting(&self.reduce_motion).into();
+        self.draft_agent = crate::editor::normalize_agent(&self.draft_agent).into();
+        for c in [
+            &mut self.primary_color,
+            &mut self.secondary_color,
+            &mut self.note_color,
+        ] {
+            *c = crate::theme::normalize_color(c).unwrap_or_default();
+        }
+        self.draft_model = crate::editor::model(&self.draft_model)
+            .unwrap_or_default()
+            .into();
+        self.draft_effort = crate::editor::effort(&self.draft_effort)
+            .unwrap_or_default()
+            .into();
+        self
+    }
+
+    /// The preferences the UI shows, as JSON keyed like [`PREFS`], plus
+    /// `reduce_motion`: whether animations are actually reduced, given what
+    /// the desktop prefers.
+    pub fn prefs_json(&self, system_reduced_motion: bool) -> String {
+        serde_json::json!({
+            "theme_mode": self.theme_mode,
+            "primary_color": self.primary_color,
+            "secondary_color": self.secondary_color,
+            "note_color": self.note_color,
+            "markdown_style": self.markdown_style,
+            "spell_check": self.spell_check,
+            "draft_agent": self.draft_agent,
+            "draft_system_prompt": self.draft_system_prompt,
+            "draft_model": self.draft_model,
+            "draft_effort": self.draft_effort,
+            "motion_setting": self.reduce_motion,
+            "reduce_motion": crate::motion::effective(&self.reduce_motion, system_reduced_motion),
+        })
+        .to_string()
+    }
+}
+
+/// One user preference that can be changed with [`pref`]: `validate` turns
+/// the text the UI sends into the value to store (`None` rejects it, and the
+/// empty text is how a color is reset), `set` stores it.
+pub struct Pref {
+    pub key: &'static str,
+    pub validate: fn(&str) -> Option<String>,
+    pub set: fn(&mut Settings, String),
+}
+
+fn text(value: &str) -> Option<String> {
+    Some(value.to_string())
+}
+
+/// A color, or empty for the theme's default.
+fn color(value: &str) -> Option<String> {
+    if value.trim().is_empty() {
+        return Some(String::new());
+    }
+    crate::theme::normalize_color(value)
+}
+
+/// `normalized` only if `value` is exactly that choice (so unknown text is
+/// not silently turned into the default).
+fn exact(normalized: &str, value: &str) -> Option<String> {
+    value
+        .trim()
+        .eq_ignore_ascii_case(normalized)
+        .then(|| normalized.to_string())
+}
+
+/// Preferences changed by the UI. Keys are the `prefs_json` keys, except
+/// that `motion_setting` is stored as the `reduce_motion` setting.
+pub const PREFS: [Pref; 11] = [
+    Pref {
+        key: "theme_mode",
+        validate: |v| exact(crate::theme::normalize_mode(v), v),
+        set: |s, v| s.theme_mode = v,
+    },
+    Pref {
+        key: "primary_color",
+        validate: color,
+        set: |s, v| s.primary_color = v,
+    },
+    Pref {
+        key: "secondary_color",
+        validate: color,
+        set: |s, v| s.secondary_color = v,
+    },
+    Pref {
+        key: "note_color",
+        validate: color,
+        set: |s, v| s.note_color = v,
+    },
+    Pref {
+        key: "markdown_style",
+        validate: text,
+        set: |s, v| s.markdown_style = v,
+    },
+    Pref {
+        key: "spell_check",
+        validate: |v| matches!(v, "true" | "false").then(|| v.to_string()),
+        set: |s, v| s.spell_check = v == "true",
+    },
+    Pref {
+        key: "draft_agent",
+        validate: |v| exact(crate::editor::normalize_agent(v), v),
+        set: |s, v| s.draft_agent = v,
+    },
+    Pref {
+        key: "draft_system_prompt",
+        validate: text,
+        set: |s, v| s.draft_system_prompt = v,
+    },
+    Pref {
+        key: "draft_model",
+        validate: |v| crate::editor::model(v).map(String::from),
+        set: |s, v| s.draft_model = v,
+    },
+    Pref {
+        key: "draft_effort",
+        validate: |v| crate::editor::effort(v).map(String::from),
+        set: |s, v| s.draft_effort = v,
+    },
+    Pref {
+        key: "motion_setting",
+        validate: |v| exact(crate::motion::normalize_setting(v), v),
+        set: |s, v| s.reduce_motion = v,
+    },
+];
+
+pub fn pref(key: &str) -> Option<&'static Pref> {
+    PREFS.iter().find(|p| p.key == key)
 }
 
 pub struct Config {
@@ -91,10 +235,35 @@ impl Config {
     }
 
     pub fn load_settings(&self) -> Settings {
-        fs::read(self.dir.join("settings.json"))
-            .ok()
-            .and_then(|b| serde_json::from_slice(&b).ok())
-            .unwrap_or_default()
+        let path = self.dir.join("settings.json");
+        let bytes = match fs::read(&path) {
+            Ok(b) => b,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Settings::default(),
+            Err(e) => {
+                eprintln!("warning: could not read {}: {e}", path.display());
+                self.set_aside(&path);
+                return Settings::default();
+            }
+        };
+        match serde_json::from_slice(&bytes) {
+            Ok(settings) => Settings::sanitized(settings),
+            Err(e) => {
+                eprintln!("warning: could not parse {}: {e}", path.display());
+                self.set_aside(&path);
+                Settings::default()
+            }
+        }
+    }
+
+    /// Move an unusable settings file to `settings.json.bad` (replacing an
+    /// older one) so the next save does not destroy it.
+    fn set_aside(&self, path: &Path) {
+        let bad = path.with_file_name("settings.json.bad");
+        let _ = fs::remove_file(&bad);
+        match fs::rename(path, &bad) {
+            Ok(()) => eprintln!("warning: kept the unusable file as {}", bad.display()),
+            Err(e) => eprintln!("warning: could not move {} aside: {e}", path.display()),
+        }
     }
 
     pub fn save_settings(&self, settings: &Settings) -> Result<()> {
@@ -153,6 +322,59 @@ mod tests {
             dir: dir.to_path_buf(),
             projects_dir: dir.join("projects"),
         }
+    }
+
+    #[test]
+    fn corrupt_settings_are_moved_aside_and_survive_a_save() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("settings.json");
+        fs::write(&file, r#"{"agent_write": tr"#).unwrap();
+        let config = config_in(dir.path());
+        let settings = config.load_settings();
+        assert!(!settings.agent_write);
+        assert!(!file.exists());
+        let bad = dir.path().join("settings.json.bad");
+        assert_eq!(fs::read_to_string(&bad).unwrap(), r#"{"agent_write": tr"#);
+        config.save_settings(&settings).unwrap();
+        assert_eq!(fs::read_to_string(&bad).unwrap(), r#"{"agent_write": tr"#);
+        assert!(file.exists());
+    }
+
+    #[test]
+    fn missing_settings_fall_back_silently_without_a_bad_file() {
+        let dir = tempfile::tempdir().unwrap();
+        config_in(dir.path()).load_settings();
+        assert!(!dir.path().join("settings.json.bad").exists());
+    }
+
+    #[test]
+    fn unknown_settings_survive_load_and_save() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("settings.json"),
+            r#"{"agent_write": true, "future_flag": {"a": 1}}"#,
+        )
+        .unwrap();
+        let config = config_in(dir.path());
+        let settings = config.load_settings();
+        config.save_settings(&settings).unwrap();
+        let text = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(v["future_flag"]["a"], 1);
+        assert_eq!(v["agent_write"], true);
+    }
+
+    #[test]
+    fn settings_without_extra_still_load_and_save_no_extra() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("settings.json"), r#"{"port": 8000}"#).unwrap();
+        let config = config_in(dir.path());
+        let settings = config.load_settings();
+        assert_eq!(settings.port, 8000);
+        assert!(settings.extra.is_empty());
+        config.save_settings(&settings).unwrap();
+        let text = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+        assert!(!text.contains("extra"));
     }
 
     #[test]
@@ -268,5 +490,98 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("settings.json"), "{ not json").unwrap();
         assert_eq!(config_in(dir.path()).load_settings().theme_mode, "light");
+    }
+
+    #[test]
+    fn invalid_values_in_a_settings_file_load_as_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("settings.json"),
+            r##"{"theme_mode": "neon", "primary_color": "red", "secondary_color": "#12",
+                "note_color": "#gggggg", "reduce_motion": "maybe", "draft_agent": "x",
+                "draft_model": "gpt", "draft_effort": "ludicrous", "port": 9000}"##,
+        )
+        .unwrap();
+        let s = config_in(dir.path()).load_settings();
+        let d = Settings::default();
+        assert_eq!(s.theme_mode, d.theme_mode);
+        assert_eq!(s.primary_color, d.primary_color);
+        assert_eq!(s.secondary_color, d.secondary_color);
+        assert_eq!(s.note_color, d.note_color);
+        assert_eq!(s.reduce_motion, d.reduce_motion);
+        assert_eq!(s.draft_agent, d.draft_agent);
+        assert_eq!(s.draft_model, d.draft_model);
+        assert_eq!(s.draft_effort, d.draft_effort);
+        assert_eq!(s.port, 9000);
+    }
+
+    fn validate(key: &str, value: &str) -> Option<String> {
+        (pref(key).expect(key).validate)(value)
+    }
+
+    #[test]
+    fn pref_validators_accept_valid_values_and_reject_invalid_ones() {
+        let ok = |k: &str, v: &str, want: &str| {
+            assert_eq!(validate(k, v).as_deref(), Some(want), "{k}={v}")
+        };
+        let bad = |k: &str, v: &str| assert_eq!(validate(k, v), None, "{k}={v}");
+        ok("theme_mode", "dark", "dark");
+        ok("theme_mode", " Light ", "light");
+        bad("theme_mode", "neon");
+        bad("theme_mode", "");
+        for k in ["primary_color", "secondary_color", "note_color"] {
+            ok(k, "#FFF", "#ffffff");
+            ok(k, "#ff8800", "#ff8800");
+            ok(k, "", ""); // reset to the theme's default
+            bad(k, "red");
+            bad(k, "#12345");
+        }
+        ok("markdown_style", "reading", "reading");
+        ok("spell_check", "true", "true");
+        ok("spell_check", "false", "false");
+        bad("spell_check", "yes");
+        ok("draft_agent", "claude_code", "claude_code");
+        bad("draft_agent", "other");
+        bad("draft_agent", "");
+        ok("draft_system_prompt", "Be brief.", "Be brief.");
+        ok("draft_system_prompt", "", "");
+        ok("draft_model", "opus", "opus");
+        ok("draft_model", "", "");
+        bad("draft_model", "gpt");
+        ok("draft_effort", "high", "high");
+        ok("draft_effort", "", "");
+        bad("draft_effort", "ludicrous");
+        ok("motion_setting", "on", "on");
+        ok("motion_setting", "system", "system");
+        bad("motion_setting", "maybe");
+        bad("motion_setting", "");
+        assert!(pref("port").is_none());
+    }
+
+    #[test]
+    fn choosing_and_resetting_prefs_updates_settings_and_json() {
+        let mut s = Settings::default();
+        let set = |s: &mut Settings, k: &str, v: &str| {
+            let p = pref(k).unwrap();
+            (p.set)(s, (p.validate)(v).unwrap());
+        };
+        set(&mut s, "primary_color", "#ff8800");
+        set(&mut s, "note_color", "#bfe3ff");
+        set(&mut s, "motion_setting", "on");
+        set(&mut s, "spell_check", "false");
+        let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
+        assert_eq!(v["primary_color"], "#ff8800");
+        assert_eq!(v["motion_setting"], "on");
+        assert_eq!(v["reduce_motion"], true);
+        assert_eq!(v["spell_check"], false);
+        set(&mut s, "primary_color", "");
+        set(&mut s, "note_color", "");
+        assert_eq!(s.primary_color, "");
+        assert_eq!(s.note_color, "");
+        set(&mut s, "motion_setting", "system");
+        let v: serde_json::Value = serde_json::from_str(&s.prefs_json(true)).unwrap();
+        assert_eq!(v["reduce_motion"], true);
+        let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
+        assert_eq!(v["reduce_motion"], false);
     }
 }

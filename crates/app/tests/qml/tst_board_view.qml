@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import StickyNotes
+import TestSupport
 
 // View-level tests: real mouse drags against BoardView/TrashCan with a
 // static board. No controller involved; we only check emitted intents.
@@ -9,19 +10,7 @@ Item {
     width: 1500
     height: 800
 
-    readonly property var board: ({
-        title: "Test",
-        columns: [
-            { id: "c0", title: "Backlog", description: "Unscoped", tasks: [
-                { id: "t0", number: 1, cardText: "first", done: 0, total: 0 },
-                { id: "t1", number: 2, cardText: "second", done: 1, total: 2, artifactCount: 2 },
-            ] },
-            { id: "c1", title: "Doing", description: "", tasks: [] },
-            { id: "c2", title: "Done", description: "", tasks: [
-                { id: "t2", number: 12, cardText: "third", done: 2, total: 2 },
-            ] },
-        ],
-    })
+    readonly property var board: TestHelpers.sampleBoard({ firstDescription: "Unscoped", artifactCount: 2 })
 
     GlowTracker { id: tracker }
 
@@ -192,16 +181,10 @@ Item {
 
         // The note's paper: the rectangle that carries the note color.
         function paperOf(card) {
-            let found = null
-            ;(function walk(it) {
-                for (const child of it.children) {
-                    if (child.hasOwnProperty("radius") && child.radius === 4 && child.color.a === 1
-                            && child.border.color.a === 0 && !found)
-                        found = child
-                    walk(child)
-                }
-            })(card)
-            return found
+            const found = TestHelpers.findWhere(card, c =>
+                c.hasOwnProperty("radius") && c.radius === 4 && c.color.a === 1
+                && c.border.color.a === 0)
+            return found.length ? found[0] : null
         }
 
         function test_notes_take_their_color_from_the_theme_and_follow_changes() {

@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls.Fusion
 import QtTest
 import StickyNotes
+import TestSupport
 
 Item {
     id: scene
@@ -39,14 +40,7 @@ Item {
         }
 
         function find(name) {
-            let found = null
-            ;(function walk(item) {
-                for (const child of item.children) {
-                    if (child.objectName === name) found = child
-                    walk(child)
-                }
-            })(editor)
-            return found
+            return TestHelpers.findByName(editor, name)
         }
 
         function choose(box, index) {
@@ -63,7 +57,7 @@ Item {
 
         function test_the_editor_page_is_in_the_sidebar_and_can_be_opened() {
             compare(page.sectionCount, 2)
-            const entry = (() => { let f = null; (function walk(i) { for (const c of i.children) { if (c.objectName === "sidebarItem1") f = c; walk(c) } })(page); return f })()
+            const entry = TestHelpers.findByName(page, "sidebarItem1")
             compare(entry.text, "Editor")
             page.currentIndex = 0
             verify(!editor.visible)
@@ -117,10 +111,14 @@ Item {
         }
 
         function test_options_are_below_the_agent_type() {
-            const type = find("agentBox").mapToItem(editor, 0, 0).y
-            verify(find("promptField").mapToItem(editor, 0, 0).y > type)
-            verify(find("modelBox").mapToItem(editor, 0, 0).y > type)
-            verify(find("effortBox").mapToItem(editor, 0, 0).y > type)
+            // init() just changed what is visible; a layout is rearranged on the
+            // next polish, not immediately, so wait for it instead of reading
+            // positions that are still from the previous test.
+            const y = (name) => find(name).mapToItem(editor, 0, 0).y
+            const type = () => y("agentBox")
+            tryVerify(() => y("promptField") > type())
+            tryVerify(() => y("modelBox") > type())
+            tryVerify(() => y("effortBox") > type())
         }
 
         function test_stored_choices_are_shown() {
@@ -156,16 +154,7 @@ Item {
             const fresh = Qt.createQmlObject(
                 'import QtQuick; import StickyNotes; EditorSection { width: 600; height: 600; draftModel: "opus"; draftEffort: "high"; draftAgent: "claude_code" }',
                 scene)
-            const box = (name) => {
-                let found = null
-                ;(function walk(item) {
-                    for (const child of item.children) {
-                        if (child.objectName === name) found = child
-                        walk(child)
-                    }
-                })(fresh)
-                return found
-            }
+            const box = (name) => TestHelpers.findByName(fresh, name)
             compare(box("modelBox").currentValue, "opus")
             compare(box("effortBox").currentValue, "high")
             fresh.destroy()
