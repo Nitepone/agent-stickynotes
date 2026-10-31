@@ -69,6 +69,19 @@ Item {
             compare(findChild(page, "artifactList").visible, false)
         }
 
+        function test_header_stays_at_top_when_empty() {
+            const back = findChild(page, "backButton")
+            const title = findChild(page, "artifactsTitle")
+            const withFiles = back.mapToItem(page, 0, 0).y
+            const titleWith = title.mapToItem(page, 0, 0).y
+            page.artifacts = []
+            wait(50)   // the layout re-polishes asynchronously
+            compare(back.mapToItem(page, 0, 0).y, withFiles)
+            compare(title.mapToItem(page, 0, 0).y, titleWith)
+            const empty = findChild(page, "artifactsEmpty")
+            verify(empty.mapToItem(page, 0, 0).y < withFiles + 100)
+        }
+
         function test_band_edges() {
             const at = (ms) => page.build([{ name: "x.md", kind: "markdown", at: ms, tasks: [] }], scene.now)[0].header
             compare(at(new Date(2024, 4, 15, 0, 0).getTime()), "Today")

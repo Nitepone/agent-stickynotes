@@ -86,6 +86,7 @@ Item {
                 onClicked: root.backRequested()
             }
             Label {
+                objectName: "artifactsTitle"
                 text: qsTr("Artifacts")
                 font.pixelSize: 20
                 font.bold: true
@@ -104,6 +105,8 @@ Item {
             objectName: "artifactsEmpty"
             visible: root.artifacts.length === 0
             Layout.fillWidth: true
+            Layout.fillHeight: true      // keeps the header pinned to the top
+            verticalAlignment: Text.AlignTop
             wrapMode: Text.Wrap
             color: Theme.subtleText
             text: qsTr("No files in this project's artifacts folder yet. Agents attach them to tasks.")
