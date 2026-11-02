@@ -120,10 +120,9 @@ ApplicationWindow {
             return
         }
         refreshPending = false
-        // The columns and cards are rebuilt: keep scroll positions and focus.
-        const view = boardView.scrollState()
+        // BoardView updates its columns and cards in place by id, so scroll
+        // positions, focus and hover need no saving and restoring.
         board = JSON.parse(controller.boardJson)
-        boardView.restoreScroll(view)
         linkCandidates = buildLinkCandidates(board)
         glow.sync(board)
         if (taskDialog.visible && taskDialog.taskId !== "")

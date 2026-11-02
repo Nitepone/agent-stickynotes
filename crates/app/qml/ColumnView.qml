@@ -51,6 +51,23 @@ Item {
         allTasks: root.column.tasks
     }
 
+    // The shown rows as a model keyed by task id (cards) or stack key
+    // (headers), updated in place so a change to one task leaves the other
+    // cards alone.
+    ListModel {
+        id: rowModel
+        dynamicRoles: true
+    }
+    ModelSync { id: rowSync }
+    function syncRows() {
+        rowSync.sync(rowModel, stacks.rows, r => r.kind === "header" ? "stack:" + r.stackKey : r.task.id)
+    }
+    Connections {
+        target: stacks
+        function onRowsChanged() { root.syncRows() }
+    }
+    Component.onCompleted: syncRows()
+
     function isCollapsed(stackKey) {
         return stackKey !== "" && !!collapsedStacks[stackKey]
     }
@@ -304,10 +321,11 @@ Item {
                     topPadding: 4
 
                     Repeater {
-                        model: stacks.rows
+                        model: rowModel
                         delegate: Item {
                             id: rowItem
-                            required property var modelData
+                            required property var payload
+                            readonly property var modelData: payload
                             readonly property bool inStack: modelData.stackKey !== ""
                             readonly property var card: loader.item && loader.item.isTaskCard ? loader.item : null
                             readonly property var header: loader.item && loader.item.isStackHeader ? loader.item : null

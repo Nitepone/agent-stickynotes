@@ -61,8 +61,9 @@ Item {
     signal columnMoved(string columnId, int position)
 
     // ---- Keeping the view steady across a board refresh --------------------
-    // Replacing `board` rebuilds every column and card. The owner takes
-    // scrollState() first and hands it to restoreScroll() afterwards.
+    // Columns and cards are updated in place by id, so scroll offsets and focus
+    // survive a refresh on their own. scrollState()/restoreScroll() remain as a
+    // fallback for an owner that wants to force positions.
 
     // The task card that has keyboard focus (its id), or the stack header
     // ("stack:" and its key), or "".
@@ -188,6 +189,19 @@ Item {
         }
     }
 
+    // The columns as a model keyed by column id, updated in place when `board`
+    // changes (see ModelSync), so columns and their cards keep their identity.
+    ListModel {
+        id: columnModel
+        dynamicRoles: true
+    }
+    ModelSync { id: columnSync }
+    function syncColumns() {
+        columnSync.sync(columnModel, board.columns, c => c.id)
+    }
+    onBoardChanged: syncColumns()
+    Component.onCompleted: syncColumns()
+
     Flickable {
         id: flick
         anchors.fill: parent
@@ -206,11 +220,12 @@ Item {
             spacing: Theme.columnSpacing
 
             Repeater {
-                model: root.board.columns
+                model: columnModel
                 delegate: ColumnView {
-                    required property var modelData
+                    required property var payload
                     required property int index
-                    column: modelData
+                    readonly property var modelData: payload
+                    column: payload
                     height: row.height
                     dragLayer: root.dragLayer
                     editMode: root.editMode
