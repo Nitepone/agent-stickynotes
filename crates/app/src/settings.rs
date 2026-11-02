@@ -32,6 +32,10 @@ pub struct Settings {
     pub last_interaction_ms: i64,
     /// Sticky note color as `#rrggbb`; empty means the theme's yellow.
     pub note_color: String,
+    /// `"user"` (one note color) or `"variable"` (a palette color per category).
+    pub note_style: String,
+    /// Id of the palette used by the variable style (see `theme::NOTE_PALETTES`).
+    pub note_palette: String,
     /// Underline misspelled words in the task editor.
     pub spell_check: bool,
     /// Which backend drafts requirements and criteria (see `editor::AGENTS`).
@@ -64,6 +68,8 @@ impl Default for Settings {
             reduce_motion: crate::motion::SYSTEM.into(),
             last_interaction_ms: 0,
             note_color: String::new(),
+            note_style: crate::theme::NOTE_STYLES[0].into(),
+            note_palette: crate::theme::NOTE_PALETTES[0].into(),
             spell_check: true,
             draft_agent: crate::editor::CLAUDE_CODE.into(),
             draft_system_prompt: String::new(),
@@ -82,6 +88,8 @@ impl Settings {
         self.theme_mode = crate::theme::normalize_mode(&self.theme_mode).into();
         self.reduce_motion = crate::motion::normalize_setting(&self.reduce_motion).into();
         self.draft_agent = crate::editor::normalize_agent(&self.draft_agent).into();
+        self.note_style = crate::theme::normalize_note_style(&self.note_style).into();
+        self.note_palette = crate::theme::normalize_note_palette(&self.note_palette).into();
         for c in [
             &mut self.primary_color,
             &mut self.secondary_color,
@@ -107,6 +115,8 @@ impl Settings {
             "primary_color": self.primary_color,
             "secondary_color": self.secondary_color,
             "note_color": self.note_color,
+            "note_style": self.note_style,
+            "note_palette": self.note_palette,
             "markdown_style": self.markdown_style,
             "spell_check": self.spell_check,
             "draft_agent": self.draft_agent,
@@ -152,7 +162,7 @@ fn exact(normalized: &str, value: &str) -> Option<String> {
 
 /// Preferences changed by the UI. Keys are the `prefs_json` keys, except
 /// that `motion_setting` is stored as the `reduce_motion` setting.
-pub const PREFS: [Pref; 11] = [
+pub const PREFS: [Pref; 13] = [
     Pref {
         key: "theme_mode",
         validate: |v| exact(crate::theme::normalize_mode(v), v),
@@ -172,6 +182,16 @@ pub const PREFS: [Pref; 11] = [
         key: "note_color",
         validate: color,
         set: |s, v| s.note_color = v,
+    },
+    Pref {
+        key: "note_style",
+        validate: |v| exact(crate::theme::normalize_note_style(v), v),
+        set: |s, v| s.note_style = v,
+    },
+    Pref {
+        key: "note_palette",
+        validate: |v| exact(crate::theme::normalize_note_palette(v), v),
+        set: |s, v| s.note_palette = v,
     },
     Pref {
         key: "markdown_style",
@@ -455,6 +475,8 @@ mod tests {
         assert!(settings.agent_write);
         assert_eq!(settings.primary_color, "#ff8800");
         assert_eq!(settings.note_color, "");
+        assert_eq!(settings.note_style, "user", "variable colors are opt-in");
+        assert_eq!(settings.note_palette, "pastel");
         assert!(settings.spell_check, "spell check is on unless turned off");
         assert_eq!(settings.draft_agent, "claude_code");
         assert_eq!(settings.draft_system_prompt, "");
@@ -469,6 +491,8 @@ mod tests {
         let config = config_in(dir.path());
         let mut settings = config.load_settings();
         settings.note_color = "#bfe3ff".into();
+        settings.note_style = "variable".into();
+        settings.note_palette = "candy".into();
         settings.spell_check = false;
         settings.draft_system_prompt = "Write in British English.".into();
         settings.draft_model = "opus".into();
@@ -478,6 +502,8 @@ mod tests {
 
         let restored = config_in(dir.path()).load_settings();
         assert_eq!(restored.note_color, "#bfe3ff");
+        assert_eq!(restored.note_style, "variable");
+        assert_eq!(restored.note_palette, "candy");
         assert!(!restored.spell_check);
         assert_eq!(restored.draft_system_prompt, "Write in British English.");
         assert_eq!(restored.draft_model, "opus");
@@ -498,7 +524,8 @@ mod tests {
         fs::write(
             dir.path().join("settings.json"),
             r##"{"theme_mode": "neon", "primary_color": "red", "secondary_color": "#12",
-                "note_color": "#gggggg", "reduce_motion": "maybe", "draft_agent": "x",
+                "note_color": "#gggggg", "note_style": "rainbow", "note_palette": "neon",
+                "reduce_motion": "maybe", "draft_agent": "x",
                 "draft_model": "gpt", "draft_effort": "ludicrous", "port": 9000}"##,
         )
         .unwrap();
@@ -508,6 +535,8 @@ mod tests {
         assert_eq!(s.primary_color, d.primary_color);
         assert_eq!(s.secondary_color, d.secondary_color);
         assert_eq!(s.note_color, d.note_color);
+        assert_eq!(s.note_style, d.note_style);
+        assert_eq!(s.note_palette, d.note_palette);
         assert_eq!(s.reduce_motion, d.reduce_motion);
         assert_eq!(s.draft_agent, d.draft_agent);
         assert_eq!(s.draft_model, d.draft_model);
@@ -536,6 +565,14 @@ mod tests {
             bad(k, "red");
             bad(k, "#12345");
         }
+        ok("note_style", "variable", "variable");
+        ok("note_style", " User ", "user");
+        bad("note_style", "rainbow");
+        bad("note_style", "");
+        ok("note_palette", "soft-earth", "soft-earth");
+        ok("note_palette", "Cool", "cool");
+        bad("note_palette", "neon");
+        bad("note_palette", "");
         ok("markdown_style", "reading", "reading");
         ok("spell_check", "true", "true");
         ok("spell_check", "false", "false");
@@ -570,6 +607,13 @@ mod tests {
         set(&mut s, "motion_setting", "on");
         set(&mut s, "spell_check", "false");
         let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
+        assert_eq!(v["note_style"], "user");
+        assert_eq!(v["note_palette"], "pastel");
+        set(&mut s, "note_style", "variable");
+        set(&mut s, "note_palette", "cool");
+        let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
+        assert_eq!(v["note_style"], "variable");
+        assert_eq!(v["note_palette"], "cool");
         assert_eq!(v["primary_color"], "#ff8800");
         assert_eq!(v["motion_setting"], "on");
         assert_eq!(v["reduce_motion"], true);

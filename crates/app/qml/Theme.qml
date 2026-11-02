@@ -15,6 +15,9 @@ QtObject {
     property string primaryColor: ""    // "#rrggbb", or "" for the mode's default
     property string secondaryColor: ""  // "#rrggbb", or "" for the mode's default
     property string noteColor: ""       // "#rrggbb", or "" for the yellow note
+    property string noteStyle: "user"   // "user": one note color; "variable": a color per category
+    property string notePalette: ""     // id of a notePalettes entry ("" is the first)
+    property var noteCategories: []     // the board's categories (see categoryColors)
 
     readonly property bool dark: mode === "dark"
 
@@ -76,20 +79,91 @@ QtObject {
         "#fff1a6", "#ffd8a8", "#ffc2d4", "#e2c9ff",
         "#bfe3ff", "#b9ecd0", "#d4efa6", "#e5e7eb"
     ]
+
+    // ---- Variable note colors: one palette color per category --------------
+    // Each palette is ordered so that neighbours are far apart in hue: the
+    // first colors handed out look as different as possible. Palette colors
+    // are the same in both modes, like the user's own note color.
+
+    readonly property var notePalettes: [
+        { id: "pastel", name: qsTr("Pastel"), colors: [
+            "#faeda8", "#a8f1fa", "#faa8d9", "#c2faa8", "#a8abfa", "#fabca8",
+            "#a8fad4", "#eba8fa", "#f2faa8", "#a8dbfa", "#faa8c3", "#acfaa8"] },
+        { id: "soft-earth", name: qsTr("Soft earth"), colors: [
+            "#dac6a9", "#a9dad4", "#daa9d3", "#c5daa9", "#a9b7da", "#daa9a9",
+            "#a9dab7", "#c5a9da", "#dad3a9", "#a9d4da", "#daa9c6", "#b8daa9"] },
+        { id: "candy", name: qsTr("Candy"), colors: [
+            "#ffb2d9", "#c3ffb2", "#b8b2ff", "#ffcdb2", "#b2ffe3", "#f9b2ff",
+            "#f0ffb2", "#b2daff", "#ffb2c4", "#b2ffb6", "#ccb2ff", "#ffe2b2"] },
+        { id: "cool", name: qsTr("Cool"), colors: [
+            "#aff4c6", "#f7c9f7", "#afc6f4", "#c9f7f7", "#c6aff4", "#c9f7e8",
+            "#afddf4", "#c9c9f7", "#ddaff4", "#c9f7e0", "#aff4e8", "#c9f0f7"] }
+    ]
+    readonly property var activeNotePalette: paletteById(notePalette)
+    readonly property bool variableNotes: noteStyle === "variable"
+    // { normalized category: "#rrggbb" } for the categories on the board.
+    readonly property var categoryColors: assignCategoryColors(noteCategories, activeNotePalette.colors)
+
+    function paletteById(id) {
+        for (const p of notePalettes)
+            if (p.id === id)
+                return p
+        return notePalettes[0]
+    }
+
+    // Case and surrounding spaces do not make a different category.
+    function normalizeCategory(category) {
+        return (category || "").trim().toLowerCase()
+    }
+
+    // Gives each distinct category (ignoring case) a palette color: sort the
+    // names, then take the palette in order, wrapping when there are more
+    // categories than colors. Depends only on the set of categories, never on
+    // the order they were created in or listed.
+    function assignCategoryColors(categories, colors) {
+        const names = []
+        for (const c of categories || []) {
+            const n = normalizeCategory(c)
+            if (n !== "" && names.indexOf(n) < 0)
+                names.push(n)
+        }
+        names.sort((a, b) => a < b ? -1 : a > b ? 1 : 0)
+        const result = {}
+        names.forEach((n, i) => { result[n] = colors[i % colors.length] })
+        return result
+    }
+
+    // The color of a note in `category`: the palette color when notes vary by
+    // category, otherwise (and for uncategorized notes) the user's note color.
+    function noteColorFor(category) {
+        if (!variableNotes)
+            return note
+        const c = categoryColors[normalizeCategory(category)]
+        return c ? Qt.color(c) : note
+    }
+
     // Text on a note: the usual dark tones, moved only as far as needed to
-    // stay legible (WCAG AA) on whatever color the user picked.
-    readonly property color noteText: legibleOn("#2b2813", note, 4.5)
-    readonly property color noteNumber: legibleOn("#5e5a3f", note, 4.5)    // gray, quieter than the text
-    readonly property color noteSubtleText: legibleOn("#4d4a33", note, 4.5)
-    readonly property color noteDoneText: legibleOn("#166534", note, 4.5)
-    readonly property color noteHoverBorder: mix(note, noteText, 0.35)
+    // stay legible (WCAG AA) on whatever color the note has.
+    function noteTextOn(bg) { return legibleOn("#2b2813", bg, 4.5) }
+    function noteNumberOn(bg) { return legibleOn("#5e5a3f", bg, 4.5) }    // gray, quieter than the text
+    function noteSubtleTextOn(bg) { return legibleOn("#4d4a33", bg, 4.5) }
+    function noteDoneTextOn(bg) { return legibleOn("#166534", bg, 4.5) }
+    function noteHoverBorderOn(bg) { return mix(bg, noteTextOn(bg), 0.35) }
+    function noteChipOn(bg) { return mix(bg, noteTextOn(bg), 0.12) }
+    function noteChipTextOn(bg) { return legibleOn(noteTextOn(bg), noteChipOn(bg), 4.5) }
+
+    readonly property color noteText: noteTextOn(note)
+    readonly property color noteNumber: noteNumberOn(note)
+    readonly property color noteSubtleText: noteSubtleTextOn(note)
+    readonly property color noteDoneText: noteDoneTextOn(note)
+    readonly property color noteHoverBorder: noteHoverBorderOn(note)
     readonly property color noteShadow: dark ? "#66000000" : "#33000000"
     readonly property color progressTrack: "#26000000"
     readonly property color progressDone: "#16a34a"
 
     // Category label on a note, and the header of a stack of notes in a column.
-    readonly property color noteChip: mix(note, noteText, 0.12)
-    readonly property color noteChipText: legibleOn(noteText, noteChip, 4.5)
+    readonly property color noteChip: noteChipOn(note)
+    readonly property color noteChipText: noteChipTextOn(note)
     readonly property color stackHeaderBackground: mix(columnBackground, text, dark ? 0.14 : 0.1)
     readonly property color stackHeaderCount: legibleOn(subtleText, stackHeaderBackground, 4.5)
 

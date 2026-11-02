@@ -19,6 +19,9 @@ Item {
     // Show the category as a label. Off for notes in a stack, whose header says it.
     property bool showCategory: true
     readonly property bool isTaskCard: true
+    // This note's color: its category's palette color when notes vary by
+    // category, else the user's note color. Text colors follow it.
+    readonly property color noteBg: Theme.noteColorFor(task.category)
     readonly property bool dragging: mouse.drag.active
 
     signal clicked()
@@ -92,10 +95,11 @@ Item {
         }
 
         Rectangle {
+            objectName: "notePaper"
             anchors.fill: parent
             radius: 4
-            color: Theme.note
-            border.color: mouse.containsMouse ? Theme.noteHoverBorder : "transparent"
+            color: root.noteBg
+            border.color: mouse.containsMouse ? Theme.noteHoverBorderOn(root.noteBg) : "transparent"
         }
 
         GlowEdge {
@@ -120,7 +124,7 @@ Item {
                 implicitWidth: categoryLabel.implicitWidth + 12
                 implicitHeight: categoryLabel.implicitHeight + 4
                 radius: 3
-                color: Theme.noteChip
+                color: Theme.noteChipOn(root.noteBg)
 
                 Label {
                     id: categoryLabel
@@ -130,7 +134,7 @@ Item {
                     elide: Text.ElideRight
                     font.pixelSize: 11
                     font.bold: true
-                    color: Theme.noteChipText
+                    color: Theme.noteChipTextOn(root.noteBg)
                 }
             }
 
@@ -138,7 +142,7 @@ Item {
                 Layout.fillWidth: true
                 text: root.task.cardText
                 wrapMode: Text.Wrap
-                color: Theme.noteText
+                color: Theme.noteTextOn(root.noteBg)
                 font.pixelSize: 14
             }
 
@@ -155,7 +159,7 @@ Item {
                     objectName: "cardNumber"
                     text: "#" + root.task.number
                     font.pixelSize: 11
-                    color: Theme.noteNumber
+                    color: Theme.noteNumberOn(root.noteBg)
                 }
 
                 Label {
@@ -163,7 +167,7 @@ Item {
                     visible: (root.task.artifactCount || 0) > 0
                     text: root.task.artifactCount === 1 ? qsTr("1 file") : qsTr("%1 files").arg(root.task.artifactCount)
                     font.pixelSize: 11
-                    color: Theme.noteSubtleText
+                    color: Theme.noteSubtleTextOn(root.noteBg)
                 }
 
                 Rectangle {
@@ -188,7 +192,7 @@ Item {
                     text: "\u2713 " + root.task.done + "/" + root.task.total
                     font.pixelSize: 12
                     font.bold: true
-                    color: parent.complete ? Theme.noteDoneText : Theme.noteSubtleText
+                    color: parent.complete ? Theme.noteDoneTextOn(root.noteBg) : Theme.noteSubtleTextOn(root.noteBg)
                 }
             }
         }

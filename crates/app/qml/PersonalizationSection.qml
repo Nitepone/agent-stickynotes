@@ -14,6 +14,8 @@ PreferencesSection {
     property string primaryColor: ""        // custom color, or "" for the default
     property string secondaryColor: ""
     property string noteColor: ""           // custom note color, or "" for the yellow
+    property string noteStyle: "user"       // "user" or "variable" (a palette color per category)
+    property string notePalette: ""         // palette id for "variable"; "" is the first
     property string motionSetting: "system"     // "system", "on" or "off"
 
     signal themeModeChosen(string mode)
@@ -22,6 +24,8 @@ PreferencesSection {
     signal resetColorsRequested()
     signal noteColorChosen(string color)
     signal resetNoteColorRequested()
+    signal noteStyleChosen(string style)
+    signal notePaletteChosen(string id)
     signal motionSettingChosen(string setting)
 
     ScrollView {
@@ -138,22 +142,75 @@ PreferencesSection {
                 color: Theme.text
             }
 
-            ColorChoice {
-                objectName: "noteChoice"
+            Label {
+                text: qsTr("Note style")
+                font.bold: true
+                color: Theme.text
+            }
+            ComboBox {
+                id: styleBox
+                objectName: "noteStyleBox"
+                Layout.preferredWidth: 260
+                textRole: "label"
+                valueRole: "value"
+                model: [
+                    { value: "user", label: qsTr("User color") },
+                    { value: "variable", label: qsTr("Variable") }
+                ]
+                onActivated: section.noteStyleChosen(currentValue)
+                Accessible.name: qsTr("Note style")
+
+                // Shows the stored style, and keeps doing so after the user
+                // has picked something (a plain binding would be dropped).
+                Binding {
+                    target: styleBox
+                    property: "currentIndex"
+                    value: styleBox.count >= 0 ? Math.max(0, styleBox.indexOfValue(section.noteStyle)) : 0
+                }
+            }
+            Label {
                 Layout.fillWidth: true
-                label: qsTr("Note color")
-                description: qsTr("The color of the notes on the board. Text on a note adjusts to stay readable.")
-                presets: Theme.notePresets
-                isDefault: section.noteColor === ""
-                effective: Theme.note
-                onChosen: (color) => section.noteColorChosen(color)
+                text: section.noteStyle === "variable"
+                      ? qsTr("Notes get a color from the palette according to their category. Text on a note adjusts to stay readable.")
+                      : qsTr("All notes use the one color you choose.")
+                wrapMode: Text.Wrap
+                color: Theme.subtleText
+                font.pixelSize: 12
             }
 
-            Button {
-                objectName: "resetNoteColor"
-                text: qsTr("Reset note color")
-                enabled: section.noteColor !== ""
-                onClicked: section.resetNoteColorRequested()
+            // Style "User color": the single note color.
+            ColumnLayout {
+                objectName: "userNoteControls"
+                Layout.fillWidth: true
+                visible: section.noteStyle !== "variable"
+                spacing: 14
+
+                ColorChoice {
+                    objectName: "noteChoice"
+                    Layout.fillWidth: true
+                    label: qsTr("Note color")
+                    description: qsTr("The color of the notes on the board. Text on a note adjusts to stay readable.")
+                    presets: Theme.notePresets
+                    isDefault: section.noteColor === ""
+                    effective: Theme.note
+                    onChosen: (color) => section.noteColorChosen(color)
+                }
+
+                Button {
+                    objectName: "resetNoteColor"
+                    text: qsTr("Reset note color")
+                    enabled: section.noteColor !== ""
+                    onClicked: section.resetNoteColorRequested()
+                }
+            }
+
+            // Style "Variable": the palettes to choose from.
+            NotePaletteChoice {
+                objectName: "paletteChoice"
+                Layout.fillWidth: true
+                visible: section.noteStyle === "variable"
+                selectedId: section.notePalette
+                onChosen: (id) => section.notePaletteChosen(id)
             }
 
             Label {

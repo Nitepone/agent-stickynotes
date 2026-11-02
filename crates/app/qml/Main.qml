@@ -52,6 +52,9 @@ ApplicationWindow {
     Binding { target: Theme; property: "primaryColor"; value: prefs.primary_color }
     Binding { target: Theme; property: "secondaryColor"; value: prefs.secondary_color }
     Binding { target: Theme; property: "noteColor"; value: prefs.note_color }
+    Binding { target: Theme; property: "noteStyle"; value: prefs.note_style }
+    Binding { target: Theme; property: "notePalette"; value: prefs.note_palette }
+    Binding { target: Theme; property: "noteCategories"; value: window.board.categories || [] }
 
     BoardController { id: controller }
     // The user's preferences (see settings::PREFS); replaced whenever one changes.
@@ -689,6 +692,10 @@ ApplicationWindow {
             noteColor: prefs.note_color
             onNoteColorChosen: (color) => controller.choosePref("note_color", color)
             onResetNoteColorRequested: controller.choosePref("note_color", "")
+            noteStyle: prefs.note_style
+            notePalette: prefs.note_palette
+            onNoteStyleChosen: (style) => controller.choosePref("note_style", style)
+            onNotePaletteChosen: (id) => controller.choosePref("note_palette", id)
             motionSetting: prefs.motion_setting
             onMotionSettingChosen: (setting) => controller.choosePref("motion_setting", setting)
         }

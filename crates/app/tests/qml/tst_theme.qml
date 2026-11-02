@@ -181,6 +181,25 @@ TestCase {
         compare(failures, [], "pairs below 4.5:1")
     }
 
+    // Every color of every variable-note palette (see also tst_note_colors.qml).
+    function test_note_text_is_readable_on_every_palette_color_in_both_modes() {
+        const failures = []
+        const texts = [Theme.noteTextOn, Theme.noteNumberOn, Theme.noteSubtleTextOn, Theme.noteDoneTextOn]
+        for (const mode of ["light", "dark"]) {
+            Theme.mode = mode
+            for (const palette of Theme.notePalettes) {
+                for (const color of palette.colors) {
+                    texts.forEach((text, i) => {
+                        const ratio = Theme.contrast(text(color), color)
+                        if (ratio < 4.5)
+                            failures.push(mode + " " + palette.id + " " + color + " #" + i + " = " + ratio.toFixed(2))
+                    })
+                }
+            }
+        }
+        compare(failures, [], "pairs below 4.5:1")
+    }
+
     function test_text_turns_light_on_a_dark_note() {
         Theme.noteColor = "#1a1a2e"
         verify(Theme.luminance(Theme.noteText) > Theme.luminance(Theme.note))

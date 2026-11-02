@@ -14,6 +14,29 @@ pub fn normalize_mode(mode: &str) -> &'static str {
     }
 }
 
+/// How notes are colored: one user-chosen color, or a palette color per category.
+pub const NOTE_STYLES: [&str; 2] = ["user", "variable"];
+/// Ids of the note palettes in `Theme.qml` (`notePalettes`); the first is the default.
+pub const NOTE_PALETTES: [&str; 4] = ["pastel", "soft-earth", "candy", "cool"];
+
+/// A known note style, else the default (`user`).
+pub fn normalize_note_style(style: &str) -> &'static str {
+    let style = style.trim();
+    NOTE_STYLES
+        .into_iter()
+        .find(|s| s.eq_ignore_ascii_case(style))
+        .unwrap_or(NOTE_STYLES[0])
+}
+
+/// A known palette id, else the first palette.
+pub fn normalize_note_palette(id: &str) -> &'static str {
+    let id = id.trim();
+    NOTE_PALETTES
+        .into_iter()
+        .find(|p| p.eq_ignore_ascii_case(id))
+        .unwrap_or(NOTE_PALETTES[0])
+}
+
 /// A user-chosen color as lowercase `#rrggbb`. `#rgb` is expanded. Returns
 /// `None` if the text is not a color.
 pub fn normalize_color(color: &str) -> Option<String> {
@@ -42,6 +65,35 @@ mod tests {
         assert_eq!(normalize_mode("light"), "light");
         assert_eq!(normalize_mode(""), "light");
         assert_eq!(normalize_mode("solarized"), "light");
+    }
+
+    #[test]
+    fn note_style_and_palette_fall_back_to_the_defaults() {
+        assert_eq!(normalize_note_style("variable"), "variable");
+        assert_eq!(normalize_note_style(" Variable "), "variable");
+        assert_eq!(normalize_note_style("user"), "user");
+        assert_eq!(normalize_note_style("rainbow"), "user");
+        assert_eq!(normalize_note_style(""), "user");
+        assert_eq!(normalize_note_palette("candy"), "candy");
+        assert_eq!(normalize_note_palette("COOL"), "cool");
+        assert_eq!(normalize_note_palette("nope"), "pastel");
+        assert_eq!(normalize_note_palette(""), "pastel");
+    }
+
+    /// The ids accepted here must be exactly the palettes `Theme.qml` defines,
+    /// in the same order, or a saved choice would silently fall back.
+    #[test]
+    fn note_palette_ids_match_theme_qml() {
+        let qml = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("qml/Theme.qml"),
+        )
+        .unwrap();
+        let ids: Vec<&str> = qml
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("{ id: \""))
+            .filter_map(|l| l.split('"').next())
+            .collect();
+        assert_eq!(ids, NOTE_PALETTES);
     }
 
     #[test]

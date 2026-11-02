@@ -29,6 +29,8 @@ Item {
     SignalSpy { id: resetSpy; target: personalization; signalName: "resetColorsRequested" }
     SignalSpy { id: noteSpy; target: personalization; signalName: "noteColorChosen" }
     SignalSpy { id: noteResetSpy; target: personalization; signalName: "resetNoteColorRequested" }
+    SignalSpy { id: styleSpy; target: personalization; signalName: "noteStyleChosen" }
+    SignalSpy { id: paletteSpy; target: personalization; signalName: "notePaletteChosen" }
     SignalSpy { id: motionSpy; target: personalization; signalName: "motionSettingChosen" }
 
     TestCase {
@@ -36,7 +38,8 @@ Item {
         when: windowShown
 
         function init() {
-            for (const spy of [backSpy, modeSpy, primarySpy, secondarySpy, resetSpy, motionSpy, noteSpy, noteResetSpy])
+            for (const spy of [backSpy, modeSpy, primarySpy, secondarySpy, resetSpy, motionSpy, noteSpy, noteResetSpy,
+                               styleSpy, paletteSpy])
                 spy.clear()
             page.currentIndex = 0
             personalization.themeMode = "light"
@@ -44,12 +47,15 @@ Item {
             personalization.secondaryColor = ""
             personalization.motionSetting = "system"
             personalization.noteColor = ""
+            personalization.noteStyle = "user"
+            personalization.notePalette = ""
             Theme.noteColor = ""
             find("motionBox").currentIndex = 0
             Theme.mode = "light"
             Theme.primaryColor = ""
             Theme.secondaryColor = ""
             page.focusSidebar()
+            waitForRendering(page)   // the theme change above re-polishes the page
         }
 
         function find(name, root) {
@@ -275,6 +281,94 @@ Item {
             compare(resetSpy.count, 1)
             personalization.primaryColor = ""
             verify(!reset.enabled)
+        }
+
+        // ---- note style: user color or variable --------------------------
+
+        // Scroll the page so `item` is on screen, as a user would before clicking it.
+        function reveal(item) {
+            let flick = item.parent
+            while (flick && flick.contentY === undefined)
+                flick = flick.parent
+            verify(flick, "inside a scrolling page")
+            const y = item.mapToItem(flick.contentItem, 0, 0).y
+            flick.contentY = Math.max(0, y - 40)
+        }
+
+        function test_the_default_note_style_shows_the_user_color_controls() {
+            const box = find("noteStyleBox")
+            compare(box.count, 2)
+            compare(box.currentValue, "user")
+            compare(box.currentText, "User color")
+            verify(find("userNoteControls").visible)
+            verify(find("noteChoice").visible)
+            verify(find("resetNoteColor").visible)
+            verify(!find("paletteChoice").visible)
+        }
+
+        function test_the_variable_style_shows_the_palettes_instead() {
+            personalization.noteStyle = "variable"
+            const box = find("noteStyleBox")
+            compare(box.currentValue, "variable")
+            compare(box.currentText, "Variable")
+            verify(!find("userNoteControls").visible)
+            verify(!find("noteChoice").visible)
+            verify(find("paletteChoice").visible)
+            for (const palette of Theme.notePalettes) {
+                const row = find("palette-" + palette.id)
+                verify(row && row.visible, palette.id)
+                compare(row.Accessible.name, palette.name)
+                verify(row.activeFocusOnTab)
+                compare(TestHelpers.findAllByName(row, "paletteColor").length, palette.colors.length)
+            }
+            personalization.noteStyle = "user"
+            verify(find("noteChoice").visible)
+            verify(!find("paletteChoice").visible)
+        }
+
+        function test_choosing_a_note_style_emits_it() {
+            const box = find("noteStyleBox")
+            box.currentIndex = 1
+            box.activated(1)
+            compare(styleSpy.count, 1)
+            compare(styleSpy.signalArguments[0][0], "variable")
+        }
+
+        function test_choosing_a_palette_emits_it_and_the_choice_is_marked() {
+            personalization.noteStyle = "variable"
+            verify(find("palette-pastel").selected, "the first palette is the default")
+            verify(!find("palette-candy").selected)
+            reveal(find("palette-candy"))
+            mouseClick(find("palette-candy"))
+            compare(paletteSpy.count, 1)
+            compare(paletteSpy.signalArguments[0][0], "candy")
+            // The owner stores it and feeds it back.
+            personalization.notePalette = "candy"
+            Theme.notePalette = "candy"
+            verify(find("palette-candy").selected)
+            verify(!find("palette-pastel").selected)
+            Theme.noteCategories = ["a"]
+            Theme.noteStyle = "variable"
+            same(Theme.noteColorFor("a"), Theme.paletteById("candy").colors[0])
+            Theme.noteStyle = "user"
+            Theme.noteCategories = []
+            Theme.notePalette = ""
+        }
+
+        function test_a_palette_can_be_chosen_from_the_keyboard() {
+            personalization.noteStyle = "variable"
+            const row = find("palette-cool")
+            row.forceActiveFocus()
+            verify(row.activeFocus)
+            keyClick(Qt.Key_Space)
+            compare(paletteSpy.count, 1)
+            compare(paletteSpy.signalArguments[0][0], "cool")
+        }
+
+        function test_an_unknown_palette_id_shows_the_first_as_selected() {
+            personalization.noteStyle = "variable"
+            personalization.notePalette = "gone"
+            verify(find("palette-pastel").selected)
         }
 
         // ---- motion ------------------------------------------------------
