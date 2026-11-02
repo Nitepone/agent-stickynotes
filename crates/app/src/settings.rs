@@ -9,6 +9,22 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_PORT: u16 = 7317;
 
+/// A credential kept in the settings file. Its `Debug` output hides the value
+/// so it cannot end up in a log by accident.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Secret(pub String);
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_empty() {
+            "Secret(unset)"
+        } else {
+            "Secret(<hidden>)"
+        })
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -42,10 +58,16 @@ pub struct Settings {
     pub draft_agent: String,
     /// Added to the built-in prompt of the draft agent.
     pub draft_system_prompt: String,
-    /// Claude Code model alias; empty means Claude Code's own default.
+    /// Claude Code model alias (empty means its own default), or the model
+    /// name to ask an Ollama-style server for.
     pub draft_model: String,
     /// Claude Code thinking (effort) level; empty means its default.
     pub draft_effort: String,
+    /// Base URL of the Ollama-style server used when `draft_agent` is `ollama`.
+    pub ollama_endpoint: String,
+    /// Optional bearer token for that server. Kept in this file in plain text
+    /// and never printed (see [`Secret`]).
+    pub ollama_token: Secret,
     /// Display style of the Markdown viewer (`default`, `reading`, ...); the
     /// viewer falls back to the default for an id it does not know.
     pub markdown_style: String,
@@ -75,6 +97,8 @@ impl Default for Settings {
             draft_system_prompt: String::new(),
             draft_model: String::new(),
             draft_effort: String::new(),
+            ollama_endpoint: crate::editor::DEFAULT_OLLAMA_ENDPOINT.into(),
+            ollama_token: Secret::default(),
             markdown_style: "default".into(),
             extra: serde_json::Map::new(),
         }
@@ -97,9 +121,17 @@ impl Settings {
         ] {
             *c = crate::theme::normalize_color(c).unwrap_or_default();
         }
-        self.draft_model = crate::editor::model(&self.draft_model)
-            .unwrap_or_default()
-            .into();
+        self.draft_model = if self.draft_agent == crate::editor::OLLAMA {
+            crate::editor::model_name(&self.draft_model).unwrap_or_default()
+        } else {
+            // Claude Code only knows its aliases.
+            crate::editor::model(&self.draft_model)
+                .unwrap_or_default()
+                .into()
+        };
+        self.ollama_endpoint = crate::editor::endpoint(&self.ollama_endpoint)
+            .unwrap_or_else(|| crate::editor::DEFAULT_OLLAMA_ENDPOINT.into());
+        self.ollama_token = Secret(crate::editor::token(&self.ollama_token.0).unwrap_or_default());
         self.draft_effort = crate::editor::effort(&self.draft_effort)
             .unwrap_or_default()
             .into();
@@ -123,6 +155,9 @@ impl Settings {
             "draft_system_prompt": self.draft_system_prompt,
             "draft_model": self.draft_model,
             "draft_effort": self.draft_effort,
+            "ollama_endpoint": self.ollama_endpoint,
+            // The token field of Preferences needs the value to show it (masked).
+            "ollama_token": self.ollama_token.0,
             "motion_setting": self.reduce_motion,
             "reduce_motion": crate::motion::effective(&self.reduce_motion, system_reduced_motion),
         })
@@ -162,7 +197,7 @@ fn exact(normalized: &str, value: &str) -> Option<String> {
 
 /// Preferences changed by the UI. Keys are the `prefs_json` keys, except
 /// that `motion_setting` is stored as the `reduce_motion` setting.
-pub const PREFS: [Pref; 13] = [
+pub const PREFS: [Pref; 15] = [
     Pref {
         key: "theme_mode",
         validate: |v| exact(crate::theme::normalize_mode(v), v),
@@ -215,8 +250,18 @@ pub const PREFS: [Pref; 13] = [
     },
     Pref {
         key: "draft_model",
-        validate: |v| crate::editor::model(v).map(String::from),
+        validate: crate::editor::model_name,
         set: |s, v| s.draft_model = v,
+    },
+    Pref {
+        key: "ollama_endpoint",
+        validate: crate::editor::endpoint,
+        set: |s, v| s.ollama_endpoint = v,
+    },
+    Pref {
+        key: "ollama_token",
+        validate: crate::editor::token,
+        set: |s, v| s.ollama_token = Secret(v),
     },
     Pref {
         key: "draft_effort",
@@ -482,7 +527,84 @@ mod tests {
         assert_eq!(settings.draft_system_prompt, "");
         assert_eq!(settings.draft_model, "");
         assert_eq!(settings.draft_effort, "");
+        assert_eq!(settings.ollama_endpoint, "http://localhost:11434");
+        assert_eq!(settings.ollama_token, Secret::default());
         assert_eq!(settings.markdown_style, "default");
+    }
+
+    #[test]
+    fn ollama_choices_survive_a_restart_and_the_token_is_never_debug_printed() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_in(dir.path());
+        let mut settings = config.load_settings();
+        settings.draft_agent = "ollama".into();
+        settings.draft_model = "llama3.2:3b".into();
+        settings.ollama_endpoint = "https://llm.example.com:8080".into();
+        settings.ollama_token = Secret("s3cr3t-token".into());
+        config.save_settings(&settings).unwrap();
+
+        let restored = config_in(dir.path()).load_settings();
+        assert_eq!(restored.draft_agent, "ollama");
+        assert_eq!(restored.draft_model, "llama3.2:3b", "free text for Ollama");
+        assert_eq!(restored.ollama_endpoint, "https://llm.example.com:8080");
+        assert_eq!(restored.ollama_token.0, "s3cr3t-token");
+        assert!(!format!("{restored:?}").contains("s3cr3t-token"));
+        assert!(!format!("{:?}", restored.ollama_token).contains("s3cr3t"));
+    }
+
+    #[test]
+    fn invalid_ollama_values_in_a_file_load_as_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("settings.json"),
+            r#"{"draft_agent": "claude_code", "draft_model": "llama3.2:3b",
+                "ollama_endpoint": "ftp://nope", "ollama_token": "bad\ntoken"}"#,
+        )
+        .unwrap();
+        let s = config_in(dir.path()).load_settings();
+        assert_eq!(s.draft_model, "", "Claude Code only knows its aliases");
+        assert_eq!(s.ollama_endpoint, "http://localhost:11434");
+        assert_eq!(s.ollama_token.0, "");
+    }
+
+    #[test]
+    fn ollama_prefs_are_validated() {
+        let ok = |k: &str, v: &str, want: &str| {
+            assert_eq!(validate(k, v).as_deref(), Some(want), "{k}={v}")
+        };
+        let bad = |k: &str, v: &str| assert_eq!(validate(k, v), None, "{k}={v}");
+        ok("draft_agent", "ollama", "ollama");
+        ok(
+            "ollama_endpoint",
+            " http://localhost:8080/ ",
+            "http://localhost:8080",
+        );
+        ok(
+            "ollama_endpoint",
+            "https://h.example/api/",
+            "https://h.example/api",
+        );
+        bad("ollama_endpoint", "localhost:11434");
+        bad("ollama_endpoint", "ftp://h");
+        bad("ollama_endpoint", "http://");
+        bad("ollama_endpoint", "http://a b");
+        bad("ollama_endpoint", "");
+        ok("ollama_token", "", "");
+        ok("ollama_token", "  abc123 ", "abc123");
+        bad("ollama_token", "a\nb");
+        ok("draft_model", "llama3.2:3b", "llama3.2:3b");
+        bad("draft_model", "bad\nname");
+    }
+
+    #[test]
+    fn prefs_json_carries_the_token_only_for_the_edit_field() {
+        let s = Settings {
+            ollama_token: Secret("tok-123".into()),
+            ..Settings::default()
+        };
+        let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
+        assert_eq!(v["ollama_token"], "tok-123");
+        assert_eq!(v["ollama_endpoint"], "http://localhost:11434");
     }
 
     #[test]
@@ -584,7 +706,6 @@ mod tests {
         ok("draft_system_prompt", "", "");
         ok("draft_model", "opus", "opus");
         ok("draft_model", "", "");
-        bad("draft_model", "gpt");
         ok("draft_effort", "high", "high");
         ok("draft_effort", "", "");
         bad("draft_effort", "ludicrous");

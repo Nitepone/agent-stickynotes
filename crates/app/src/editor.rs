@@ -7,10 +7,13 @@ use std::path::{Path, PathBuf};
 
 use spellbook::Dictionary;
 
-/// The only draft agent type for now: Claude Code run as a subshell.
+/// Claude Code run as a subshell (the default draft agent).
 pub const CLAUDE_CODE: &str = "claude_code";
+/// An Ollama-style server (Ollama, llama.cpp's `llama-server`, ...) over HTTP.
+pub const OLLAMA: &str = "ollama";
 /// Draft agent types offered in preferences (the first is the default).
-pub const AGENTS: [&str; 1] = [CLAUDE_CODE];
+pub const AGENTS: [&str; 2] = [CLAUDE_CODE, OLLAMA];
+pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://localhost:11434";
 /// Claude Code model aliases; empty is Claude Code's own default.
 pub const MODELS: [&str; 5] = ["", "fable", "opus", "sonnet", "haiku"];
 /// Claude Code effort ("thinking") levels; empty is its default.
@@ -32,6 +35,38 @@ pub fn normalize_agent(value: &str) -> &'static str {
 /// A known model alias, or `None` for text that is not one. Empty is valid.
 pub fn model(value: &str) -> Option<&'static str> {
     pick(&MODELS, value)
+}
+
+/// A model name for an Ollama-style server: free text without control
+/// characters. Empty is valid here; drafting then asks for a model to be set.
+pub fn model_name(value: &str) -> Option<String> {
+    let value = value.trim();
+    (value.chars().count() <= 200 && !value.chars().any(char::is_control))
+        .then(|| value.to_string())
+}
+
+/// The base URL of an Ollama-style server: `http` or `https` with a host, no
+/// spaces. A trailing slash is removed. Empty is not valid.
+pub fn endpoint(value: &str) -> Option<String> {
+    let value = value.trim().trim_end_matches('/');
+    let rest = value
+        .strip_prefix("http://")
+        .or_else(|| value.strip_prefix("https://"))?;
+    let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let ok = !host.is_empty()
+        && !host.starts_with(':')
+        && !host.contains('@')
+        && value.len() <= 2000
+        && !value.chars().any(|c| c.is_whitespace() || c.is_control());
+    ok.then(|| value.to_string())
+}
+
+/// An auth token: no whitespace or control characters, so it is safe in a
+/// header. Empty means no token.
+pub fn token(value: &str) -> Option<String> {
+    let value = value.trim();
+    (value.len() <= 4096 && !value.chars().any(|c| c.is_whitespace() || c.is_control()))
+        .then(|| value.to_string())
 }
 
 /// A known effort level, or `None` for text that is not one. Empty is valid.
@@ -318,6 +353,7 @@ mod tests {
     #[test]
     fn draft_agent_options_are_validated() {
         assert_eq!(normalize_agent("claude_code"), "claude_code");
+        assert_eq!(normalize_agent("OLLAMA"), "ollama");
         assert_eq!(normalize_agent("something else"), "claude_code");
         assert_eq!(model("Opus"), Some("opus"));
         assert_eq!(model(""), Some(""));

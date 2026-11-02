@@ -8,6 +8,8 @@
 //! Qt so it can be unit tested.
 
 pub mod claude_code;
+pub mod ollama;
+pub mod select;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

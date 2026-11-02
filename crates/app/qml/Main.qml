@@ -712,6 +712,10 @@ ApplicationWindow {
             onDraftModelChosen: (model) => controller.choosePref("draft_model", model)
             draftEffort: prefs.draft_effort
             onDraftEffortChosen: (effort) => controller.choosePref("draft_effort", effort)
+            ollamaEndpoint: prefs.ollama_endpoint
+            onOllamaEndpointChosen: (endpoint) => ollamaEndpointInvalid = !controller.choosePref("ollama_endpoint", endpoint)
+            ollamaToken: prefs.ollama_token
+            onOllamaTokenChosen: (token) => controller.choosePref("ollama_token", token)
         }
 
         AboutSection {

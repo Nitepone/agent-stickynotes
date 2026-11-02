@@ -7,7 +7,7 @@
 | Refer to a task | Every task has a permanent number (`#12`) at the bottom left of the note and in its dialog. Numbers are never reused. Tell an agent "look at #12"; every agent tool accepts `#12` in place of an id. |
 | Move a task | Drag the note to a position in any column |
 | Delete a task | Drag it onto the trash can (bottom right), or **Delete** in its dialog |
-| Draft requirements and criteria | In a task's dialog, **Draft requirements & criteria**. Claude Code proposes new items from the descriptions; it also picks one of the board's existing categories if the task has none (a note appears if it cannot). Review the result, then **Save**. **Undo draft** (next to the button, after confirming) puts the requirements, criteria and category back as they were before the draft. Needs `claude` on your PATH. |
+| Draft requirements and criteria | In a task's dialog, **Draft requirements & criteria**. Claude Code (or an Ollama server, see Preferences ▸ Editor) proposes new items from the descriptions; it also picks one of the board's existing categories if the task has none (a note appears if it cannot). Review the result, then **Save**. **Undo draft** (next to the button, after confirming) puts the requirements, criteria and category back as they were before the draft. Claude Code needs `claude` on your PATH. |
 | Link tasks | In a task's dialog, **References**: pick a relation and a task, **Add**, then **Save**. The other task shows the matching reverse link. |
 | Group tasks | In a task's dialog, **Category**: pick one already on the board or type a new name (case is ignored: "ui" selects "UI"), and use the clear button to remove it. Tasks of one category in the same column stack under a header showing the name and count; click it (or press Enter/Space) to collapse or expand the stack. Uncategorized tasks and a lone categorized task stay ordinary cards. Collapsed state is not saved. |
 | Open an artifact | Click a file in a task's dialog (or in **Board ▸ Project Settings…**, which lists every file in `artifacts/`). It opens in its own window: Markdown has a contents pane to jump between sections, search (Ctrl+F; Enter / Shift+Enter for next and previous), zoom (Ctrl+`+`/`-`/`0` or Ctrl + wheel) and a display style menu (Default, Reading, Compact, Monospace) that is remembered; images fit the window or show at actual size. |
@@ -15,7 +15,7 @@
 | Give agents project instructions | **Board ▸ Project Settings…** (document prompt, code guidance); **Agent ▸ Export Claude Code Skill…** writes them into a `SKILL.md` |
 | See what an agent changed | Notes an agent created, moved, edited or ticked criteria on **glow green** at the edges (a highlight circles the note; an edited note also gets a sheen). The glow stays until you are back, then fades over 20 seconds. Your own changes never glow. With reduced motion (Preferences ▸ Personalization ▸ Motion, or the desktop's setting) the glow is still. |
 | Change the look | **File ▸ Preferences…** (Ctrl+,) or the gear icon in the toolbar: Personalization has Light/Dark, primary and secondary accent colors and the sticky note color (presets, a hex code, or a picker), plus resets. **Note style** is either *User color* (one color for every note, the default) or *Variable*: pick a palette (Pastel, Soft earth, Candy, Cool) and each category gets its own color from it, assigned alphabetically (case ignored), so the same categories always get the same colors whatever order they were created in; with more categories than palette colors the colors repeat, and uncategorized notes keep your note color. Text on a note adjusts to stay readable on any color. Changes apply immediately and are remembered. |
-| Spell check and the draft agent | Preferences ▸ Editor: turn the red underlines for misspelled words in the task editor on or off, and choose how the draft agent runs (agent type, an extra system prompt, and for Claude Code the model and thinking level). |
+| Spell check and the draft agent | Preferences ▸ Editor: turn the red underlines for misspelled words in the task editor on or off, and choose how the draft agent runs (agent type, an extra system prompt, and for Claude Code the model and thinking level, or for an Ollama server its endpoint, model and optional auth token). |
 | Edit a column | Click the column title |
 | Reorder / add / delete columns | the pencil icon (toolbar) or **Board ▸ Edit Columns** |
 | Save / open / new | **File ▸ New Project… / Open Project…** (the picker), **File ▸ Save**. A floppy-disk icon appears in the toolbar while there are unsaved changes. You are warned before unsaved changes are lost. |
@@ -30,7 +30,7 @@ folders, a `dictionaries` folder next to the executable (the AppImage ships
 underlined, and Preferences ▸ Editor says so. Acronyms, `camelCase`, words with
 digits and paths or addresses are not flagged.
 
-## Drafting with Claude Code
+## Drafting (Claude Code or an Ollama-style server)
 
 The draft button runs `claude -p` as a subprocess, with no tools, MCP servers or
 session history, and sends it a system prompt plus the task as JSON (the
@@ -40,6 +40,21 @@ cancelled. Preferences ▸ Editor adds your own system prompt to the built-in on
 (which fixes the reply format) and sets Claude Code's `--model` and `--effort`.
 If `claude` is not on your PATH, set `"claude_command"` in
 `~/.config/agent-stickynotes/settings.json`. The backend sits behind the
-`DraftBackend` trait (`crates/app/src/drafting.rs`), so an Ollama-style endpoint
-or local model can be added without touching the UI.
+`DraftBackend` trait (`crates/app/src/drafting.rs`).
+
+Choose **Ollama server** as the agent type in Preferences ▸ Editor to draft with
+a model served over HTTP instead. Set the endpoint (default
+`http://localhost:11434`), the model name (required, e.g. `llama3.2`) and, if the
+server wants one, an auth token (masked in the field, sent as
+`Authorization: Bearer <token>` only when set, and stored in plain text in
+`settings.json`; it is never logged). The app sends one non-streaming
+`POST <endpoint>/v1/chat/completions` asking for a JSON reply, the same
+OpenAI-compatible call that both Ollama and llama.cpp's `llama-server` answer, so
+either can be used (for llama.cpp, point the endpoint at `llama-server`, e.g.
+`http://localhost:8080`, and use any model name; start it with `--api-key` to
+require a token). The HTTP client is `ureq`, a small blocking client; the `ollama-rs`
+crate was not used because it targets Ollama's native API, which would need a
+second code path for llama.cpp. An unreachable server shows `Cannot reach the Ollama
+server at <endpoint>`, and a 401/403 shows that the server rejected the auth token.
+The same system prompt and reply parsing as for Claude Code apply.
 

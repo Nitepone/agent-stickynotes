@@ -17,12 +17,17 @@ PreferencesSection {
     property string draftSystemPrompt: ""
     property string draftModel: ""              // "" is the agent's own default
     property string draftEffort: ""
+    property string ollamaEndpoint: "http://localhost:11434"
+    property string ollamaToken: ""             // optional; shown masked
+    property bool ollamaEndpointInvalid: false  // the owner rejected the last endpoint typed
 
     signal spellCheckChosen(bool enabled)
     signal draftAgentChosen(string agent)
     signal draftSystemPromptChosen(string prompt)
     signal draftModelChosen(string model)
     signal draftEffortChosen(string effort)
+    signal ollamaEndpointChosen(string endpoint)
+    signal ollamaTokenChosen(string token)
 
     // The prompt is saved shortly after typing stops, and when the field loses
     // focus or the page is left, rather than on every keystroke.
@@ -31,7 +36,18 @@ PreferencesSection {
         if (promptField.text !== section.draftSystemPrompt)
             section.draftSystemPromptChosen(promptField.text)
     }
-    onVisibleChanged: if (!visible) savePrompt()
+    onVisibleChanged: if (!visible) { savePrompt(); saveOllama() }
+
+    // Endpoint, token and model are saved when the field is left (or Enter is
+    // pressed), and when the page is left.
+    function saveOllama() {
+        if (endpointField.text !== section.ollamaEndpoint)
+            section.ollamaEndpointChosen(endpointField.text)
+        if (tokenField.text !== section.ollamaToken)
+            section.ollamaTokenChosen(tokenField.text)
+        if (section.draftAgent === "ollama" && ollamaModelField.text !== section.draftModel)
+            section.draftModelChosen(ollamaModelField.text)
+    }
 
     Timer {
         id: saveTimer
@@ -98,7 +114,10 @@ PreferencesSection {
                 Layout.preferredWidth: 260
                 textRole: "label"
                 valueRole: "value"
-                model: [{ value: "claude_code", label: qsTr("Claude Code (subshell)") }]
+                model: [
+                    { value: "claude_code", label: qsTr("Claude Code (subshell)") },
+                    { value: "ollama", label: qsTr("Ollama server") }
+                ]
                 onActivated: section.draftAgentChosen(currentValue)
                 Binding {
                     target: agentBox
@@ -127,6 +146,80 @@ PreferencesSection {
             }
 
             // Options that belong to the selected agent type.
+            ColumnLayout {
+                objectName: "ollamaOptions"
+                Layout.fillWidth: true
+                visible: section.draftAgent === "ollama"
+                spacing: 14
+
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Works with Ollama, llama.cpp's llama-server and other servers that offer the OpenAI-compatible /v1/chat/completions endpoint.")
+                    wrapMode: Text.Wrap
+                    color: Theme.subtleText
+                    font.pixelSize: 12
+                }
+
+                SectionLabel { text: qsTr("Endpoint") }
+                FormTextField {
+                    id: endpointField
+                    objectName: "endpointField"
+                    Layout.fillWidth: true
+                    placeholderText: "http://localhost:11434"
+                    text: section.ollamaEndpoint
+                    invalid: section.ollamaEndpointInvalid
+                    onEditingFinished: {
+                        if (text !== section.ollamaEndpoint)
+                            section.ollamaEndpointChosen(text)
+                            text = Qt.binding(() => section.ollamaEndpoint)
+                    }
+                    Accessible.name: qsTr("Server endpoint")
+                }
+                ErrorLabel {
+                    objectName: "endpointError"
+                    text: section.ollamaEndpointInvalid
+                          ? qsTr("Not saved. Enter a web address starting with http:// or https://.") : ""
+                }
+
+                SectionLabel { text: qsTr("Model") }
+                FormTextField {
+                    id: ollamaModelField
+                    objectName: "ollamaModelField"
+                    Layout.fillWidth: true
+                    placeholderText: qsTr("For example: llama3.2")
+                    text: section.draftModel
+                    onEditingFinished: {
+                        if (text !== section.draftModel)
+                            section.draftModelChosen(text)
+                            text = Qt.binding(() => section.draftModel)
+                    }
+                    Accessible.name: qsTr("Model name")
+                }
+
+                SectionLabel { text: qsTr("Auth token (optional)") }
+                FormTextField {
+                    id: tokenField
+                    objectName: "tokenField"
+                    Layout.fillWidth: true
+                    echoMode: TextInput.Password
+                    placeholderText: qsTr("Leave empty if the server needs none")
+                    text: section.ollamaToken
+                    onEditingFinished: {
+                        if (text !== section.ollamaToken)
+                            section.ollamaTokenChosen(text)
+                            text = Qt.binding(() => section.ollamaToken)
+                    }
+                    Accessible.name: qsTr("Auth token")
+                }
+                Label {
+                    Layout.fillWidth: true
+                    text: qsTr("Sent as a Bearer token. It is saved in the app's settings file in plain text.")
+                    wrapMode: Text.Wrap
+                    color: Theme.subtleText
+                    font.pixelSize: 12
+                }
+            }
+
             ColumnLayout {
                 objectName: "claudeCodeOptions"
                 Layout.fillWidth: true

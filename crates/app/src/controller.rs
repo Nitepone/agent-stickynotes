@@ -196,8 +196,6 @@ impl cxx_qt::Initialize for qobject::BoardController {
             .set_endpoint(QString::from(ctx.endpoint.as_str()));
         self.as_mut()
             .set_app_version(QString::from(env!("CARGO_PKG_VERSION")));
-        self.as_mut()
-            .set_generator_name(QString::from(ctx.drafter.name()));
         {
             let settings = stickynotes_core::store::relock(&ctx.settings).clone();
             self.as_mut().publish_prefs();
@@ -221,10 +219,19 @@ impl cxx_qt::Initialize for qobject::BoardController {
 
 impl qobject::BoardController {
     /// Republish the preferences, so QML bindings on `prefsJson` update.
-    fn publish_prefs(self: Pin<&mut Self>) {
+    fn publish_prefs(mut self: Pin<&mut Self>) {
         let ctx = context::get();
-        let json =
-            stickynotes_core::store::relock(&ctx.settings).prefs_json(ctx.system_reduced_motion);
+        let (json, generator) = {
+            let settings = stickynotes_core::store::relock(&ctx.settings);
+            (
+                settings.prefs_json(ctx.system_reduced_motion),
+                crate::drafting::select::select(&settings, &ctx.drafter)
+                    .name()
+                    .to_string(),
+            )
+        };
+        self.as_mut()
+            .set_generator_name(QString::from(generator.as_str()));
         self.set_prefs_json(to_qstring(json));
     }
 
@@ -481,7 +488,7 @@ impl qobject::BoardController {
             let settings = stickynotes_core::store::relock(&ctx.settings);
             let options = DraftOptions {
                 system_prompt: settings.draft_system_prompt.trim().to_string(),
-                model: settings.draft_model.clone(),
+                model: crate::drafting::select::model_for(&settings),
                 effort: settings.draft_effort.clone(),
             };
             form.draft_request(&document_prompt, &code_guidance, categories, options)
@@ -495,7 +502,10 @@ impl qobject::BoardController {
         self.as_mut().rust_mut().generation = Some(token.clone());
         self.as_mut().set_generating(true);
 
-        let backend = ctx.drafter.clone();
+        let backend = {
+            let settings = stickynotes_core::store::relock(&ctx.settings);
+            crate::drafting::select::select(&settings, &ctx.drafter)
+        };
         let thread = self.qt_thread();
         std::thread::spawn(move || {
             let result = backend.generate(&request, &token);

@@ -25,6 +25,7 @@ stickynotes-server = { version = "0.3.3", path = "../server" }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["full"] }
 uuid = { version = "1.29.0", features = ["v4"] }
+ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 
 [build-dependencies]
 cxx-qt-build = "=0.10.0"

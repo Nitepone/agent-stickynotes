@@ -22,13 +22,15 @@ Item {
     SignalSpy { id: promptSpy; target: editor; signalName: "draftSystemPromptChosen" }
     SignalSpy { id: modelSpy; target: editor; signalName: "draftModelChosen" }
     SignalSpy { id: effortSpy; target: editor; signalName: "draftEffortChosen" }
+    SignalSpy { id: endpointSpy; target: editor; signalName: "ollamaEndpointChosen" }
+    SignalSpy { id: tokenSpy; target: editor; signalName: "ollamaTokenChosen" }
 
     TestCase {
         name: "EditorSection"
         when: windowShown
 
         function init() {
-            for (const spy of [spellSpy, agentSpy, promptSpy, modelSpy, effortSpy])
+            for (const spy of [spellSpy, agentSpy, promptSpy, modelSpy, effortSpy, endpointSpy, tokenSpy])
                 spy.clear()
             page.currentIndex = 1
             editor.spellCheck = true
@@ -37,6 +39,9 @@ Item {
             editor.draftSystemPrompt = ""
             editor.draftModel = ""
             editor.draftEffort = ""
+            editor.ollamaEndpoint = "http://localhost:11434"
+            editor.ollamaToken = ""
+            editor.ollamaEndpointInvalid = false
         }
 
         function find(name) {
@@ -93,11 +98,86 @@ Item {
 
         // ---- draft agent -------------------------------------------------
 
-        function test_agent_type_lists_only_claude_code() {
+        function test_agent_type_offers_claude_code_and_ollama() {
             const box = find("agentBox")
-            compare(box.count, 1)
+            compare(box.count, 2)
             compare(box.currentValue, "claude_code")
             compare(box.currentText, "Claude Code (subshell)")
+            choose(box, 1)
+            compare(agentSpy.count, 1)
+            compare(agentSpy.signalArguments[0][0], "ollama")
+            editor.draftAgent = "ollama"
+            compare(box.currentValue, "ollama")
+        }
+
+        function test_ollama_fields_show_only_when_ollama_is_selected() {
+            verify(!find("ollamaOptions").visible)
+            verify(find("claudeCodeOptions").visible)
+            editor.draftAgent = "ollama"
+            verify(find("ollamaOptions").visible)
+            verify(!find("claudeCodeOptions").visible)
+            verify(find("endpointField").visible && find("tokenField").visible)
+        }
+
+        function test_the_token_is_masked_and_optional() {
+            editor.draftAgent = "ollama"
+            editor.ollamaToken = "s3cret"
+            const field = find("tokenField")
+            compare(field.echoMode, TextInput.Password)
+            compare(field.text, "s3cret")
+            compare(field.displayText.indexOf("s3cret"), -1, "the characters are not displayed")
+            compare(tokenSpy.count, 0)
+            field.forceActiveFocus()
+            field.text = ""
+            field.editingFinished()
+            compare(tokenSpy.count, 1)
+            compare(tokenSpy.signalArguments[0][0], "", "an empty token clears it")
+        }
+
+        function test_endpoint_token_and_model_are_reported() {
+            editor.draftAgent = "ollama"
+            compare(find("endpointField").text, "http://localhost:11434")
+            let field = find("endpointField")
+            field.forceActiveFocus()
+            field.text = "https://llm.example.com"
+            field.editingFinished()
+            compare(endpointSpy.count, 1)
+            compare(endpointSpy.signalArguments[0][0], "https://llm.example.com")
+
+            field = find("tokenField")
+            field.forceActiveFocus()
+            field.text = "abc"
+            field.editingFinished()
+            compare(tokenSpy.count, 1)
+            compare(tokenSpy.signalArguments[0][0], "abc")
+
+            field = find("ollamaModelField")
+            field.forceActiveFocus()
+            field.text = "llama3.2"
+            field.editingFinished()
+            compare(modelSpy.count, 1)
+            compare(modelSpy.signalArguments[0][0], "llama3.2")
+        }
+
+        function test_unchanged_fields_report_nothing_and_a_rejected_endpoint_is_flagged() {
+            editor.draftAgent = "ollama"
+            const field = find("endpointField")
+            field.forceActiveFocus()
+            field.editingFinished()
+            compare(endpointSpy.count, 0)
+            verify(!find("endpointError").visible)
+            editor.ollamaEndpointInvalid = true
+            verify(find("endpointError").visible)
+            field.textEdited()
+            verify(!field.invalid, "typing clears the flag")
+        }
+
+        function test_stored_ollama_values_are_shown() {
+            editor.draftAgent = "ollama"
+            editor.ollamaEndpoint = "http://box:8080"
+            editor.draftModel = "qwen3"
+            compare(find("endpointField").text, "http://box:8080")
+            compare(find("ollamaModelField").text, "qwen3")
         }
 
         function test_claude_code_options_show_for_claude_code() {
