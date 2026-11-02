@@ -218,6 +218,8 @@ Item {
             compare(h.activeFocusOnTab, true)
             compare(h.Accessible.role, Accessible.Button)
             verify(h.Accessible.name.indexOf("UI") >= 0 && h.Accessible.name.indexOf("3") >= 0)
+            // A header takes focus when pressed, and an earlier test may have left it there.
+            item("card-t2").forceActiveFocus()
             compare(findChild(h, "focusRing").visible, false)
             h.forceActiveFocus()
             compare(findChild(h, "focusRing").visible, true)

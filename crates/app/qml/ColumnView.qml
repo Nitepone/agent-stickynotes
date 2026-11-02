@@ -37,6 +37,10 @@ Item {
     signal taskClicked(string taskId)
     signal taskDropped(string taskId, int position)
     signal taskMoveRequested(string taskId, int direction)
+    // A whole stack (its task ids, in order) dropped at `position`, or asked to
+    // move one column with Ctrl+Left / Ctrl+Right.
+    signal stackDropped(var taskIds, int position)
+    signal stackMoveRequested(var taskIds, int direction)
     signal stackToggled(string stackKey)
     signal collapseToggled()
 
@@ -104,7 +108,7 @@ Item {
         const result = []
         for (let i = 0; i < cards.children.length; i++) {
             const c = cards.children[i].card
-            if (c && c.task.id !== excludeId && (!shownOnly || cards.children[i].visible))
+            if (c && !stacks.isDragged(excludeId, c.task.id) && (!shownOnly || cards.children[i].visible))
                 result.push(c)
         }
         return result
@@ -357,6 +361,10 @@ Item {
                                     count: rowItem.modelData.count
                                     collapsed: root.isCollapsed(rowItem.modelData.stackKey)
                                     reducedMotion: root.reducedMotion
+                                    taskIds: rowItem.modelData.ids
+                                    dragLayer: root.dragLayer
+                                    dragEnabled: !root.editMode
+                                    onMoveRequested: (direction) => root.stackMoveRequested(taskIds, direction)
                                     onToggled: root.stackToggled(rowItem.modelData.stackKey)
                                 }
                             }
@@ -400,20 +408,31 @@ Item {
         DropArea {
             id: taskDrop
             anchors.fill: parent
-            keys: ["task"]
+            keys: ["task", "stack"]
             enabled: !root.editMode && !root.collapsed
 
             property int hoverIndex: -1
-            property string draggedId: drag.source ? drag.source.task.id : ""
+            // One task id, or the array of ids of a dragged stack.
+            property var draggedId: draggedOf(drag.source)
+
+            function draggedOf(source) {
+                if (!source)
+                    return ""
+                return source.isStackHeader ? source.taskIds : source.task.id
+            }
 
             onPositionChanged: (event) => hoverIndex = root.dropIndex(taskDrop, event.x, event.y, draggedId)
             onExited: hoverIndex = -1
             onDropped: (event) => {
-                const id = event.source.task.id
+                const id = draggedOf(event.source)
+                const wholeStack = !!event.source.isStackHeader
                 const index = root.storedPosition(root.dropIndex(taskDrop, event.x, event.y, id), id)
                 hoverIndex = -1
                 event.accept()
-                root.taskDropped(id, index)
+                if (wholeStack)
+                    root.stackDropped(id, index)
+                else
+                    root.taskDropped(id, index)
             }
         }
 

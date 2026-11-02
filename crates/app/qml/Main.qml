@@ -670,6 +670,7 @@ ApplicationWindow {
         onColumnTitleClicked: (column) => columnDialog.openColumn(column)
         onAddColumnClicked: columnDialog.openNew(window.board.columns.length)
         onTaskMoved: (taskId, columnId, position) => window.result(controller.moveTask(taskId, columnId, position))
+        onTasksMoved: (taskIds, columnId, position) => window.result(controller.moveTasks(JSON.stringify(taskIds), columnId, position))
         onColumnMoved: (columnId, position) => window.result(controller.moveColumn(columnId, position))
         onDeleteColumnClicked: (column) => {
             const n = column.tasks.length

@@ -19,7 +19,8 @@ QtObject {
     property var allTasks: []
 
     // [{ kind: "card", task, stackKey, showCategory }
-    //  | { kind: "header", stackKey, category, count }]
+    //  | { kind: "header", stackKey, category, count, ids }]  (ids: the stack's
+    // task ids in stored order)
     // `stackKey` is "" for a card that is not in a stack.
     readonly property var rows: build(tasks, columnId)
 
@@ -52,7 +53,8 @@ QtObject {
                 continue
             emitted[n] = true
             const key = stackKey(columnId, n)
-            rows.push({ kind: "header", stackKey: key, category: t.category.trim(), count: counts[n] })
+            rows.push({ kind: "header", stackKey: key, category: t.category.trim(), count: counts[n],
+                          ids: tasks.filter(m => normalized(m.category) === n).map(m => m.id) })
             for (const member of tasks) {
                 if (normalized(member.category) === n)
                     rows.push({ kind: "card", task: member, stackKey: key, showCategory: false })
@@ -65,8 +67,13 @@ QtObject {
     // `index`-th shown card. `shownIds` lists the shown cards from top to
     // bottom (collapsed members are not shown), without the dragged one; an
     // index past the end means the end of the column.
+    // `draggedId` is one id or an array of ids (a whole stack being moved).
+    function isDragged(draggedId, id) {
+        return typeof draggedId === "string" ? draggedId === id : draggedId.indexOf(id) >= 0
+    }
+
     function storedPosition(shownIds, index, draggedId) {
-        const others = (allTasks.length > 0 ? allTasks : tasks).filter(t => t.id !== draggedId)
+        const others = (allTasks.length > 0 ? allTasks : tasks).filter(t => !isDragged(draggedId, t.id))
         if (index >= shownIds.length)
             return others.length
         const at = others.findIndex(t => t.id === shownIds[index])

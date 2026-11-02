@@ -35,7 +35,9 @@ pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applie
 fn change_kind(cmd: &Command) -> ChangeKind {
     match cmd {
         Command::CreateTask { .. } => ChangeKind::Created,
-        Command::MoveTask { .. } | Command::AdvanceTask { .. } => ChangeKind::Moved,
+        Command::MoveTask { .. } | Command::MoveTasks { .. } | Command::AdvanceTask { .. } => {
+            ChangeKind::Moved
+        }
         Command::SetCriterion { .. } => ChangeKind::Progress,
         _ => ChangeKind::Edited,
     }
@@ -93,6 +95,11 @@ fn run(board: &mut Board, cmd: Command) -> Result<Applied> {
             to_column,
             position,
         } => move_task(board, id, to_column, position),
+        Command::MoveTasks {
+            ids,
+            to_column,
+            position,
+        } => move_tasks(board, &ids, to_column, position),
         Command::AdvanceTask { id } => {
             let (ci, _) = locate(board, id)?;
             let next = board
@@ -251,6 +258,7 @@ fn check_agent_rules(board: &Board, cmd: &Command) -> Result<()> {
         | Command::RenameBoard { .. } => deny("agents cannot modify columns or the board"),
         Command::UpdateProject { .. } => deny("only the user can edit project settings"),
         Command::Restore(_) => deny("agents cannot undo or redo"),
+        Command::MoveTasks { .. } => deny("agents move one task at a time, one column right"),
         Command::UpdateTask { .. }
         | Command::AdvanceTask { .. }
         | Command::DeleteTask { .. }
@@ -432,6 +440,47 @@ fn move_task(
     let pos = clamp(position, tasks.len());
     tasks.insert(pos, task);
     Ok(Applied::Task(id))
+}
+
+/// Move `ids` (in that order) to `to_column` as a contiguous run at `position`.
+/// Everything is validated before anything changes.
+fn move_tasks(
+    board: &mut Board,
+    ids: &[TaskId],
+    to_column: ColumnId,
+    position: usize,
+) -> Result<Applied> {
+    let to = column_index(board, to_column)?;
+    if ids.is_empty() {
+        return Err(Error::Validation("no tasks to move".into()));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for id in ids {
+        locate(board, *id)?;
+        if !seen.insert(*id) {
+            return Err(Error::Validation("a task is listed twice".into()));
+        }
+    }
+    let remaining = board.columns[to]
+        .tasks
+        .iter()
+        .filter(|t| !seen.contains(&t.id))
+        .count();
+    if position > remaining {
+        return Err(Error::Validation(format!(
+            "position {position} is past the end of the column ({remaining} tasks)"
+        )));
+    }
+    let now = Utc::now();
+    let mut moved = Vec::with_capacity(ids.len());
+    for id in ids {
+        let (ci, ti) = locate(board, *id)?;
+        let mut task = board.columns[ci].tasks.remove(ti);
+        task.updated_at = now;
+        moved.push(task);
+    }
+    board.columns[to].tasks.splice(position..position, moved);
+    Ok(Applied::Board)
 }
 
 /// Keep ids (and unknown fields) of criteria the client referenced by id.
@@ -728,6 +777,132 @@ mod tests {
         .unwrap();
         assert_eq!(b.locate_task(id), Some((4, 0)));
         assert_eq!(task_count(&b), 1);
+    }
+
+    fn four_tasks() -> (Board, Vec<TaskId>) {
+        let (mut b, first) = board_with_task();
+        let mut ids = vec![first];
+        for d in ["b", "c", "d"] {
+            let Applied::Task(id) = execute(
+                &mut b,
+                Origin::User,
+                Command::CreateTask {
+                    column: None,
+                    position: None,
+                    draft: draft(d),
+                },
+            )
+            .unwrap() else {
+                panic!()
+            };
+            ids.push(id);
+        }
+        (b, ids)
+    }
+
+    fn names(b: &Board, c: usize) -> Vec<&str> {
+        b.columns[c]
+            .tasks
+            .iter()
+            .map(|t| t.description.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn move_tasks_moves_a_run_in_order_to_another_column() {
+        let (mut b, ids) = four_tasks();
+        let c1 = col(&b, 1);
+        execute(
+            &mut b,
+            Origin::User,
+            Command::MoveTasks {
+                ids: vec![ids[3], ids[1]],
+                to_column: c1,
+                position: 0,
+            },
+        )
+        .unwrap();
+        assert_eq!(names(&b, 0), ["first", "c"]);
+        assert_eq!(names(&b, 1), ["d", "b"]);
+    }
+
+    #[test]
+    fn move_tasks_reorders_within_a_column() {
+        let (mut b, ids) = four_tasks();
+        let c0 = col(&b, 0);
+        // Without b and c the column is first, d; position 1 lands between them.
+        execute(
+            &mut b,
+            Origin::User,
+            Command::MoveTasks {
+                ids: vec![ids[1], ids[2]],
+                to_column: c0,
+                position: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(names(&b, 0), ["first", "b", "c", "d"]);
+        execute(
+            &mut b,
+            Origin::User,
+            Command::MoveTasks {
+                ids: vec![ids[0], ids[1]],
+                to_column: c0,
+                position: 2,
+            },
+        )
+        .unwrap();
+        assert_eq!(names(&b, 0), ["c", "d", "first", "b"]);
+    }
+
+    #[test]
+    fn move_tasks_is_all_or_nothing() {
+        let (mut b, ids) = four_tasks();
+        let c1 = col(&b, 1);
+        let before = names(&b, 0).join(",");
+        for cmd in [
+            Command::MoveTasks {
+                ids: vec![ids[0], Uuid::new_v4()],
+                to_column: c1,
+                position: 0,
+            },
+            Command::MoveTasks {
+                ids: vec![ids[0], ids[1]],
+                to_column: c1,
+                position: 1,
+            },
+            Command::MoveTasks {
+                ids: vec![ids[0], ids[0]],
+                to_column: c1,
+                position: 0,
+            },
+            Command::MoveTasks {
+                ids: vec![ids[0]],
+                to_column: Uuid::new_v4(),
+                position: 0,
+            },
+        ] {
+            assert!(execute(&mut b, Origin::User, cmd).is_err());
+        }
+        assert_eq!(names(&b, 0).join(","), before);
+        assert!(b.columns[1].tasks.is_empty());
+    }
+
+    #[test]
+    fn agents_cannot_move_tasks_in_bulk() {
+        let (mut b, ids) = four_tasks();
+        let c1 = col(&b, 1);
+        let r = execute(
+            &mut b,
+            Origin::Agent,
+            Command::MoveTasks {
+                ids: vec![ids[0]],
+                to_column: c1,
+                position: 0,
+            },
+        );
+        assert!(matches!(r, Err(Error::AgentNotPermitted(_))));
+        assert_eq!(names(&b, 0).len(), 4);
     }
 
     #[test]

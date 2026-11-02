@@ -69,6 +69,14 @@ pub enum Command {
         to_column: ColumnId,
         position: Option<usize>,
     },
+    /// User only. Move several tasks, in the order given, to `to_column`, as one
+    /// contiguous run at `position` (an index into the target column's tasks
+    /// once the moved ones are removed; at most that length). All or none.
+    MoveTasks {
+        ids: Vec<TaskId>,
+        to_column: ColumnId,
+        position: usize,
+    },
     /// Move a task to the end of the next column to the right.
     AdvanceTask {
         id: TaskId,

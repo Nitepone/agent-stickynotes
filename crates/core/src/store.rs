@@ -441,6 +441,38 @@ mod tests {
         store.save(true).unwrap();
     }
 
+    #[test]
+    fn move_tasks_is_one_revision_and_one_notification() {
+        let store = BoardStore::new(true);
+        let mut ids = vec![];
+        for _ in 0..3 {
+            let (Applied::Task(id), _) = store.apply(Origin::User, create(), None).unwrap() else {
+                panic!()
+            };
+            ids.push(id);
+        }
+        let calls = std::sync::Arc::new(AtomicU64::new(0));
+        let seen = calls.clone();
+        store.subscribe(move |_| {
+            seen.fetch_add(1, Ordering::SeqCst);
+        });
+        let rev = store.snapshot().revision;
+        let to = store.snapshot().board.columns[1].id;
+        store
+            .apply(
+                Origin::User,
+                Command::MoveTasks {
+                    ids,
+                    to_column: to,
+                    position: 0,
+                },
+                None,
+            )
+            .unwrap();
+        assert_eq!(store.snapshot().revision, rev + 1);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
     fn create() -> Command {
         Command::CreateTask {
             column: None,

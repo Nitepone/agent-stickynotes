@@ -167,13 +167,14 @@ fn diff(cmd: &Command, before: &Board, after: &Board) -> (Snap, Snap) {
     let mut task_ids: Vec<TaskId> = before.tasks().map(|(_, t)| t.id).collect();
     task_ids.extend(after.tasks().map(|(_, t)| t.id));
     // A move within a column changes only an index, which equality ignores.
-    let moved = match cmd {
-        Command::MoveTask { id, .. } | Command::AdvanceTask { id } => Some(*id),
-        _ => None,
+    let moved: Vec<TaskId> = match cmd {
+        Command::MoveTask { id, .. } | Command::AdvanceTask { id } => vec![*id],
+        Command::MoveTasks { ids, .. } => ids.clone(),
+        _ => Vec::new(),
     };
     for id in task_ids {
         let (x, y) = (placed(before, id), placed(after, id));
-        if !same_task(&x, &y) || moved == Some(id) {
+        if !same_task(&x, &y) || moved.contains(&id) {
             b.tasks.insert(id, x);
             a.tasks.insert(id, y);
         }
@@ -320,6 +321,18 @@ fn label(cmd: &Command, applied: &Applied, before: &Board, after: &Board) -> Str
             task_number(after, *id),
             column_title(after, *to_column)
         ),
+        Command::MoveTasks { ids, to_column, .. } => match ids.as_slice() {
+            [id] => format!(
+                "move {} to {}",
+                task_number(after, *id),
+                column_title(after, *to_column)
+            ),
+            _ => format!(
+                "move {} tasks to {}",
+                ids.len(),
+                column_title(after, *to_column)
+            ),
+        },
         Command::AdvanceTask { id } => {
             let col = after
                 .locate_task(*id)
@@ -433,6 +446,47 @@ mod tests {
         assert_eq!(order(&store, 0), [1, 2, 3], "number and position restored");
         make(&store, Origin::User, "d");
         assert_eq!(order(&store, 0), [1, 2, 3, 4], "numbers are never reused");
+    }
+
+    #[test]
+    fn a_stack_move_is_one_undo_step_even_inside_one_column() {
+        let (store, a, b, c) = setup();
+        let col2 = store.read(|bd, _| bd.columns[1].id);
+        let col1 = store.read(|bd, _| bd.columns[0].id);
+        // Two tasks to another column: one step.
+        let mv = Command::MoveTasks {
+            ids: vec![a, b],
+            to_column: col2,
+            position: 0,
+        };
+        store.apply(Origin::User, mv, None).unwrap();
+        assert_eq!(order(&store, 1), [1, 2]);
+        assert_eq!(
+            store
+                .history_labels()
+                .0
+                .as_deref()
+                .map(|l| l.starts_with("move 2 tasks")),
+            Some(true)
+        );
+        store.undo().unwrap();
+        assert_eq!(order(&store, 0), [1, 2, 3]);
+        assert!(order(&store, 1).is_empty());
+        store.redo().unwrap();
+        assert_eq!(order(&store, 1), [1, 2]);
+        store.undo().unwrap();
+
+        // A reorder within one column changes only positions, and is still undoable.
+        let mv = Command::MoveTasks {
+            ids: vec![a, b],
+            to_column: col1,
+            position: 1,
+        };
+        store.apply(Origin::User, mv, None).unwrap();
+        assert_eq!(order(&store, 0), [3, 1, 2]);
+        store.undo().unwrap();
+        assert_eq!(order(&store, 0), [1, 2, 3]);
+        let _ = c;
     }
 
     #[test]

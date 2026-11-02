@@ -55,6 +55,9 @@ Item {
     signal deleteColumnClicked(var column)
     signal addColumnClicked()
     signal taskMoved(string taskId, string columnId, int position)
+    // A whole stack (task ids in order) moved to `columnId` at `position`
+    // (an index among that column's tasks without the moved ones).
+    signal tasksMoved(var taskIds, string columnId, int position)
     signal columnMoved(string columnId, int position)
 
     // ---- Keeping the view steady across a board refresh --------------------
@@ -115,6 +118,22 @@ Item {
             if (target < 0 || target >= columns.length)
                 return
             taskMoved(taskId, columns[target].id, Math.min(index, columns[target].tasks.length))
+            return
+        }
+    }
+
+    // Ctrl+Left / Ctrl+Right on a focused stack header: the whole stack moves
+    // one column, to the row of its first task (or the end).
+    function moveStackByColumns(taskIds, direction) {
+        const columns = board.columns
+        for (let i = 0; i < columns.length; i++) {
+            const index = columns[i].tasks.findIndex(t => t.id === taskIds[0])
+            if (index < 0)
+                continue
+            const target = i + direction
+            if (target < 0 || target >= columns.length)
+                return
+            tasksMoved(taskIds, columns[target].id, Math.min(index, columns[target].tasks.length))
             return
         }
     }
@@ -209,6 +228,8 @@ Item {
                     onTaskClicked: (taskId) => root.taskClicked(taskId)
                     onTaskMoveRequested: (taskId, direction) => root.moveTaskByColumns(taskId, direction)
                     onTaskDropped: (taskId, position) => root.taskMoved(taskId, modelData.id, position)
+                    onStackDropped: (taskIds, position) => root.tasksMoved(taskIds, modelData.id, position)
+                    onStackMoveRequested: (taskIds, direction) => root.moveStackByColumns(taskIds, direction)
                 }
             }
 

@@ -75,6 +75,13 @@ pub mod qobject {
             position: i32,
         ) -> QString;
         #[qinvokable]
+        fn move_tasks(
+            self: &BoardController,
+            ids_json: &QString,
+            column_id: &QString,
+            position: i32,
+        ) -> QString;
+        #[qinvokable]
         fn delete_task(self: &BoardController, id: &QString) -> QString;
 
         #[qinvokable]
@@ -396,6 +403,23 @@ impl qobject::BoardController {
             id,
             to_column,
             position: usize::try_from(position).ok(),
+        })
+    }
+
+    /// Move several tasks (a JSON array of ids, in order) as one change.
+    fn move_tasks(&self, ids_json: &QString, column_id: &QString, position: i32) -> QString {
+        let ids: Option<Vec<Uuid>> = serde_json::from_str::<Vec<String>>(&String::from(ids_json))
+            .ok()
+            .and_then(|v| v.iter().map(|s| Uuid::parse_str(s).ok()).collect());
+        let (Some(ids), Some(to_column), Ok(position)) =
+            (ids, parse_id(column_id), usize::try_from(position))
+        else {
+            return bad_id();
+        };
+        apply(Command::MoveTasks {
+            ids,
+            to_column,
+            position,
         })
     }
 
