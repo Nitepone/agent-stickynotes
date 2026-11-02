@@ -24,6 +24,7 @@ pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applie
         crate::history::restore(board, snap)?;
         return Ok(Applied::Board);
     }
+    crate::limits::check(board, &cmd)?;
     let kind = change_kind(&cmd);
     let before = update_stamps(board);
     let applied = run(board, origin, cmd)?;

@@ -75,7 +75,8 @@ detach the old; detaching never deletes the file.
 /// The text of the MCP `instructions` field.
 pub fn mcp_instructions() -> String {
     format!(
-        "This server exposes the user's kanban board (agent-stickynotes).\n\nWorkflow rules:\n{WORKFLOW_RULES}"
+        "This server exposes the user's kanban board (agent-stickynotes).\n\nWorkflow rules:\n{WORKFLOW_RULES}\n{}",
+        crate::limits::rule()
     )
 }
 
@@ -101,6 +102,8 @@ pub fn skill_markdown(board: &Board) -> String {
 
     out.push_str("## Workflow\n\n");
     out.push_str(WORKFLOW_RULES);
+    out.push('\n');
+    out.push_str(&crate::limits::rule());
     out.push_str("\n\n## Tools\n\n");
     for (name, purpose) in TOOLS {
         let _ = writeln!(out, "- `{name}`: {purpose}");

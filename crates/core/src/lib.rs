@@ -9,6 +9,7 @@ pub mod command;
 pub mod error;
 pub mod export_md;
 pub mod history;
+pub mod limits;
 pub mod model;
 pub mod ops;
 pub mod persist;

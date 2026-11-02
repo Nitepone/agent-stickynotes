@@ -130,6 +130,8 @@ Agents cannot move tasks backwards, skip columns, or change columns at all;
 the core enforces this. All write tools accept `expected_revision`, and a
 mismatch means the board changed and the agent should re-read it.
 
+**Size limits.** Writes are capped so a runaway agent (or a huge paste) cannot bloat the board file: a description is at most 2,000 characters, an extended description 50,000, each requirement or criterion 1,000; a task holds at most 100 requirements, 100 criteria and 50 references, and a board at most 2,000 tasks. The same limits apply to your own edits, and a write over a limit is refused with an error naming it (for example "description is 2413 characters; the limit is 2000"). A board that is already over a limit still loads and can be edited downward. Agents are told the limits in the MCP instructions and the exported skill. The numbers are in `crates/core/src/limits.rs`.
+
 Notes you change through these tools glow in the window until the user is back, so changes are easy to spot; the user's own edits clear the glow.
 
 Agent edits appear in the window immediately and count as unsaved changes.
