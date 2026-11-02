@@ -36,11 +36,16 @@ impl AppContext {
     }
 
     pub fn claude_setup_command(&self) -> String {
-        format!(
-            "claude mcp add --transport http --scope user stickynotes {}/mcp --header \"Authorization: Bearer {}\"",
-            self.endpoint, self.token
-        )
+        command_for(&self.endpoint, &self.token)
     }
+}
+
+/// The Claude Code CLI registration command. Existing users are connected
+/// through exactly this text (URL, server name, header), so keep it stable.
+pub fn command_for(endpoint: &str, token: &str) -> String {
+    format!(
+        "claude mcp add --transport http --scope user stickynotes {endpoint}/mcp --header \"Authorization: Bearer {token}\""
+    )
 }
 
 static CONTEXT: OnceLock<AppContext> = OnceLock::new();

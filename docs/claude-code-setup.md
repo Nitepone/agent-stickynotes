@@ -1,20 +1,102 @@
-# Connecting Claude Code
+# Connecting an agent
 
 The app serves an MCP server over Streamable HTTP at `http://127.0.0.1:7317/mcp`
 while its window is open. If port 7317 is busy, it uses a free port instead; the
-**Agent ▸ Connect Claude Code…** dialog always shows the real address.
+**Agent ▸ Connect Agent…** dialog always shows the real address.
 
-## 1. Register the server (once)
+Every request needs a bearer token. It is generated on first launch and stored in
+`~/.config/agent-stickynotes/token` (mode 0600). The dialog's snippets already
+contain it, so treat them (and any file you paste them into) as secret.
 
-Open **Agent ▸ Connect Claude Code…** and click **Copy command**. It looks like:
+## 1. Connect a client (once)
+
+Open **Agent ▸ Connect Agent…**. It has one collapsible section per client; they
+open and close independently, and each shows only that client's steps.
+**Test connection** in a section asks the app's own endpoint for the project with
+the token. "Connected" means the endpoint is reachable and the token is accepted;
+it does not see the client's configuration. On failure the section shows the
+error and **Retry**.
+
+### Claude Code CLI
+
+Click **Copy command** and run it in a terminal:
 
 ```sh
 claude mcp add --transport http --scope user stickynotes \
   http://127.0.0.1:7317/mcp --header "Authorization: Bearer <token>"
 ```
 
-The token is generated on first launch and stored in
-`~/.config/agent-stickynotes/token` (mode 0600). Every request needs it.
+This text is unchanged from earlier versions, so a registration made then keeps
+working.
+
+### Claude Code Desktop (no CLI needed)
+
+The desktop app's Code tab loads MCP servers from `~/.claude.json`, a project's
+`.mcp.json` and `claude_desktop_config.json`. The simplest way without the `claude`
+command is a `.mcp.json` in the project folder you open in the Code tab:
+
+```json
+{
+  "mcpServers": {
+    "stickynotes": {
+      "type": "http",
+      "url": "http://127.0.0.1:7317/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+Approve the server when the Code tab asks. Keep `.mcp.json` out of version control.
+
+The chat tab (and `claude_desktop_config.json` in general) starts local programs
+only, so it needs the `mcp-remote` bridge, which requires **Node.js** (`npx`):
+
+```json
+{
+  "mcpServers": {
+    "stickynotes": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://127.0.0.1:7317/mcp", "--allow-http",
+               "--header", "Authorization:${AUTH_HEADER}"],
+      "env": { "AUTH_HEADER": "Bearer <token>" }
+    }
+  }
+}
+```
+
+The file is `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS),
+`%APPDATA%\Claude\claude_desktop_config.json` (Windows) or
+`~/.config/Claude/claude_desktop_config.json` (Linux); **Settings ▸ Developer ▸
+Edit Config** opens it. Restart Claude afterwards. Claude's "custom connectors"
+are for remote servers on the internet and cannot reach a loopback address.
+
+Sources: <https://code.claude.com/docs/en/desktop> (Code tab and
+`claude_desktop_config.json`), <https://code.claude.com/docs/en/mcp> (`.mcp.json`
+format), <https://modelcontextprotocol.io/docs/develop/connect-local-servers>
+(config file locations), <https://github.com/geelen/mcp-remote> (bridge and header
+syntax).
+
+### OpenCode
+
+Add to `opencode.json` in the project root, or `~/.config/opencode/opencode.json`
+for every project:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "stickynotes": {
+      "type": "remote",
+      "url": "http://127.0.0.1:7317/mcp",
+      "enabled": true,
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}
+```
+
+Sources: <https://opencode.ai/docs/mcp-servers/>, <https://opencode.ai/docs/config/>.
 
 ## 2. Allow writes (when you want them)
 

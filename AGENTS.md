@@ -91,7 +91,7 @@ columns, the board title or project settings. Those rules live in
 
 `QT_QPA_PLATFORM=offscreen` works. Set `STICKYNOTES_SCREENSHOT=out.png:<scene>[:delayMs[:WxH]]` (`WxH` resizes the window, e.g. `1560x820`)
 and run `cargo run -p stickynotes -- <project-folder>`: it renders to a PNG and exits.
-Scenes: `board`, `projects`, `artifacts`, `edit`, `task`, `newtask`, `collapsed`, `column`, `agent`, `project`, `prefs`,
+Scenes: `board`, `projects`, `artifacts`, `edit`, `task`, `newtask`, `collapsed`, `column`, `agent`, `agent-all`, `project`, `prefs`,
 `editor`, `note-demo`, `theme-demo`, `theme-reset`, `generate`, `interact`, `synthetic`. Always point
 `XDG_CONFIG_HOME` at a scratch directory (settings, the API token and
 `last_project` live there) and set `XDG_DATA_HOME` too (the projects folder is under it); use a copy of
@@ -107,7 +107,7 @@ call `project_get` first, advance a task only after checking the next column's
 description against it, tick criteria as you complete them, and write nothing if write
 access is off. Do not move a task into Done: that is the user's acceptance. Reconnecting
 after the app restarts needs `/mcp`; the port falls back to a random one if 7317 is
-busy, so re-register with the command in **Agent ▸ Connect Claude Code…**. Do not read the
+busy, so re-register with the command in **Agent ▸ Connect Agent…**. Do not read the
 API token from the config directory to work around a failed connection.
 
 ## Commits

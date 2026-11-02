@@ -95,7 +95,7 @@ pub fn skill_markdown(board: &Board) -> String {
         out,
         "# Working with the kanban board\n\n\
          The board \"{}\" is served by the `stickynotes` MCP server. If its tools are not \
-         available, ask the user to connect it (Agent > Connect Claude Code in the app).\n\n",
+         available, ask the user to connect it (Agent > Connect Agent in the app).\n\n",
         board.title.replace('"', "'")
     );
 

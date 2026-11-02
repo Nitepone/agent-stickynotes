@@ -111,6 +111,14 @@ pub mod qobject {
         fn set_agent_write_enabled(self: &BoardController, enabled: bool);
         #[qinvokable]
         fn claude_setup_command(self: &BoardController) -> QString;
+        /// Setup text for the other clients, as JSON `{desktop_project,
+        /// desktop_bridge, opencode}`.
+        #[qinvokable]
+        fn agent_setup_json(self: &BoardController) -> QString;
+        /// Check the app's own agent endpoint and token in the background;
+        /// the outcome for `client` arrives through `agent_check_finished`.
+        #[qinvokable]
+        fn check_agent_connection(self: &BoardController, client: &QString);
 
         /// Remember when the user last used the app (ms since the epoch).
         #[qinvokable]
@@ -144,6 +152,11 @@ pub mod qobject {
         #[qinvokable]
         fn cancel_generation(self: &BoardController);
 
+        /// JSON `{ok: true}` or `{ok: false, message}` for the client section
+        /// that asked.
+        #[qsignal]
+        fn agent_check_finished(self: Pin<&mut BoardController>, client: QString, result: QString);
+
         /// JSON: `{ok: true, requirements, criteria}` or `{ok: false, code, message}`.
         #[qsignal]
         fn generation_finished(self: Pin<&mut BoardController>, result: QString);
@@ -161,6 +174,7 @@ use cxx_qt_lib::{QString, QUrl};
 use stickynotes_core::{Applied, Command, Origin, Result as CoreResult, project};
 use uuid::Uuid;
 
+use crate::agent_setup;
 use crate::context;
 use crate::drafting::{CancelToken, DraftOptions};
 use crate::settings;
@@ -452,6 +466,31 @@ impl qobject::BoardController {
 
     fn claude_setup_command(&self) -> QString {
         to_qstring(context::get().claude_setup_command())
+    }
+
+    fn agent_setup_json(&self) -> QString {
+        let ctx = context::get();
+        let json = serde_json::json!({
+            "desktop_project": agent_setup::claude_desktop_project_json(&ctx.endpoint, &ctx.token),
+            "desktop_bridge": agent_setup::claude_desktop_bridge_json(&ctx.endpoint, &ctx.token),
+            "opencode": agent_setup::opencode_json(&ctx.endpoint, &ctx.token),
+        });
+        to_qstring(json.to_string())
+    }
+
+    fn check_agent_connection(&self, client: &QString) {
+        let ctx = context::get();
+        let client = client.clone();
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = match agent_setup::check_endpoint(&ctx.endpoint, &ctx.token) {
+                Ok(()) => serde_json::json!({ "ok": true }),
+                Err(message) => serde_json::json!({ "ok": false, "message": message }),
+            };
+            let result = to_qstring(result.to_string());
+            // Fails only if the controller was destroyed.
+            let _ = thread.queue(move |obj| obj.agent_check_finished(client, result));
+        });
     }
 
     fn save_screenshot(&self, path: &QString) -> bool {

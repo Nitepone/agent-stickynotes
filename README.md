@@ -57,7 +57,7 @@ folder anywhere else.
 
 ## Connect an agent
 
-Open **Agent ▸ Connect Claude Code…**, copy the command, and run it once. See
+Open **Agent ▸ Connect Agent…**, pick your client (Claude Code CLI, Claude Code Desktop or OpenCode) and follow its steps once. See
 [docs/claude-code-setup.md](docs/claude-code-setup.md) for the tools, the REST API
 and the artifact rules.
 

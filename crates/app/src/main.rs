@@ -1,3 +1,4 @@
+mod agent_setup;
 mod context;
 mod controller;
 mod drafting;

@@ -178,7 +178,10 @@ ApplicationWindow {
                 }
                 else if (scene === "newtask") taskDialog.openNew(window.board.columns[0])
                 else if (scene === "column") columnDialog.openColumn(window.board.columns[0])
-                else if (scene === "agent") agentDialog.open()
+                else if (scene === "agent" || scene === "agent-all") {
+                    agentDialog.open()
+                    if (scene === "agent-all") agentDialog.expandAll()
+                }
                 else if (scene === "project") projectDialog.openProject(controller.projectJson())
                 else if (scene === "prefs") window.openPreferences()
                 else if (scene === "editor") {
@@ -507,7 +510,7 @@ ApplicationWindow {
             MenuItem { action: agentWriteAction }
             MenuSeparator {}
             Action {
-                text: qsTr("&Connect Claude Code…")
+                text: qsTr("&Connect Agent…")
                 onTriggered: agentDialog.open()
             }
             Action {
@@ -811,7 +814,20 @@ ApplicationWindow {
     AgentConnectDialog {
         id: agentDialog
         setupCommand: controller.claudeSetupCommand()
+        desktopProjectJson: agentSetup.desktop_project
+        desktopBridgeJson: agentSetup.desktop_bridge
+        opencodeJson: agentSetup.opencode
         endpoint: controller.endpoint
         agentWrite: controller.agentWrite
+        reducedMotion: prefs.reduce_motion
+        onTestRequested: (client) => controller.checkAgentConnection(client)
+    }
+    readonly property var agentSetup: JSON.parse(controller.agentSetupJson())
+    Connections {
+        target: controller
+        function onAgentCheckFinished(client, resultJson) {
+            const r = JSON.parse(resultJson)
+            agentDialog.setCheckResult(client, r.ok, r.message)
+        }
     }
 }
