@@ -236,7 +236,7 @@ ApplicationWindow {
             if (!taskDialog.visible)
                 return
             if (r.ok)
-                taskDialog.applyDraft(r.requirements, r.criteria)
+                taskDialog.applyDraft(r.requirements, r.criteria, r.category, r.categoryInvalid)
             else if (r.code !== "cancelled")
                 taskDialog.showGenerationError(r.message)
         }
@@ -743,6 +743,10 @@ ApplicationWindow {
         generatorName: controller.generatorName
         onGenerateRequested: (form) => controller.startGeneration(form)
         onCancelGenerationRequested: controller.cancelGeneration()
+        onUndoDraftRequested: messageDialog.ask(
+            qsTr("Undo the draft?"),
+            qsTr("Remove the drafted requirements and criteria, and put the requirements, criteria and category back as they were before the draft? This also discards any changes you made to them since."),
+            qsTr("Undo draft"), true, () => taskDialog.undoDraft())
         linkCandidates: window.linkCandidates
         categories: window.board.categories || []
         relationOptions: JSON.parse(controller.relationOptions())

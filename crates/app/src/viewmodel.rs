@@ -13,7 +13,9 @@ use stickynotes_core::{
 };
 use uuid::Uuid;
 
-use crate::drafting::{Draft, DraftError, DraftOptions, DraftRequest};
+use crate::drafting::{
+    CategoryChoice, CategoryInfo, Draft, DraftError, DraftOptions, DraftRequest,
+};
 
 /// Most lines of description shown on a card before `[...]`.
 const CARD_MAX_LINES: usize = 6;
@@ -129,6 +131,39 @@ fn used_categories(board: &Board) -> Vec<&str> {
         .collect();
     names.sort_by_key(|c| c.to_lowercase());
     names
+}
+
+/// The board's categories for the drafting prompt: each with up to two
+/// example task descriptions (shortened) so the model can tell them apart.
+pub fn category_infos(board: &Board) -> Vec<CategoryInfo> {
+    used_categories(board)
+        .into_iter()
+        .map(|name| {
+            let examples = board
+                .tasks()
+                .filter(|(_, t)| {
+                    t.category
+                        .as_deref()
+                        .is_some_and(|c| c.to_lowercase() == name.to_lowercase())
+                })
+                .map(|(_, t)| shorten(&t.description, 60))
+                .take(2)
+                .collect();
+            CategoryInfo {
+                name: name.to_string(),
+                examples,
+            }
+        })
+        .collect()
+}
+
+fn shorten(text: &str, max: usize) -> String {
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if text.chars().count() <= max {
+        return text;
+    }
+    let cut: String = text.chars().take(max).collect();
+    format!("{}...", cut.trim_end())
 }
 
 fn card(task: &Task) -> CardVm {
@@ -358,6 +393,7 @@ impl TaskForm {
         &self,
         document_prompt: &str,
         code_guidance: &str,
+        categories: Vec<CategoryInfo>,
         options: DraftOptions,
     ) -> Result<DraftRequest, String> {
         if self.description.trim().is_empty() {
@@ -379,6 +415,8 @@ impl TaskForm {
             document_prompt: document_prompt.to_string(),
             code_guidance: code_guidance.to_string(),
             options,
+            categories,
+            current_category: self.category.trim().to_string(),
         })
     }
 
@@ -452,11 +490,21 @@ pub fn draft_result_json(
     let value = match result {
         Ok(draft) => {
             let draft = draft.without_existing(request);
+            // A missing or unknown category never fails the draft; the view
+            // leaves the field alone and tells the user.
+            let (category, category_invalid) =
+                match request.resolve_category(draft.category.as_deref()) {
+                    CategoryChoice::Chosen(name) => (Some(name), false),
+                    CategoryChoice::Invalid => (None, true),
+                    CategoryChoice::NotAsked => (None, false),
+                };
             json!({
                 "ok": true,
                 "backend": backend,
                 "requirements": draft.requirements,
                 "criteria": draft.acceptance_criteria,
+                "category": category,
+                "categoryInvalid": category_invalid,
             })
         }
         Err(e) => json!({ "ok": false, "code": e.code(), "message": e.to_string() }),
@@ -829,7 +877,7 @@ mod tests {
             effort: "high".into(),
         };
         let req = form
-            .draft_request("Plain.", "Rust.", options.clone())
+            .draft_request("Plain.", "Rust.", vec![], options.clone())
             .unwrap();
         assert_eq!(req.options, options);
         assert_eq!(req.description, "Add login");
@@ -844,7 +892,7 @@ mod tests {
         let blank = TaskForm::parse(r#"{"description":"  "}"#).unwrap();
         assert!(
             blank
-                .draft_request("", "", DraftOptions::default())
+                .draft_request("", "", vec![], DraftOptions::default())
                 .is_err()
         );
     }
@@ -859,6 +907,7 @@ mod tests {
         let draft = Draft {
             requirements: vec!["use https".into(), "Hash passwords".into()],
             acceptance_criteria: vec!["Can sign in".into()],
+            category: None,
         };
         let v: serde_json::Value =
             serde_json::from_str(&draft_result_json(Ok(draft), &request, "Claude Code")).unwrap();
@@ -866,6 +915,8 @@ mod tests {
         assert_eq!(v["requirements"], json!(["Hash passwords"]));
         assert_eq!(v["criteria"], json!(["Can sign in"]));
         assert_eq!(v["backend"], "Claude Code");
+        assert!(v["category"].is_null());
+        assert_eq!(v["categoryInvalid"], false, "none exist: not asked");
 
         let v: serde_json::Value = serde_json::from_str(&draft_result_json(
             Err(DraftError::Unavailable("not installed".into())),
@@ -876,6 +927,94 @@ mod tests {
         assert_eq!(v["ok"], false);
         assert_eq!(v["code"], "unavailable");
         assert_eq!(v["message"], "not installed");
+    }
+
+    fn categorized_request(current: &str) -> DraftRequest {
+        DraftRequest {
+            description: "d".into(),
+            categories: vec![
+                CategoryInfo {
+                    name: "Backend".into(),
+                    examples: vec![],
+                },
+                CategoryInfo {
+                    name: "UI".into(),
+                    examples: vec![],
+                },
+            ],
+            current_category: current.into(),
+            ..Default::default()
+        }
+    }
+
+    fn category_result(request: &DraftRequest, named: Option<&str>) -> serde_json::Value {
+        let draft = Draft {
+            category: named.map(String::from),
+            ..Default::default()
+        };
+        serde_json::from_str(&draft_result_json(Ok(draft), request, "x")).unwrap()
+    }
+
+    #[test]
+    fn draft_result_carries_the_canonical_category_or_flags_an_invalid_one() {
+        let request = categorized_request("");
+        let v = category_result(&request, Some("ui"));
+        assert_eq!(v["ok"], true);
+        assert_eq!(v["category"], "UI", "the board's spelling is used");
+        assert_eq!(v["categoryInvalid"], false);
+
+        for bad in [Some("Docs"), Some("  "), None] {
+            let v = category_result(&request, bad);
+            assert_eq!(v["ok"], true, "the draft itself is kept");
+            assert!(v["category"].is_null());
+            assert_eq!(v["categoryInvalid"], true, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn an_existing_category_is_not_asked_for_or_flagged() {
+        let request = categorized_request("Backend");
+        for named in [Some("UI"), None] {
+            let v = category_result(&request, named);
+            assert!(v["category"].is_null());
+            assert_eq!(v["categoryInvalid"], false);
+        }
+    }
+
+    #[test]
+    fn category_infos_list_used_categories_with_short_examples() {
+        let store = BoardStore::new(true);
+        for (desc, cat) in [
+            ("Fix the parser", "Backend"),
+            ("Add retries", "backend"),
+            ("A third backend task", "Backend"),
+            (
+                "Round the buttons off but keep the description rather long so it gets cut",
+                "UI",
+            ),
+            ("No category", ""),
+        ] {
+            let form = TaskForm::parse(&json!({"description": desc, "category": cat}).to_string())
+                .unwrap();
+            store
+                .apply(
+                    stickynotes_core::Origin::User,
+                    stickynotes_core::Command::CreateTask {
+                        column: None,
+                        position: None,
+                        draft: form.into_draft(),
+                    },
+                    None,
+                )
+                .unwrap();
+        }
+        let infos = store.read(|b, _| category_infos(b));
+        assert_eq!(infos.len(), 2);
+        assert_eq!(infos[0].name, "Backend");
+        assert_eq!(infos[0].examples.len(), 2, "at most two examples");
+        assert_eq!(infos[1].name, "UI");
+        assert!(infos[1].examples[0].ends_with("..."));
+        assert!(infos[1].examples[0].chars().count() <= 63);
     }
 
     #[test]

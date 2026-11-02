@@ -471,10 +471,11 @@ impl qobject::BoardController {
         }
         let ctx = context::get();
         let request = TaskForm::parse(&String::from(form)).and_then(|form| {
-            let (document_prompt, code_guidance) = ctx.store.read(|board, _| {
+            let (document_prompt, code_guidance, categories) = ctx.store.read(|board, _| {
                 (
                     board.project.document_prompt.clone(),
                     board.project.code_guidance.clone(),
+                    viewmodel::category_infos(board),
                 )
             });
             let settings = stickynotes_core::store::relock(&ctx.settings);
@@ -483,7 +484,7 @@ impl qobject::BoardController {
                 model: settings.draft_model.clone(),
                 effort: settings.draft_effort.clone(),
             };
-            form.draft_request(&document_prompt, &code_guidance, options)
+            form.draft_request(&document_prompt, &code_guidance, categories, options)
         });
         let request = match request {
             Ok(request) => request,

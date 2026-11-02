@@ -35,6 +35,12 @@ StickyDialog {
     property string generationNote: ""
     property bool generationNoteIsError: false
     property int generationSeconds: 0
+    // Shown under the category box when a draft did not give a usable category.
+    property string categoryNote: ""
+    // What the lists and category were just before the last draft was applied,
+    // as { requirements, criteria, category }; null when there is nothing to undo.
+    property var draftSnapshot: null
+    readonly property bool hasDraftSnapshot: draftSnapshot !== null
 
     // Link targets: all tasks except this one.
     readonly property var linkTargets: linkCandidates.filter(c => c.id !== taskId)
@@ -54,29 +60,83 @@ StickyDialog {
     signal artifactClicked(string name)
     signal generateRequested(string formJson)
     signal cancelGenerationRequested()
+    // Asks the owner to confirm; the owner then calls undoDraft().
+    signal undoDraftRequested()
 
     onGeneratingChanged: if (generating) generationSeconds = 0
     // Closing the dialog abandons any draft in progress.
-    onClosed: if (generating) cancelGenerationRequested()
+    onClosed: {
+        if (generating) cancelGenerationRequested()
+        draftSnapshot = null
+    }
 
     function plural(n, one, many) {
         return n === 1 ? one : many
     }
 
-    // Append drafted items. Existing ones are kept; nothing is saved here.
-    function applyDraft(requirements, criteria) {
+    function takeSnapshot() {
+        const requirements = []
+        for (let i = 0; i < requirementsModel.count; i++)
+            requirements.push(requirementsModel.get(i).text)
+        const criteria = []
+        for (let i = 0; i < criteriaModel.count; i++) {
+            const c = criteriaModel.get(i)
+            criteria.push({ cid: c.cid, text: c.text, done: c.done })
+        }
+        return { requirements: requirements, criteria: criteria, category: categoryText }
+    }
+
+    // Add drafted items, and fill the category when the draft chose one and the
+    // box is empty (a category the user already set is never replaced). Existing
+    // items are kept; nothing is saved here. `category` and `categoryInvalid`
+    // are optional. Remembers the state before, for undoDraft().
+    function applyDraft(requirements, criteria, category, categoryInvalid) {
+        const before = takeSnapshot()
+        const fillCategory = !!category && categoryText.trim() === ""
         for (const r of requirements)
             requirementsModel.append({ text: r })
         for (const c of criteria)
             criteriaModel.append({ cid: "", text: c, done: false })
+        if (fillCategory) {
+            showCategory(category)
+            settleCategory()
+        }
+        if (requirements.length + criteria.length > 0 || fillCategory)
+            draftSnapshot = before
+        categoryNote = (categoryInvalid && categoryText.trim() === "")
+            ? qsTr("The draft did not choose one of the existing categories, so none was set. Pick one yourself if you want one.")
+            : ""
         generationNoteIsError = false
+        const categoryPart = fillCategory ? qsTr(" Category set to \u201c%1\u201d.").arg(categoryText) : ""
         if (requirements.length + criteria.length === 0) {
-            generationNote = qsTr("Nothing new to add: the task already covers what was found.")
+            generationNote = qsTr("Nothing new to add: the task already covers what was found.") + categoryPart
             return
         }
         generationNote = qsTr("Added %1 and %2 below. Review and edit them, then Save.")
             .arg(requirements.length + " " + plural(requirements.length, qsTr("requirement"), qsTr("requirements")))
             .arg(criteria.length + " " + plural(criteria.length, qsTr("acceptance criterion"), qsTr("acceptance criteria")))
+            + categoryPart
+    }
+
+    // Put the requirements, criteria and category back as they were before the
+    // last draft, discarding anything changed since. Called once the user has
+    // confirmed.
+    function undoDraft() {
+        const snap = draftSnapshot
+        if (snap === null)
+            return
+        requirementsModel.clear()
+        for (const r of snap.requirements)
+            requirementsModel.append({ text: r })
+        criteriaModel.clear()
+        for (const c of snap.criteria)
+            criteriaModel.append({ cid: c.cid, text: c.text, done: c.done })
+        showCategory(snap.category)
+        settleCategory()
+        draftSnapshot = null
+        categoryNote = ""
+        generationNoteIsError = false
+        generationNote = qsTr("Draft undone.")
     }
 
     function showGenerationError(message) {
@@ -158,6 +218,8 @@ StickyDialog {
         deletedExternally = false
         errorText = ""
         generationNote = ""
+        categoryNote = ""
+        draftSnapshot = null
         descriptionField.text = ""
         extendedField.text = ""
         showCategory("")
@@ -173,6 +235,8 @@ StickyDialog {
         columnId = task.columnId
         loadedUpdatedAt = task.updatedAt
         changedExternally = false
+        draftSnapshot = null
+        categoryNote = ""
         descriptionField.text = task.description
         extendedField.text = task.extendedDescription
         showCategory(task.category || "")
@@ -321,6 +385,73 @@ StickyDialog {
                 placeholderText: qsTr("Optional details, context, links…")
             }
 
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                spacing: 8
+
+                Button {
+                    objectName: "generateButton"
+                    visible: !dialog.generating
+                    text: qsTr("Draft requirements && criteria")
+                    enabled: descriptionField.text.trim().length > 0
+                    onClicked: {
+                        dialog.generationNote = ""
+                        dialog.categoryNote = ""
+                        dialog.generateRequested(dialog.formJson())
+                    }
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 600
+                    ToolTip.text: qsTr("Ask %1 to propose requirements and acceptance criteria from the descriptions. Nothing is saved until you click Save.")
+                                  .arg(dialog.generatorName)
+                }
+                Button {
+                    objectName: "undoDraftButton"
+                    visible: dialog.hasDraftSnapshot && !dialog.generating
+                    text: qsTr("Undo draft")
+                    onClicked: dialog.undoDraftRequested()
+                    Accessible.name: qsTr("Undo the drafted requirements and criteria")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 600
+                    ToolTip.text: qsTr("Remove what the draft added and restore the task as it was before it.")
+                }
+                BusyIndicator {
+                    objectName: "generatingIndicator"
+                    visible: dialog.generating
+                    running: dialog.generating
+                    implicitWidth: 28
+                    implicitHeight: 28
+                }
+                Label {
+                    objectName: "generatingLabel"
+                    visible: dialog.generating
+                    text: qsTr("Asking %1\u2026 %2 s").arg(dialog.generatorName).arg(dialog.generationSeconds)
+                    color: Theme.subtleText
+                }
+                Button {
+                    objectName: "cancelGeneration"
+                    visible: dialog.generating
+                    text: qsTr("Cancel")
+                    onClicked: dialog.cancelGenerationRequested()
+                }
+                Item { Layout.fillWidth: true }
+
+                Timer {
+                    interval: 1000
+                    repeat: true
+                    running: dialog.generating
+                    onTriggered: dialog.generationSeconds++
+                }
+            }
+            Label {
+                objectName: "generationNote"
+                Layout.fillWidth: true
+                visible: dialog.generationNote !== ""
+                text: dialog.generationNote
+                wrapMode: Text.Wrap
+                color: dialog.generationNoteIsError ? Theme.danger : Theme.success
+            }
+
             SectionLabel { text: qsTr("Category") }
             RowLayout {
                 Layout.fillWidth: true
@@ -369,61 +500,14 @@ StickyDialog {
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
             }
-
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.topMargin: 8
-                spacing: 8
-
-                Button {
-                    objectName: "generateButton"
-                    visible: !dialog.generating
-                    text: qsTr("Draft requirements && criteria")
-                    enabled: descriptionField.text.trim().length > 0
-                    onClicked: {
-                        dialog.generationNote = ""
-                        dialog.generateRequested(dialog.formJson())
-                    }
-                    ToolTip.visible: hovered
-                    ToolTip.delay: 600
-                    ToolTip.text: qsTr("Ask %1 to propose requirements and acceptance criteria from the descriptions. Nothing is saved until you click Save.")
-                                  .arg(dialog.generatorName)
-                }
-                BusyIndicator {
-                    objectName: "generatingIndicator"
-                    visible: dialog.generating
-                    running: dialog.generating
-                    implicitWidth: 28
-                    implicitHeight: 28
-                }
-                Label {
-                    objectName: "generatingLabel"
-                    visible: dialog.generating
-                    text: qsTr("Asking %1\u2026 %2 s").arg(dialog.generatorName).arg(dialog.generationSeconds)
-                    color: Theme.subtleText
-                }
-                Button {
-                    objectName: "cancelGeneration"
-                    visible: dialog.generating
-                    text: qsTr("Cancel")
-                    onClicked: dialog.cancelGenerationRequested()
-                }
-                Item { Layout.fillWidth: true }
-
-                Timer {
-                    interval: 1000
-                    repeat: true
-                    running: dialog.generating
-                    onTriggered: dialog.generationSeconds++
-                }
-            }
             Label {
-                objectName: "generationNote"
+                objectName: "categoryNote"
                 Layout.fillWidth: true
-                visible: dialog.generationNote !== ""
-                text: dialog.generationNote
+                visible: dialog.categoryNote !== ""
+                text: dialog.categoryNote
+                color: Theme.warning
+                font.pixelSize: 12
                 wrapMode: Text.Wrap
-                color: dialog.generationNoteIsError ? Theme.danger : Theme.success
             }
 
             SectionLabel { text: qsTr("Requirements") }

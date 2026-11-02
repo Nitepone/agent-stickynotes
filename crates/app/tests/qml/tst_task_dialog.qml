@@ -24,6 +24,15 @@ Item {
             { id: "t3", columnTitle: "Done", text: "Ship it", label: "Done \u2014 Ship it" },
         ]
     }
+    // Wired like Main.qml: the dialog only asks, the owner confirms.
+    ConfirmDialog { id: confirm }
+    Connections {
+        target: dialog
+        function onUndoDraftRequested() {
+            confirm.ask("Undo the draft?", "text", "Undo draft", true, () => dialog.undoDraft())
+        }
+    }
+    SignalSpy { id: undoSpy; target: dialog; signalName: "undoDraftRequested" }
     SignalSpy { id: openSpy; target: dialog; signalName: "openTaskRequested" }
     SignalSpy { id: artifactSpy; target: dialog; signalName: "artifactClicked" }
     SignalSpy { id: generateSpy; target: dialog; signalName: "generateRequested" }
@@ -53,10 +62,12 @@ Item {
             artifactSpy.clear()
             generateSpy.clear()
             cancelSpy.clear()
+            undoSpy.clear()
+            dialog.categories = []
             dialog.generating = false
             dialog.generatorName = "Claude Code"
         }
-        function cleanup() { dialog.close() }
+        function cleanup() { confirm.close(); dialog.close() }
 
         function fields(name) {
             return TestHelpers.findAllByName(dialog.contentItem, name)
@@ -324,6 +335,162 @@ Item {
             dialog.applyDraft(["Hash passwords"], [])
             fields("requirementField")[0].text = "Hash passwords with argon2"
             compare(form().requirements, ["Hash passwords with argon2"])
+        }
+
+        // ---- category from a draft, and the layout around it ----
+
+        function openCategorized(category, requirements, criteria) {
+            dialog.categories = ["Backend", "UI"]
+            dialog.openTask(JSON.stringify({
+                id: "t1", number: 7, columnId: "c0", description: "d", extendedDescription: "",
+                category: category, requirements: requirements || [], criteria: criteria || [],
+                references: [], updatedAt: "2026-01-01T00:00:00Z",
+            }), "Backlog")
+            waitForRendering(dialog.contentItem)
+        }
+
+        function sectionY(text) {
+            const [label] = TestHelpers.findWhere(dialog.contentItem, c =>
+                c.hasOwnProperty("text") && c.text === text && c.visible && c.width > 0)
+            verify(label, "section " + text)
+            return label.mapToItem(dialog.contentItem.contentItem, 0, 0).y
+        }
+
+        function test_the_draft_button_sits_above_the_category_section() {
+            openCategorized("", [], [])
+            const draft = fields("generateButton")[0]
+            const draftY = draft.mapToItem(dialog.contentItem.contentItem, 0, 0).y
+            verify(draftY < sectionY("Category"), "draft button above Category")
+            verify(draftY > sectionY("Extended description"), "and below the descriptions")
+            verify(fields("categoryBox")[0].mapToItem(dialog.contentItem.contentItem, 0, 0).y > draftY)
+        }
+
+        function test_a_draft_fills_an_empty_category() {
+            openCategorized("", [], [])
+            dialog.applyDraft(["R"], [], "UI", false)
+            compare(form().category, "UI")
+            compare(fields("categoryBox")[0].currentIndex, 1, "the combo shows the board's entry")
+            compare(fields("categoryBox")[0].editText, "UI")
+            verify(noteText().indexOf("Category set to") >= 0)
+            verify(!fields("categoryNote")[0].visible)
+        }
+
+        function test_a_category_the_user_already_chose_is_kept_silently() {
+            openCategorized("Backend", [], [])
+            dialog.applyDraft(["R"], [], "UI", false)
+            compare(form().category, "Backend")
+            verify(noteText().indexOf("Category") < 0, noteText())
+            verify(!fields("categoryNote")[0].visible)
+        }
+
+        function test_an_invalid_category_is_flagged_and_changes_nothing() {
+            openCategorized("", [], [])
+            dialog.applyDraft(["R"], ["C"], null, true)
+            compare(form().category, "")
+            compare(form().requirements, ["R"], "the rest of the draft is applied")
+            verify(fields("categoryNote")[0].visible)
+            // The next attempt clears the flag.
+            mouseClick(fields("generateButton")[0])
+            verify(!fields("categoryNote")[0].visible)
+        }
+
+        function test_no_flag_when_the_user_has_a_category_even_if_the_draft_had_none() {
+            openCategorized("UI", [], [])
+            dialog.applyDraft(["R"], [], null, true)
+            verify(!fields("categoryNote")[0].visible)
+        }
+
+        function test_the_category_box_still_works_after_a_draft() {
+            openCategorized("", [], [])
+            dialog.applyDraft(["R"], [], "UI", false)
+            const box = fields("categoryBox")[0]
+            box.currentIndex = 0
+            box.activated(0)
+            compare(form().category, "Backend")
+            mouseClick(fields("clearCategory")[0])
+            compare(form().category, "")
+            box.contentItem.forceActiveFocus()
+            box.contentItem.selectAll()
+            for (const ch of "Docs")
+                keyClick(ch)
+            compare(form().category, "Docs")
+        }
+
+        // ---- undoing a draft ----
+
+        function undoButton() { return fields("undoDraftButton")[0] }
+
+        function test_undo_is_only_offered_after_a_draft() {
+            openCategorized("", ["Keep"], [])
+            verify(!undoButton().visible)
+            dialog.applyDraft([], [], null, false)
+            verify(!undoButton().visible, "an empty draft changes nothing, so nothing to undo")
+            dialog.applyDraft(["R"], [], null, false)
+            verify(undoButton().visible)
+            const left = undoButton().mapToItem(dialog.contentItem.contentItem, 0, 0)
+            const draft = fields("generateButton")[0].mapToItem(dialog.contentItem.contentItem, 0, 0)
+            verify(Math.abs(left.y - draft.y) < 4, "next to the draft button")
+            verify(left.x > draft.x)
+        }
+
+        function test_clicking_undo_asks_first_and_changes_nothing() {
+            openCategorized("", ["Keep"], [{ id: "k1", text: "Old", done: true }])
+            dialog.applyDraft(["R"], ["C"], "UI", false)
+            mouseClick(undoButton())
+            compare(undoSpy.count, 1)
+            tryCompare(confirm, "visible", true)
+            compare(form().requirements, ["Keep", "R"])
+            compare(form().category, "UI")
+        }
+
+        function test_cancelling_the_confirmation_keeps_the_draft() {
+            openCategorized("", ["Keep"], [])
+            dialog.applyDraft(["R"], ["C"], "UI", false)
+            mouseClick(undoButton())
+            tryCompare(confirm, "visible", true)
+            wait(50)
+            mouseClick(TestHelpers.findWhere(confirm.footer, i => i.text === "Cancel" && i.visible)[0])
+            tryCompare(confirm, "visible", false)
+            compare(form().requirements, ["Keep", "R"])
+            compare(form().criteria.length, 1)
+            compare(form().category, "UI")
+            verify(undoButton().visible, "still undoable")
+        }
+
+        function test_confirming_restores_the_state_before_the_draft() {
+            openCategorized("", ["Keep"], [{ id: "k1", text: "Old", done: true }])
+            const before = form()
+            dialog.applyDraft(["R"], ["C"], "UI", false)
+            verify(form().requirements.length === 2)
+            mouseClick(undoButton())
+            tryCompare(confirm, "visible", true)
+            wait(50)
+            mouseClick(TestHelpers.findWhere(confirm.footer, i => i.text === "Undo draft" && i.visible)[0])
+            tryCompare(confirm, "visible", false)
+            compare(form(), before, "requirements, criteria (ids, done) and category as before")
+            verify(!undoButton().visible)
+            verify(!dialog.isEdited())
+        }
+
+        function test_undo_works_after_the_drafted_items_were_shown_and_edited() {
+            openCategorized("", [], [])
+            dialog.applyDraft(["R"], ["C"], "UI", false)
+            waitForRendering(dialog.contentItem)
+            compare(fields("requirementField").length, 1, "the item is in the dialog's list")
+            fields("requirementField")[0].text = "edited"
+            dialog.undoDraft()
+            compare(fields("requirementField").length, 0)
+            compare(fields("criterionField").length, 0)
+            compare(form().category, "")
+        }
+
+        function test_the_snapshot_is_dropped_when_the_dialog_closes() {
+            openCategorized("", [], [])
+            dialog.applyDraft(["R"], [], null, false)
+            dialog.close()
+            verify(!dialog.hasDraftSnapshot)
+            openCategorized("", [], [])
+            verify(!undoButton().visible)
         }
 
         // ---- task number ----
