@@ -14,6 +14,9 @@ QtObject {
 
     property string columnId: ""
     property var tasks: []
+    // The column's full stored order when `tasks` is a filtered subset of it;
+    // empty means `tasks` is everything. Positions are always stored ones.
+    property var allTasks: []
 
     // [{ kind: "card", task, stackKey, showCategory }
     //  | { kind: "header", stackKey, category, count }]
@@ -63,7 +66,7 @@ QtObject {
     // bottom (collapsed members are not shown), without the dragged one; an
     // index past the end means the end of the column.
     function storedPosition(shownIds, index, draggedId) {
-        const others = tasks.filter(t => t.id !== draggedId)
+        const others = (allTasks.length > 0 ? allTasks : tasks).filter(t => t.id !== draggedId)
         if (index >= shownIds.length)
             return others.length
         const at = others.findIndex(t => t.id === shownIds[index])

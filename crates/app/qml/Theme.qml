@@ -201,6 +201,7 @@ QtObject {
     // ---- Layout constants (not colors, but shared by every view) ----------
 
     readonly property int columnWidth: 284
+    readonly property int collapsedColumnWidth: 48
     readonly property int columnSpacing: 12
     readonly property int cardSpacing: 8
     readonly property int radius: 8

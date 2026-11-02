@@ -18,6 +18,16 @@ Item {
     // Collapsed stacks, as { stackKey: true }. The owner keeps it across board
     // refreshes (this view is rebuilt then) and updates it on stackToggled.
     property var collapsedStacks: ({})
+    // View-only filter (TaskFilter) and whether this is the board's last column;
+    // null means nothing is hidden.
+    property var filter: null
+    property bool isLastColumn: false
+    // Slim header only (title and count). BoardView ignores it while editing columns.
+    property bool collapsed: false
+    readonly property var visibleTasks: filter ? filter.visibleTasks(column.tasks, isLastColumn) : column.tasks
+    readonly property string countText: filter ? filter.countText(visibleTasks.length, column.tasks.length)
+                                               : String(column.tasks.length)
+    readonly property bool noMatches: visibleTasks.length === 0 && column.tasks.length > 0
     readonly property bool isColumn: true
     readonly property bool dragging: grip.drag.active
 
@@ -28,11 +38,13 @@ Item {
     signal taskDropped(string taskId, int position)
     signal taskMoveRequested(string taskId, int direction)
     signal stackToggled(string stackKey)
+    signal collapseToggled()
 
     StackModel {
         id: stacks
         columnId: root.column.id
-        tasks: root.column.tasks
+        tasks: root.visibleTasks
+        allTasks: root.column.tasks
     }
 
     function isCollapsed(stackKey) {
@@ -56,7 +68,7 @@ Item {
     }
 
     objectName: "column-" + column.id
-    width: Theme.columnWidth
+    width: collapsed ? Theme.collapsedColumnWidth : Theme.columnWidth
 
     // Index among the shown cards at which a task dropped at (x, y) in `item`
     // coordinates lands, ignoring the dragged task itself. Use storedPosition()
@@ -73,7 +85,13 @@ Item {
 
     function storedPosition(index, draggedId) {
         const ids = cardItems(draggedId, true).map(c => c.task.id)
-        return stacks.storedPosition(ids, index, draggedId)
+        return storedPositionForShown(ids, index, draggedId)
+    }
+
+    // The same for an explicit list of shown card ids (top to bottom, without
+    // the dragged one). Hidden (filtered) tasks keep their stored places.
+    function storedPositionForShown(shownIds, index, draggedId) {
+        return stacks.storedPosition(shownIds, index, draggedId)
     }
 
     function cardTop(card) {
@@ -129,7 +147,54 @@ Item {
         Drag.hotSpot.x: width / 2
         Drag.hotSpot.y: 20
 
+        // The slim form of a collapsed column.
+        Item {
+            id: slim
+            objectName: "collapsedColumn"
+            anchors.fill: parent
+            visible: root.collapsed
+
+            ToolButton {
+                id: expandButton
+                objectName: "expandColumn"
+                anchors.top: parent.top
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.topMargin: 6
+                text: "›"
+                font.pixelSize: 16
+                implicitWidth: 32
+                implicitHeight: 32
+                Accessible.name: qsTr("Expand column %1").arg(root.column.title)
+                onClicked: root.collapseToggled()
+                ToolTip.visible: hovered
+                ToolTip.text: qsTr("Expand column")
+            }
+            Label {
+                id: slimCount
+                objectName: "slimCount"
+                anchors.top: expandButton.bottom
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: root.countText
+                color: Theme.subtleText
+                font.pixelSize: 12
+            }
+            Label {
+                objectName: "slimTitle"
+                transformOrigin: Item.TopLeft
+                rotation: 90
+                x: (slim.width + height) / 2
+                y: slimCount.y + slimCount.height + 8
+                width: Math.max(0, slim.height - y - 8)
+                text: root.column.title
+                font.pixelSize: 15
+                font.bold: true
+                color: Theme.text
+                elide: Text.ElideRight
+            }
+        }
+
         ColumnLayout {
+            visible: !root.collapsed
             anchors.fill: parent
             anchors.margins: 10
             spacing: 8
@@ -175,9 +240,23 @@ Item {
                 }
 
                 Label {
-                    text: root.column.tasks.length
+                    objectName: "count"
+                    text: root.countText
                     color: Theme.subtleText
                     font.pixelSize: 13
+                }
+
+                ToolButton {
+                    objectName: "collapseColumn"
+                    visible: !root.editMode
+                    text: "‹"
+                    font.pixelSize: 16
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    Accessible.name: qsTr("Collapse column %1").arg(root.column.title)
+                    onClicked: root.collapseToggled()
+                    ToolTip.visible: hovered
+                    ToolTip.text: qsTr("Collapse column")
                 }
 
                 ToolButton {
@@ -190,6 +269,15 @@ Item {
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Delete column")
                 }
+            }
+
+            Label {
+                objectName: "noMatches"
+                visible: root.noMatches
+                Layout.fillWidth: true
+                text: qsTr("No tasks match the filter.")
+                color: Theme.subtleText
+                wrapMode: Text.WordWrap
             }
 
             Flickable {
@@ -313,7 +401,7 @@ Item {
             id: taskDrop
             anchors.fill: parent
             keys: ["task"]
-            enabled: !root.editMode
+            enabled: !root.editMode && !root.collapsed
 
             property int hoverIndex: -1
             property string draggedId: drag.source ? drag.source.task.id : ""

@@ -80,10 +80,10 @@ Item {
 
         function test_tab_reaches_every_card_and_control_in_a_sensible_order() {
             const seen = tabChain(30)
-            // Per column: title, its cards, then the add-task button.
-            compare(seen, ["title", "card-t0", "card-t1", "addTask",
-                           "title", "card-t3", "addTask",
-                           "title", "card-t2", "addTask"])
+            // Per column: title, the collapse button, its cards, then the add-task button.
+            compare(seen, ["title", "collapseColumn", "card-t0", "card-t1", "addTask",
+                           "title", "collapseColumn", "card-t3", "addTask",
+                           "title", "collapseColumn", "card-t2", "addTask"])
         }
 
         function test_tab_reaches_add_column_last_in_edit_mode() {

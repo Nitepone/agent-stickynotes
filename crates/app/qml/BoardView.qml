@@ -16,6 +16,30 @@ Item {
     // state only: kept here across board refreshes, never saved.
     property var collapsedStacks: ({})
 
+    // View-only filter (TaskFilter); null shows everything.
+    property var filter: null
+    // Collapsed columns, { columnId: true }; kept for the session, never saved.
+    property var collapsedColumns: ({})
+
+    function toggleColumn(columnId) {
+        const next = Object.assign({}, collapsedColumns)
+        if (next[columnId])
+            delete next[columnId]
+        else
+            next[columnId] = true
+        collapsedColumns = next
+    }
+
+    // Escape on a focused card clears the filter.
+    Keys.onEscapePressed: (event) => {
+        if (filter && filter.active) {
+            filter.clear()
+            event.accepted = true
+        } else {
+            event.accepted = false
+        }
+    }
+
     function toggleStack(stackKey) {
         const next = Object.assign({}, collapsedStacks)
         if (next[stackKey])
@@ -166,6 +190,7 @@ Item {
                 model: root.board.columns
                 delegate: ColumnView {
                     required property var modelData
+                    required property int index
                     column: modelData
                     height: row.height
                     dragLayer: root.dragLayer
@@ -173,6 +198,10 @@ Item {
                     glowTracker: root.glowTracker
                     reducedMotion: root.reducedMotion
                     collapsedStacks: root.collapsedStacks
+                    filter: root.filter
+                    isLastColumn: index === root.board.columns.length - 1
+                    collapsed: !!root.collapsedColumns[modelData.id] && !root.editMode
+                    onCollapseToggled: root.toggleColumn(modelData.id)
                     onStackToggled: (stackKey) => root.toggleStack(stackKey)
                     onTitleClicked: root.columnTitleClicked(modelData)
                     onAddTaskClicked: root.addTaskClicked(modelData)

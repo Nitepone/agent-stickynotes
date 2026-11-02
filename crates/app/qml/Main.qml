@@ -426,6 +426,14 @@ ApplicationWindow {
 
     // ---- Menus and toolbar ---------------------------------------------
 
+    // View-only filter of the board (never saved, never seen by agents).
+    TaskFilter { id: taskFilter }
+    Shortcut {
+        sequences: [StandardKey.Find]
+        enabled: !window.preferencesOpen && !window.artifactsOpen
+        onActivated: filterBar.focusField()
+    }
+
     Action {
         id: newAction
         text: qsTr("&New Project…")
@@ -586,6 +594,15 @@ ApplicationWindow {
 
             Item { Layout.fillWidth: true }
 
+            FilterBar {
+                id: filterBar
+                visible: !window.preferencesOpen && !window.artifactsOpen
+                filter: taskFilter
+                categories: window.board.categories || []
+                lastColumnTitle: window.board.columns.length > 0
+                                 ? window.board.columns[window.board.columns.length - 1].title : ""
+            }
+
             IconButton {
                 objectName: "artifactsButton"
                 glyph: "folder"
@@ -640,6 +657,7 @@ ApplicationWindow {
         anchors.fill: parent
         enabled: !window.preferencesOpen && !window.artifactsOpen
         glowTracker: glow
+        filter: taskFilter
         reducedMotion: prefs.reduce_motion
         board: window.board
         dragLayer: dragLayer

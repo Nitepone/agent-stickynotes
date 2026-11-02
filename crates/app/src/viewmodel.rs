@@ -48,6 +48,10 @@ struct CardVm {
     /// Set when an agent made the latest change: `{at: ms since epoch, kind}`.
     agent_change: Option<AgentChangeVm>,
     card_text: String,
+    /// Description, requirements and criteria text, for the view's filter.
+    search_text: String,
+    /// Last change, ms since the epoch (stands in for "done since").
+    updated_at: i64,
     done: usize,
     total: usize,
     artifact_count: usize,
@@ -181,6 +185,12 @@ fn card(task: &Task) -> CardVm {
             SUGGESTED_DESCRIPTION_CHARS,
             CARD_MAX_LINES,
         ),
+        search_text: std::iter::once(task.description.as_str())
+            .chain(task.requirements.iter().map(String::as_str))
+            .chain(task.acceptance_criteria.iter().map(|c| c.text.as_str()))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        updated_at: task.updated_at.timestamp_millis(),
         done: p.done,
         total: p.total,
         artifact_count: task.artifacts.len(),
