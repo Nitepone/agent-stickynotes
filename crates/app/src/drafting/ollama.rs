@@ -18,6 +18,118 @@ use super::{CancelToken, Draft, DraftBackend, DraftError, DraftRequest, parse_re
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(180);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL: Duration = Duration::from_millis(40);
+/// The whole "Test connection" check, connect included.
+const CHECK_TIMEOUT: Duration = Duration::from_secs(15);
+
+const REJECTED_TOKEN: &str =
+    "The server rejected the auth token. Check the token in Preferences > Editor.";
+
+/// The one HTTP client setup, shared by drafting and the connection check.
+fn http_agent(timeout: Duration) -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_connect(Some(CONNECT_TIMEOUT))
+        .timeout_global(Some(timeout))
+        .build()
+        .into()
+}
+
+fn unreachable_message(endpoint: &str) -> String {
+    format!(
+        "Cannot reach the Ollama server at {endpoint}. Check that it is running and that the \
+endpoint in Preferences > Editor is right."
+    )
+}
+
+fn status_message(endpoint: &str, status: u16, body: &str) -> String {
+    format!(
+        "The Ollama server at {endpoint} answered with status {status}. {}",
+        excerpt(body)
+    )
+}
+
+/// A successful connection check; `note` is a gentle remark, not an error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConnectionOk {
+    pub note: Option<String>,
+}
+
+/// Ask the server's model list (`GET {endpoint}/v1/models`) to find out
+/// whether drafting can work, without drafting anything. A model that is not
+/// in the list, or a list that cannot be read, is only a note: the server
+/// answered. Errors use drafting's wording and never contain the token.
+pub fn check_connection(endpoint: &str, token: &str, model: &str) -> Result<ConnectionOk, String> {
+    check_connection_within(endpoint, token, model, CHECK_TIMEOUT)
+}
+
+fn check_connection_within(
+    endpoint: &str,
+    token: &str,
+    model: &str,
+    timeout: Duration,
+) -> Result<ConnectionOk, String> {
+    let endpoint = endpoint.trim_end_matches('/');
+    let timed_out = || {
+        format!(
+            "The Ollama server at {endpoint} did not answer within {} seconds.",
+            timeout.as_secs().max(1)
+        )
+    };
+    let mut call = http_agent(timeout).get(format!("{endpoint}/v1/models"));
+    if !token.is_empty() {
+        call = call.header("Authorization", format!("Bearer {token}"));
+    }
+    let mut response = call.call().map_err(|e| match e {
+        ureq::Error::Timeout(
+            ureq::Timeout::Global | ureq::Timeout::RecvResponse | ureq::Timeout::RecvBody,
+        ) => timed_out(),
+        _ => unreachable_message(endpoint),
+    })?;
+    let status = response.status().as_u16();
+    let text = response.body_mut().read_to_string().map_err(|e| match e {
+        ureq::Error::Timeout(_) => timed_out(),
+        _ => format!("The Ollama server at {endpoint} sent an unreadable reply."),
+    })?;
+    match status {
+        200..=299 => {
+            let model = model.trim();
+            let listed = listed_models(&text);
+            let note = (!model.is_empty() && !listed.is_some_and(|l| has_model(&l, model)))
+                .then(|| format!("Connected. Model '{model}' was not listed by the server."));
+            Ok(ConnectionOk { note })
+        }
+        401 | 403 => Err(REJECTED_TOKEN.into()),
+        _ => Err(status_message(endpoint, status, &text)),
+    }
+}
+
+/// Model names in an OpenAI-style (`data[].id`) or Ollama-style
+/// (`models[].name`) list; `None` when the body is neither.
+fn listed_models(body: &str) -> Option<Vec<String>> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let mut names = Vec::new();
+    let mut found = false;
+    for (list, keys) in [("data", &["id"][..]), ("models", &["name", "model"][..])] {
+        if let Some(items) = value[list].as_array() {
+            found = true;
+            for item in items {
+                names.extend(
+                    keys.iter()
+                        .filter_map(|k| item[*k].as_str())
+                        .map(String::from),
+                );
+            }
+        }
+    }
+    found.then_some(names)
+}
+
+/// Servers list `llama3.2:latest` for a model configured as `llama3.2`.
+fn has_model(listed: &[String], model: &str) -> bool {
+    listed
+        .iter()
+        .any(|n| n == model || n.strip_suffix(":latest") == Some(model))
+}
 
 pub struct OllamaBackend {
     endpoint: String,
@@ -64,11 +176,7 @@ impl OllamaBackend {
     }
 
     fn unreachable(&self) -> DraftError {
-        DraftError::Unavailable(format!(
-            "Cannot reach the Ollama server at {}. Check that it is running and that the \
-endpoint in Preferences > Editor is right.",
-            self.endpoint
-        ))
+        DraftError::Unavailable(unreachable_message(&self.endpoint))
     }
 
     fn body(request: &DraftRequest) -> String {
@@ -86,13 +194,7 @@ endpoint in Preferences > Editor is right.",
 
     /// The blocking HTTP exchange. Returns the model's reply text.
     fn post(&self, body: String) -> Result<String, DraftError> {
-        let agent: ureq::Agent = ureq::Agent::config_builder()
-            .http_status_as_error(false)
-            .timeout_connect(Some(CONNECT_TIMEOUT))
-            .timeout_global(Some(self.timeout))
-            .build()
-            .into();
-        let mut call = agent
+        let mut call = http_agent(self.timeout)
             .post(self.url())
             .header("Content-Type", "application/json");
         if !self.token.is_empty() {
@@ -114,14 +216,11 @@ endpoint in Preferences > Editor is right.",
         })?;
         match status {
             200..=299 => reply_text(&text),
-            401 | 403 => Err(DraftError::Failed(
-                "The server rejected the auth token. Check the token in Preferences > Editor."
-                    .into(),
-            )),
-            _ => Err(DraftError::Failed(format!(
-                "The Ollama server at {} answered with status {status}. {}",
-                self.endpoint,
-                excerpt(&text)
+            401 | 403 => Err(DraftError::Failed(REJECTED_TOKEN.into())),
+            _ => Err(DraftError::Failed(status_message(
+                &self.endpoint,
+                status,
+                &text,
             ))),
         }
     }
@@ -431,6 +530,106 @@ mod tests {
             .generate(&request("m"), &CancelToken::new())
             .unwrap_err();
         assert_eq!(err.code(), "timeout");
+    }
+
+    fn models(ids: &[&str]) -> String {
+        let data: Vec<_> = ids.iter().map(|i| serde_json::json!({"id": i})).collect();
+        serde_json::json!({"object": "list", "data": data}).to_string()
+    }
+
+    #[test]
+    fn a_check_succeeds_when_the_model_is_listed() {
+        let server = mock(200, &models(&["llama3.2:latest", "x"]), Duration::ZERO);
+        let ok = check_connection(&format!("{}/", server.url), "", "llama3.2").unwrap();
+        assert_eq!(ok, ConnectionOk { note: None });
+        let seen = server.seen.lock().unwrap();
+        assert!(
+            seen[0].starts_with("GET /v1/models HTTP/1.1"),
+            "{}",
+            seen[0]
+        );
+    }
+
+    #[test]
+    fn a_missing_model_or_unreadable_list_is_still_a_success_with_a_note() {
+        let note = "Connected. Model 'm' was not listed by the server.";
+        for body in [models(&["other"]), "<html>hi</html>".into(), "{}".into()] {
+            let server = mock(200, &body, Duration::ZERO);
+            let ok = check_connection(&server.url, "", "m").unwrap();
+            assert_eq!(ok.note.as_deref(), Some(note), "{body}");
+        }
+        // Ollama's own list shape.
+        let server = mock(200, r#"{"models":[{"name":"m:latest"}]}"#, Duration::ZERO);
+        assert_eq!(check_connection(&server.url, "", "m").unwrap().note, None);
+        // No model configured: nothing to look for.
+        let server = mock(200, &models(&[]), Duration::ZERO);
+        assert_eq!(check_connection(&server.url, "", " ").unwrap().note, None);
+    }
+
+    #[test]
+    fn a_check_reports_a_rejected_token_like_drafting_without_echoing_it() {
+        for status in [401, 403] {
+            let server = mock(status, r#"{"error":"bad tok-123"}"#, Duration::ZERO);
+            let err = check_connection(&server.url, "tok-123", "m").unwrap_err();
+            assert_eq!(err, REJECTED_TOKEN);
+            let drafting = OllamaBackend::new(&server.url, "tok-123")
+                .generate(&request("m"), &CancelToken::new())
+                .unwrap_err();
+            assert_eq!(err, drafting.to_string());
+            assert!(!err.contains("tok-123"));
+        }
+    }
+
+    #[test]
+    fn a_check_of_an_unreachable_server_uses_drafting_wording() {
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let endpoint = format!("http://127.0.0.1:{port}");
+        let err = check_connection(&endpoint, "tok-123", "m").unwrap_err();
+        assert_eq!(err, unreachable_message(&endpoint));
+        assert!(err.starts_with(&format!("Cannot reach the Ollama server at {endpoint}")));
+        assert!(!err.contains("tok-123"));
+    }
+
+    #[test]
+    fn a_check_shows_other_statuses_with_an_excerpt() {
+        let server = mock(500, r#"{"error":"boom"}"#, Duration::ZERO);
+        let err = check_connection(&server.url, "", "m").unwrap_err();
+        assert!(err.contains("status 500") && err.contains("boom"), "{err}");
+    }
+
+    #[test]
+    fn a_check_sends_the_bearer_header_only_with_a_token() {
+        let server = mock(200, &models(&["m"]), Duration::ZERO);
+        check_connection(&server.url, "", "m").unwrap();
+        check_connection(&server.url, "tok-123", "m").unwrap();
+        let seen = server.seen.lock().unwrap();
+        assert!(!seen[0].to_ascii_lowercase().contains("authorization"));
+        assert!(
+            seen[1].contains("authorization: Bearer tok-123"),
+            "{}",
+            seen[1]
+        );
+    }
+
+    #[test]
+    fn a_check_of_a_hung_server_times_out() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        // Accepts and then never answers.
+        let _hold = thread::spawn(move || {
+            let _conn = listener.accept();
+            thread::sleep(Duration::from_secs(5));
+        });
+        let started = Instant::now();
+        let err = check_connection_within(&endpoint, "tok-123", "m", Duration::from_millis(300))
+            .unwrap_err();
+        assert!(err.contains("did not answer within"), "{err}");
+        assert!(!err.contains("tok-123"));
+        assert!(started.elapsed() < Duration::from_secs(3));
     }
 
     #[test]

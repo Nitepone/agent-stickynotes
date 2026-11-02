@@ -24,13 +24,14 @@ Item {
     SignalSpy { id: effortSpy; target: editor; signalName: "draftEffortChosen" }
     SignalSpy { id: endpointSpy; target: editor; signalName: "ollamaEndpointChosen" }
     SignalSpy { id: tokenSpy; target: editor; signalName: "ollamaTokenChosen" }
+    SignalSpy { id: testSpy; target: editor; signalName: "testConnectionRequested" }
 
     TestCase {
         name: "EditorSection"
         when: windowShown
 
         function init() {
-            for (const spy of [spellSpy, agentSpy, promptSpy, modelSpy, effortSpy, endpointSpy, tokenSpy])
+            for (const spy of [spellSpy, agentSpy, promptSpy, modelSpy, effortSpy, endpointSpy, tokenSpy, testSpy])
                 spy.clear()
             page.currentIndex = 1
             editor.spellCheck = true
@@ -42,6 +43,9 @@ Item {
             editor.ollamaEndpoint = "http://localhost:11434"
             editor.ollamaToken = ""
             editor.ollamaEndpointInvalid = false
+            editor.testState = "idle"
+            editor.testStale = false
+            editor.testMessage = ""
         }
 
         function find(name) {
@@ -243,6 +247,104 @@ Item {
         function test_unknown_stored_values_show_the_default() {
             editor.draftModel = "no-such-model"
             compare(find("modelBox").currentIndex, 0)
+        }
+
+        // ---- test connection ---------------------------------------------
+
+        function test_the_test_button_is_only_there_for_the_ollama_agent() {
+            const button = find("testConnectionButton")
+            verify(!button.visible)
+            editor.draftAgent = "ollama"
+            verify(button.visible)
+            const y = (name) => find(name).mapToItem(editor, 0, 0).y
+            tryVerify(() => Math.abs(y("testConnectionButton") - y("endpointField")) < 12,
+                      1000, "next to the endpoint field")
+            verify(button.mapToItem(editor, 0, 0).x > find("endpointField").mapToItem(editor, 0, 0).x)
+            editor.draftAgent = "claude_code"
+            verify(!button.visible)
+        }
+
+        function test_clicking_asks_the_owner_and_is_disabled_while_running() {
+            editor.draftAgent = "ollama"
+            const button = find("testConnectionButton")
+            mouseClick(button)
+            compare(testSpy.count, 1)
+            compare(editor.testState, "testing")
+            verify(!button.enabled)
+            compare(button.text, "Testing\u2026")
+            mouseClick(button)
+            compare(testSpy.count, 1, "no second request while one runs")
+        }
+
+        function test_a_success_is_shown_and_the_button_works_again() {
+            editor.draftAgent = "ollama"
+            mouseClick(find("testConnectionButton"))
+            editor.setTestResult(true, null, undefined)
+            verify(find("testOkLabel").visible)
+            compare(find("testOkLabel").text, "Connected")
+            verify(!find("testErrorLabel").visible)
+            verify(find("testConnectionButton").enabled)
+            mouseClick(find("testConnectionButton"))
+            compare(testSpy.count, 2)
+            verify(!find("testOkLabel").visible, "a new run clears the old result")
+        }
+
+        function test_a_success_with_a_note_shows_the_note() {
+            editor.draftAgent = "ollama"
+            mouseClick(find("testConnectionButton"))
+            editor.setTestResult(true, "Connected. Model 'x' was not listed by the server.", undefined)
+            verify(find("testOkLabel").visible)
+            compare(find("testOkLabel").text, "Connected. Model 'x' was not listed by the server.")
+            verify(!find("testErrorLabel").visible)
+        }
+
+        function test_a_failure_shows_the_message() {
+            editor.draftAgent = "ollama"
+            mouseClick(find("testConnectionButton"))
+            editor.setTestResult(false, null, "The server rejected the auth token.")
+            verify(find("testErrorLabel").visible)
+            compare(find("testErrorLabel").text, "The server rejected the auth token.")
+            verify(!find("testOkLabel").visible)
+            verify(find("testConnectionButton").enabled, "can retry")
+        }
+
+        function test_a_stale_result_is_cleared_when_the_settings_change() {
+            editor.draftAgent = "ollama"
+            const changes = [
+                () => editor.ollamaEndpoint = "http://other:1",
+                () => editor.ollamaToken = "t",
+                () => editor.draftModel = "m",
+                () => { editor.draftAgent = "claude_code"; editor.draftAgent = "ollama" }
+            ]
+            for (const change of changes) {
+                editor.testState = "failed"
+                editor.testMessage = "boom"
+                change()
+                compare(editor.testState, "idle")
+                verify(!find("testErrorLabel").visible)
+            }
+        }
+
+        function test_a_result_for_changed_settings_is_dropped() {
+            editor.draftAgent = "ollama"
+            mouseClick(find("testConnectionButton"))
+            editor.ollamaEndpoint = "http://other:1"
+            compare(editor.testState, "testing", "still waiting for the run")
+            editor.setTestResult(true, null, undefined)
+            compare(editor.testState, "idle")
+            verify(!find("testOkLabel").visible)
+            verify(find("testConnectionButton").enabled)
+        }
+
+        function test_clicking_saves_pending_edits_before_asking() {
+            editor.draftAgent = "ollama"
+            const field = find("endpointField")
+            field.forceActiveFocus()
+            field.text = "http://typed:1"
+            mouseClick(find("testConnectionButton"))
+            compare(endpointSpy.count, 1)
+            compare(endpointSpy.signalArguments[0][0], "http://typed:1")
+            compare(testSpy.count, 1)
         }
 
         // ---- system prompt -----------------------------------------------

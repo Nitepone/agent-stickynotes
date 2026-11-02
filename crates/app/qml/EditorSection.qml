@@ -21,6 +21,38 @@ PreferencesSection {
     property string ollamaToken: ""             // optional; shown masked
     property bool ollamaEndpointInvalid: false  // the owner rejected the last endpoint typed
 
+    // "Test connection" for the Ollama server. `testState` is idle, testing, ok
+    // or failed; the owner starts the check on `testConnectionRequested` and
+    // answers with `setTestResult`. Any change to the endpoint, token, model or
+    // agent type makes a shown result stale, so it is cleared.
+    property string testState: "idle"
+    property string testMessage: ""
+    property bool testStale: false              // settings changed while a test was running
+
+    signal testConnectionRequested()
+    function setTestResult(ok, note, message) {
+        if (section.testState !== "testing")
+            return
+        if (section.testStale) {
+            section.testState = "idle"
+            section.testStale = false
+            return
+        }
+        section.testMessage = ok ? (note || "") : (message || "")
+        section.testState = ok ? "ok" : "failed"
+    }
+    function forgetTest() {
+        if (section.testState === "testing")
+            section.testStale = true
+        else
+            section.testState = "idle"
+        section.testMessage = ""
+    }
+    onOllamaEndpointChanged: forgetTest()
+    onOllamaTokenChanged: forgetTest()
+    onDraftModelChanged: forgetTest()
+    onDraftAgentChanged: forgetTest()
+
     signal spellCheckChosen(bool enabled)
     signal draftAgentChosen(string agent)
     signal draftSystemPromptChosen(string prompt)
@@ -161,19 +193,52 @@ PreferencesSection {
                 }
 
                 SectionLabel { text: qsTr("Endpoint") }
-                FormTextField {
-                    id: endpointField
-                    objectName: "endpointField"
+                RowLayout {
                     Layout.fillWidth: true
-                    placeholderText: "http://localhost:11434"
-                    text: section.ollamaEndpoint
-                    invalid: section.ollamaEndpointInvalid
-                    onEditingFinished: {
-                        if (text !== section.ollamaEndpoint)
-                            section.ollamaEndpointChosen(text)
-                            text = Qt.binding(() => section.ollamaEndpoint)
+                    spacing: 8
+                    FormTextField {
+                        id: endpointField
+                        objectName: "endpointField"
+                        Layout.fillWidth: true
+                        placeholderText: "http://localhost:11434"
+                        text: section.ollamaEndpoint
+                        invalid: section.ollamaEndpointInvalid
+                        onEditingFinished: {
+                            if (text !== section.ollamaEndpoint)
+                                section.ollamaEndpointChosen(text)
+                                text = Qt.binding(() => section.ollamaEndpoint)
+                        }
+                        Accessible.name: qsTr("Server endpoint")
                     }
-                    Accessible.name: qsTr("Server endpoint")
+                    Button {
+                        objectName: "testConnectionButton"
+                        enabled: section.testState !== "testing"
+                        text: section.testState === "testing" ? qsTr("Testing…") : qsTr("Test connection")
+                        Accessible.name: qsTr("Test connection")
+                        onClicked: {
+                            // Test what is saved, including what was just typed.
+                            section.saveOllama()
+                            section.testState = "testing"
+                            section.testStale = false
+                            section.testMessage = ""
+                            section.testConnectionRequested()
+                        }
+                    }
+                }
+                Label {
+                    objectName: "testOkLabel"
+                    Layout.fillWidth: true
+                    visible: section.testState === "ok"
+                    wrapMode: Text.Wrap
+                    font.bold: section.testMessage === ""
+                    color: section.testMessage === "" ? Theme.success : Theme.warning
+                    text: section.testMessage === "" ? qsTr("Connected") : section.testMessage
+                    Accessible.role: Accessible.StaticText
+                    Accessible.name: text
+                }
+                ErrorLabel {
+                    objectName: "testErrorLabel"
+                    text: section.testState === "failed" ? section.testMessage : ""
                 }
                 ErrorLabel {
                     objectName: "endpointError"

@@ -704,6 +704,7 @@ ApplicationWindow {
         }
 
         EditorSection {
+            id: editorSection
             spellCheck: prefs.spell_check
             spellAvailable: controller.spellAvailable
             onSpellCheckChosen: (enabled) => controller.choosePref("spell_check", String(enabled))
@@ -719,6 +720,7 @@ ApplicationWindow {
             onOllamaEndpointChosen: (endpoint) => ollamaEndpointInvalid = !controller.choosePref("ollama_endpoint", endpoint)
             ollamaToken: prefs.ollama_token
             onOllamaTokenChosen: (token) => controller.choosePref("ollama_token", token)
+            onTestConnectionRequested: controller.checkOllamaConnection()
         }
 
         AboutSection {
@@ -825,6 +827,10 @@ ApplicationWindow {
     readonly property var agentSetup: JSON.parse(controller.agentSetupJson())
     Connections {
         target: controller
+        function onOllamaCheckFinished(resultJson) {
+            const r = JSON.parse(resultJson)
+            editorSection.setTestResult(r.ok, r.note, r.message)
+        }
         function onAgentCheckFinished(client, resultJson) {
             const r = JSON.parse(resultJson)
             agentDialog.setCheckResult(client, r.ok, r.message)

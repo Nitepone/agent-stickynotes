@@ -119,6 +119,11 @@ pub mod qobject {
         /// the outcome for `client` arrives through `agent_check_finished`.
         #[qinvokable]
         fn check_agent_connection(self: &BoardController, client: &QString);
+        /// Test the saved Ollama endpoint and token in the background; the
+        /// outcome arrives through `ollama_check_finished`. A second request
+        /// while one runs is ignored.
+        #[qinvokable]
+        fn check_ollama_connection(self: &BoardController);
 
         /// Remember when the user last used the app (ms since the epoch).
         #[qinvokable]
@@ -156,6 +161,9 @@ pub mod qobject {
         /// that asked.
         #[qsignal]
         fn agent_check_finished(self: Pin<&mut BoardController>, client: QString, result: QString);
+        /// JSON `{ok: true, note}` (note may be null) or `{ok: false, message}`.
+        #[qsignal]
+        fn ollama_check_finished(self: Pin<&mut BoardController>, result: QString);
 
         /// JSON: `{ok: true, requirements, criteria}` or `{ok: false, code, message}`.
         #[qsignal]
@@ -490,6 +498,34 @@ impl qobject::BoardController {
             let result = to_qstring(result.to_string());
             // Fails only if the controller was destroyed.
             let _ = thread.queue(move |obj| obj.agent_check_finished(client, result));
+        });
+    }
+
+    fn check_ollama_connection(&self) {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static RUNNING: AtomicBool = AtomicBool::new(false);
+        if RUNNING.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let (endpoint, token, model) = {
+            let settings = stickynotes_core::store::relock(&context::get().settings);
+            (
+                settings.ollama_endpoint.clone(),
+                settings.ollama_token.0.clone(),
+                crate::drafting::select::model_for(&settings),
+            )
+        };
+        let thread = self.qt_thread();
+        std::thread::spawn(move || {
+            let result = match crate::drafting::ollama::check_connection(&endpoint, &token, &model)
+            {
+                Ok(ok) => serde_json::json!({ "ok": true, "note": ok.note }),
+                Err(message) => serde_json::json!({ "ok": false, "message": message }),
+            };
+            RUNNING.store(false, Ordering::SeqCst);
+            let result = to_qstring(result.to_string());
+            // Fails only if the controller was destroyed.
+            let _ = thread.queue(move |obj| obj.ollama_check_finished(result));
         });
     }
 
