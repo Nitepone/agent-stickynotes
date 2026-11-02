@@ -321,6 +321,38 @@ Item {
             verify(animation.duration >= 2000 && animation.duration <= 4000, "got " + animation.duration)
         }
 
+        function test_the_trail_bends_round_the_corners_and_stays_on_the_note() {
+            const e = edge({ intensity: 1 })
+            const animation = find(e, "cometAnimation")[0]
+            animation.running = false
+            const pieces = find(e, "cometPiece")
+            verify(pieces.length >= 12)
+            const tol = 6                       // the glow rings' thickness
+            for (let i = 0; i <= 400; i++) {
+                e.cometProgress = i / 400
+                for (const piece of pieces) {
+                    const c = piece.mapToItem(e, piece.width / 2, piece.height / 2)
+                    verify(c.x >= -tol && c.x <= e.width + tol && c.y >= -tol && c.y <= e.height + tol,
+                           "piece at " + c.x + "," + c.y + " for progress " + e.cometProgress)
+                }
+            }
+        }
+
+        function test_the_head_leads_the_trail() {
+            const e = edge({ intensity: 1 })
+            find(e, "cometAnimation")[0].running = false
+            const pieces = find(e, "cometPiece")
+            const head = pieces[0]
+            e.cometProgress = 0.1
+            const a = head.mapToItem(e, 0, 0)
+            e.cometProgress = 0.12
+            const b = head.mapToItem(e, 0, 0)
+            verify(b.x > a.x, "moves clockwise along the top edge")
+            const tail = pieces[pieces.length - 1]
+            verify(tail.opacity < head.opacity)
+            verify(tail.mapToItem(e, 0, 0).x < b.x, "the tail follows the head")
+        }
+
         function test_edited_notes_get_a_sheen_that_moves_left_to_right() {
             const e = edge({ intensity: 1, edited: true })
             const sheen = find(e, "sheen")[0]
@@ -344,6 +376,7 @@ Item {
             for (const ring of find(e, "glowRing"))
                 verify(ring.visible)
             verify(!find(e, "comet")[0].visible, "no rotation")
+            verify(!find(e, "cometPiece")[0].visible)
             verify(!find(e, "cometAnimation")[0].running)
             verify(!find(e, "sheen")[0].parent.visible, "no sheen")
             verify(!find(e, "sheenAnimation")[0].running)

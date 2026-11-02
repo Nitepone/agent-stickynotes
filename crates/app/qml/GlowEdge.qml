@@ -41,54 +41,77 @@ Item {
     }
 
     // A highlight that travels once around the edge of the note per rotation.
+    // It is a trail of small dots, each placed on the outline separately, so
+    // the trail bends round the corners instead of sticking out of them.
+    property real cometProgress: 0      // 0 to 1: where the head is along the outline
+    readonly property int cometPieces: 14
+    readonly property real cometLength: 48          // arc length of the whole trail
+    readonly property real outlineLength: Math.max(1,
+        2 * Math.max(0, width - 2 * cornerRadius) + 2 * Math.max(0, height - 2 * cornerRadius)
+        + 2 * Math.PI * cornerRadius)
+
+    // The point at `p` (0 to 1) along the note's rounded outline, clockwise
+    // from the end of the top-left corner. The one definition of the path.
+    function outlinePoint(p) {
+        const r = Math.min(cornerRadius, width / 2, height / 2)
+        const sw = Math.max(0, width - 2 * r)
+        const sh = Math.max(0, height - 2 * r)
+        const arc = Math.PI * r / 2
+        const segments = [sw, arc, sh, arc, sw, arc, sh, arc]
+        let d = (((p % 1) + 1) % 1) * (2 * sw + 2 * sh + 4 * arc)
+        let i = 0
+        while (i < 7 && d > segments[i]) {
+            d -= segments[i]
+            i++
+        }
+        const t = Math.min(1, segments[i] > 0 ? d / segments[i] : 0)
+        const a = t * Math.PI / 2
+        switch (i) {
+        case 0: return Qt.point(r + d, 0)
+        case 1: return Qt.point(width - r + r * Math.sin(a), r - r * Math.cos(a))
+        case 2: return Qt.point(width, r + d)
+        case 3: return Qt.point(width - r + r * Math.cos(a), height - r + r * Math.sin(a))
+        case 4: return Qt.point(width - r - d, height)
+        case 5: return Qt.point(r - r * Math.sin(a), height - r + r * Math.cos(a))
+        case 6: return Qt.point(0, height - r - d)
+        default: return Qt.point(r - r * Math.cos(a), r - r * Math.sin(a))
+        }
+    }
+
     Item {
         id: comet
         objectName: "comet"
         visible: root.animated
-        width: 48
-        height: 5
 
-        Rectangle {
-            anchors.fill: parent
-            radius: height / 2
-            gradient: Gradient {
-                orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: "transparent" }
-                GradientStop { position: 1.0; color: Theme.glowCore }
+        Repeater {
+            model: root.cometPieces
+            delegate: Rectangle {
+                required property int index
+                readonly property real fade: index / (root.cometPieces - 1)     // 0 at the head, 1 at the tail
+                readonly property point spot: root.outlinePoint(root.cometProgress
+                    - index * root.cometLength / (root.cometPieces - 1) / root.outlineLength)
+                objectName: "cometPiece"
+                width: 7 - 4.5 * fade
+                height: width
+                radius: width / 2
+                x: spot.x - width / 2
+                y: spot.y - height / 2
+                color: Theme.glowCore
+                opacity: 1 - fade
             }
-        }
-        Rectangle {
-            width: 7
-            height: 7
-            radius: 3.5
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            color: Theme.glowCore
         }
     }
 
-    PathAnimation {
+    NumberAnimation {
         id: cometAnimation
         objectName: "cometAnimation"
-        target: comet
+        target: root
+        property: "cometProgress"
+        from: 0
+        to: 1
         running: root.animated
         loops: Animation.Infinite
         duration: Theme.glowRotationMs
-        orientation: PathAnimation.RightFirst
-        anchorPoint: Qt.point(comet.width, comet.height / 2)       // the head leads
-
-        path: Path {
-            startX: root.cornerRadius
-            startY: 0
-            PathLine { x: root.width - root.cornerRadius; y: 0 }
-            PathArc { x: root.width; y: root.cornerRadius; radiusX: root.cornerRadius; radiusY: root.cornerRadius }
-            PathLine { x: root.width; y: root.height - root.cornerRadius }
-            PathArc { x: root.width - root.cornerRadius; y: root.height; radiusX: root.cornerRadius; radiusY: root.cornerRadius }
-            PathLine { x: root.cornerRadius; y: root.height }
-            PathArc { x: 0; y: root.height - root.cornerRadius; radiusX: root.cornerRadius; radiusY: root.cornerRadius }
-            PathLine { x: 0; y: root.cornerRadius }
-            PathArc { x: root.cornerRadius; y: 0; radiusX: root.cornerRadius; radiusY: root.cornerRadius }
-        }
     }
 
     // The sheen: a slanted translucent band moving left to right, then a pause.
