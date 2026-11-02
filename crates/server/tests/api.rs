@@ -552,6 +552,10 @@ async fn artifacts_are_attached_read_and_detached() {
     assert_eq!(added["artifact"]["kind"], "markdown");
     assert_eq!(added["artifact"]["path"], "artifacts/Design-Notes.md");
     assert_eq!(added["artifact"]["added_by_agent"], true);
+    // REST has no client name; the stage is the column the task was in.
+    assert_eq!(added["artifact"]["added_by"], "agent");
+    assert_eq!(added["artifact"]["stage"], task["column"]["title"]);
+    assert!(added["artifact"]["added_at"].is_string());
 
     let (status, _) = api
         .call(
@@ -676,6 +680,10 @@ async fn a_large_image_can_be_attached_over_mcp() {
         .unwrap();
     assert_ne!(result.is_error, Some(true), "{:?}", result.content);
     assert_eq!(api.store.read_artifact("big.png").unwrap().len(), big);
+    // The MCP client's name from its initialize info is recorded.
+    let added: Value = serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+    assert!(added["artifact"]["added_by"].is_string());
+    assert_ne!(added["artifact"]["added_by"], "user");
 
     let args = json!({"task_id": id, "artifact": "big.png"});
     let result = client

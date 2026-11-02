@@ -89,10 +89,14 @@ pub enum Command {
         criterion: CriterionId,
         done: bool,
     },
-    /// Record a file already written to `artifacts/` on a task.
+    /// Record a file already written to `artifacts/` on a task. The task's
+    /// current column title is stored as the artifact's stage, and `added_by`
+    /// (the caller's name) as who added it; any values already on `artifact`
+    /// are overwritten.
     AttachArtifact {
         task: TaskId,
         artifact: Artifact,
+        added_by: Option<String>,
     },
     /// Remove the record from the task; the file stays in `artifacts/`.
     DetachArtifact {

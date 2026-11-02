@@ -111,6 +111,10 @@ pub mod qobject {
         fn artifacts_json(self: &BoardController) -> QString;
         #[qinvokable]
         fn artifact_json(self: &BoardController, name: &QString) -> QString;
+        /// Copy the chosen local file into the project's `artifacts/` folder
+        /// and attach it to the task, as the user.
+        #[qinvokable]
+        fn attach_artifact(self: &BoardController, task_id: &QString, file: &QUrl) -> QString;
         #[qinvokable]
         fn update_project(
             self: &BoardController,
@@ -478,6 +482,20 @@ impl qobject::BoardController {
             &context::get().store,
             &String::from(name),
         ))
+    }
+
+    fn attach_artifact(&self, task_id: &QString, file: &QUrl) -> QString {
+        let Some(task) = parse_id(task_id) else {
+            return bad_id();
+        };
+        let Some(path) = file
+            .to_local_file()
+            .map(|p| PathBuf::from(String::from(&p)))
+        else {
+            return to_qstring(viewmodel::error_json("only local files are supported"));
+        };
+        let result = viewmodel::attach_file(&context::get().store, task, &path);
+        to_qstring(viewmodel::result_json(result.map(|_| None::<Applied>)))
     }
 
     fn update_project(&self, document_prompt: &QString, code_guidance: &QString) -> QString {

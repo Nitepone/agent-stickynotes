@@ -86,6 +86,11 @@ struct ArtifactVm<'a> {
     name: &'a str,
     kind: &'static str,
     by_agent: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    added_by: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stage: Option<&'a str>,
+    added_at: String,
 }
 
 #[derive(Serialize)]
@@ -242,11 +247,45 @@ pub fn task_json(board: &Board, id: Uuid) -> String {
                 name: &a.name,
                 kind: a.kind.as_str(),
                 by_agent: a.by_agent,
+                added_by: a.added_by.as_deref(),
+                stage: a.stage.as_deref(),
+                added_at: a.added_at.to_rfc3339(),
             })
             .collect(),
         updated_at: t.updated_at.to_rfc3339(),
     };
     serde_json::to_string(&vm).expect("view model serializes")
+}
+
+/// Attach a file the user chose to `task`: read it (within the size limits),
+/// store a copy in `artifacts/` and record it as the user's. Nothing is
+/// attached on error.
+pub fn attach_file(store: &BoardStore, task: Uuid, path: &Path) -> Result<(), Error> {
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| Error::Validation("that file has no usable name".into()))?;
+    // Same name and type rules as agents, checked before reading the file.
+    let (clean, kind) = artifact::clean_name(name)?;
+    let limit = match kind {
+        ArtifactKind::Markdown => artifact::MAX_TEXT_BYTES,
+        ArtifactKind::Image if clean.ends_with(".svg") => artifact::MAX_TEXT_BYTES,
+        ArtifactKind::Image => artifact::MAX_IMAGE_BYTES,
+    };
+    let len = std::fs::metadata(path)
+        .map_err(|e| Error::Validation(format!("cannot read {name}: {e}")))?
+        .len();
+    if len > limit as u64 {
+        return Err(Error::Validation(format!(
+            "{name} is too big (the limit is {} MiB)",
+            limit >> 20
+        )));
+    }
+    let data =
+        std::fs::read(path).map_err(|e| Error::Validation(format!("cannot read {name}: {e}")))?;
+    store
+        .add_artifact(stickynotes_core::Origin::User, task, name, &data, None)
+        .map(|_| ())
 }
 
 /// Project settings for `ProjectDialog.qml`, with every file in the
@@ -766,6 +805,40 @@ mod tests {
         assert_eq!(task["artifacts"][0]["byAgent"], true);
         assert_eq!(task["artifacts"][1]["kind"], "image");
         assert_eq!(task["artifacts"][1]["byAgent"], false);
+        assert_eq!(task["artifacts"][1]["addedBy"], "user");
+        assert!(task["artifacts"][0]["stage"].is_string());
+        assert!(task["artifacts"][0]["addedAt"].is_string());
+    }
+
+    #[test]
+    fn old_artifacts_omit_the_missing_fields_and_the_user_can_attach_files() {
+        let (root, store, id) = store_with_artifacts();
+        // An old record: no who, no stage.
+        let mut board = store.snapshot().board;
+        let a = &mut board.columns[0].tasks[0].artifacts[0];
+        a.added_by = None;
+        a.stage = None;
+        let task: serde_json::Value = serde_json::from_str(&task_json(&board, id)).unwrap();
+        assert!(task["artifacts"][0].get("addedBy").is_none());
+        assert!(task["artifacts"][0].get("stage").is_none());
+        assert!(task["artifacts"][0]["addedAt"].is_string());
+
+        let file = root.path().join("note.md");
+        std::fs::write(&file, "# hi").unwrap();
+        attach_file(&store, id, &file).unwrap();
+        let snap = store.snapshot();
+        let last = snap
+            .board
+            .task(id)
+            .unwrap()
+            .artifacts
+            .last()
+            .unwrap()
+            .clone();
+        assert_eq!(last.added_by.as_deref(), Some("user"));
+        let bad = root.path().join("tool.exe");
+        std::fs::write(&bad, "x").unwrap();
+        assert!(attach_file(&store, id, &bad).is_err());
     }
 
     #[test]

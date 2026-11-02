@@ -147,6 +147,14 @@ images and 50 artifacts per task. Request bodies up to 8 MiB are accepted, which
 covers a base64-encoded 5 MiB image. Base64 costs output tokens (about 4/3 of
 the file size), so agents should prefer text formats where they can.
 
+Each artifact records who added it (`added_by`: `user` for files the user
+attached from the task dialog, or the MCP client's name, for example
+`claude-code`; `agent` over REST or when the client sent no name), when
+(`added_at`) and the title of the task's column at that moment (`stage`, a
+snapshot that renaming the column does not change). Task and artifact views
+return all three; files attached by older versions may lack `added_by` and
+`stage`. Agents cannot set these themselves.
+
 Agents cannot replace or delete files. `artifact_detach` only removes the record
 from the task; the file stays in `artifacts/` and the user decides what to do
 with it. Task views list each artifact's `path` relative to the project folder,

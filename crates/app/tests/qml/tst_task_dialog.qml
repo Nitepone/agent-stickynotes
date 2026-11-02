@@ -35,6 +35,7 @@ Item {
     SignalSpy { id: undoSpy; target: dialog; signalName: "undoDraftRequested" }
     SignalSpy { id: openSpy; target: dialog; signalName: "openTaskRequested" }
     SignalSpy { id: artifactSpy; target: dialog; signalName: "artifactClicked" }
+    SignalSpy { id: attachSpy; target: dialog; signalName: "attachRequested" }
     SignalSpy { id: generateSpy; target: dialog; signalName: "generateRequested" }
     SignalSpy { id: cancelSpy; target: dialog; signalName: "cancelGenerationRequested" }
 
@@ -96,6 +97,42 @@ Item {
             mouseClick(links[1])
             compare(artifactSpy.count, 1)
             compare(artifactSpy.signalArguments[0][0], "flow.png")
+        }
+
+        function test_artifact_metadata_and_the_attach_button() {
+            openWithArtifacts([
+                { id: "a1", name: "plan.md", kind: "markdown", byAgent: true, addedBy: "claude-code",
+                  stage: "Backlog", addedAt: "2026-03-05T10:12:00Z" },
+                { id: "a2", name: "mine.png", kind: "image", byAgent: false, addedBy: "user", stage: "Doing",
+                  addedAt: "2026-03-05T10:12:00Z" },
+                { id: "a3", name: "old.md", kind: "markdown", byAgent: true },
+                { id: "a4", name: "older.md", kind: "markdown", byAgent: false },
+            ])
+            const meta = fields("artifactMeta")
+            verify(meta[0].text.indexOf("claude-code") === 0, meta[0].text)
+            verify(meta[0].text.indexOf("in Backlog") > 0, meta[0].text)
+            verify(meta[1].text.indexOf("You") === 0 && meta[1].text.indexOf("in Doing") > 0, meta[1].text)
+            compare(meta[2].text, "added by an agent")
+            compare(meta[3].visible, false)
+            for (const m of meta)
+                verify(m.text.indexOf("undefined") < 0 && m.text.indexOf("Invalid") < 0, m.text)
+
+            // The real file chooser is replaced by a stub.
+            dialog.chooser = { open: () => dialog.attachRequested(dialog.taskId, "file:///tmp/x.md") }
+            const button = fields("attachButton")[0]
+            verify(button.visible)
+            button.clicked()   // may be scrolled out of view in the test window
+            compare(attachSpy.count, 1)
+            compare(attachSpy.signalArguments[0][0], "t1")
+            dialog.attachError = "too big"
+            compare(fields("attachError")[0].visible, true)
+            dialog.close()
+        }
+
+        function test_attach_button_is_hidden_when_creating() {
+            dialog.openNew({ id: "c0", title: "Backlog" })
+            waitForRendering(dialog.contentItem)
+            compare(fields("attachButton")[0].visible, false)
         }
 
         function test_no_artifacts_says_so_and_artifacts_are_not_part_of_the_form() {

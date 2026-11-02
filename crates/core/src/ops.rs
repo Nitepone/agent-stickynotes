@@ -26,7 +26,7 @@ pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applie
     }
     let kind = change_kind(&cmd);
     let before = update_stamps(board);
-    let applied = run(board, cmd)?;
+    let applied = run(board, origin, cmd)?;
     track_changes(board, origin, kind, &applied, &before);
     Ok(applied)
 }
@@ -82,7 +82,7 @@ fn track_changes(
     }
 }
 
-fn run(board: &mut Board, cmd: Command) -> Result<Applied> {
+fn run(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applied> {
     match cmd {
         Command::CreateTask {
             column,
@@ -132,7 +132,14 @@ fn run(board: &mut Board, cmd: Command) -> Result<Applied> {
             }
             Ok(Applied::Task(task))
         }
-        Command::AttachArtifact { task, artifact } => {
+        Command::AttachArtifact {
+            task,
+            mut artifact,
+            added_by,
+        } => {
+            let stage = board
+                .locate_task(task)
+                .map(|(ci, _)| board.columns[ci].title.clone());
             let t = task_mut(board, task)?;
             if t.artifacts.len() >= crate::artifact::MAX_PER_TASK {
                 return Err(Error::Validation(format!(
@@ -149,6 +156,13 @@ fn run(board: &mut Board, cmd: Command) -> Result<Applied> {
                     artifact.name
                 )));
             }
+            artifact.stage = stage;
+            artifact.added_by = Some(match (origin, added_by) {
+                (Origin::User, _) => "user".to_string(),
+                (_, Some(n)) if !n.trim().is_empty() => n.trim().chars().take(80).collect(),
+                _ => "agent".to_string(),
+            });
+            artifact.by_agent = origin == Origin::Agent;
             t.artifacts.push(artifact);
             t.updated_at = Utc::now();
             Ok(Applied::Task(task))

@@ -113,7 +113,7 @@ async fn add_artifact(
     headers: HeaderMap,
     Json(body): Json<NewArtifact>,
 ) -> ApiResult {
-    let added = s.add_artifact(&id, body, if_match(&headers)?)?;
+    let added = s.add_artifact(&id, body, None, if_match(&headers)?)?;
     Ok((StatusCode::CREATED, Json(added)).into_response())
 }
 

@@ -813,6 +813,13 @@ ApplicationWindow {
         categories: window.board.categories || []
         relationOptions: JSON.parse(controller.relationOptions())
         onArtifactClicked: (name) => window.openArtifact(name)
+        onAttachRequested: (taskId, fileUrl) => {
+            const r = window.result(controller.attachArtifact(taskId, fileUrl))
+            if (r.ok)
+                artifactsAttached(controller.taskJson(taskId))
+            else
+                attachError = r.message
+        }
         onOpenTaskRequested: (taskId) => {
             const go = () => window.openTaskFromJson(controller.taskJson(taskId))
             if (isEdited())

@@ -127,6 +127,13 @@ pub struct ArtifactView {
     pub path: String,
     pub added_at: DateTime<Utc>,
     pub added_by_agent: bool,
+    /// Who added it: `user`, or the agent client's name. Absent on files
+    /// attached before this was recorded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub added_by: Option<String>,
+    /// The task's column when it was attached. Absent on older files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
 }
 
 /// An artifact with its text, when it has any.
@@ -410,6 +417,7 @@ impl AgentService {
         &self,
         task: &str,
         new: NewArtifact,
+        client: Option<String>,
         expected: Option<u64>,
     ) -> ServiceResult<ArtifactAdded> {
         let task = self.resolve_task(task)?;
@@ -426,7 +434,7 @@ impl AgentService {
         };
         let (artifact, revision) =
             self.store
-                .add_artifact(Origin::Agent, task, &new.name, &data, expected)?;
+                .add_artifact_as(Origin::Agent, client, task, &new.name, &data, expected)?;
         Ok(ArtifactAdded {
             artifact: artifact_view(&artifact),
             revision,
@@ -519,6 +527,8 @@ fn artifact_view(a: &Artifact) -> ArtifactView {
         path: format!("{}/{}", stickynotes_core::project::ARTIFACTS_DIR, a.name),
         added_at: a.added_at,
         added_by_agent: a.by_agent,
+        added_by: a.added_by.clone(),
+        stage: a.stage.clone(),
     }
 }
 

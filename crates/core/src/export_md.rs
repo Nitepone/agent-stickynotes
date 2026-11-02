@@ -154,12 +154,18 @@ mod tests {
             kind: ArtifactKind::Image,
             added_at: chrono::Utc::now(),
             by_agent: false,
+            added_by: None,
+            stage: None,
             extra: Default::default(),
         };
         execute(
             &mut board,
             Origin::User,
-            Command::AttachArtifact { task: id, artifact },
+            Command::AttachArtifact {
+                task: id,
+                artifact,
+                added_by: None,
+            },
         )
         .unwrap();
         let md = to_markdown(&board);

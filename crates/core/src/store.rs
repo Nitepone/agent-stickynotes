@@ -288,6 +288,20 @@ impl BoardStore {
         data: &[u8],
         expected_revision: Option<u64>,
     ) -> Result<(Artifact, u64)> {
+        self.add_artifact_as(origin, None, task, name, data, expected_revision)
+    }
+
+    /// Like [`add_artifact`](Self::add_artifact), recording `client` (an
+    /// agent's name) as who added it; ignored for the user.
+    pub fn add_artifact_as(
+        &self,
+        origin: Origin,
+        client: Option<String>,
+        task: TaskId,
+        name: &str,
+        data: &[u8],
+        expected_revision: Option<u64>,
+    ) -> Result<(Artifact, u64)> {
         if origin == Origin::Agent && !self.agent_write() {
             return Err(Error::AgentWriteDisabled);
         }
@@ -304,14 +318,27 @@ impl BoardStore {
             kind,
             added_at: chrono::Utc::now(),
             by_agent: origin == Origin::Agent,
+            added_by: None,
+            stage: None,
             extra: Default::default(),
         };
         let cmd = Command::AttachArtifact {
             task,
-            artifact: record.clone(),
+            artifact: record,
+            added_by: client,
         };
         match self.apply(origin, cmd, expected_revision) {
-            Ok((_, revision)) => Ok((record, revision)),
+            Ok((_, revision)) => {
+                // The core filled in who and stage; read the stored record.
+                let record = self
+                    .read(|board, _| {
+                        board
+                            .task(task)
+                            .and_then(|t| t.artifacts.iter().find(|a| a.name == stored).cloned())
+                    })
+                    .ok_or_else(|| Error::not_found("task", task))?;
+                Ok((record, revision))
+            }
             Err(e) => {
                 artifact::remove(&dir, &stored);
                 Err(e)
@@ -857,5 +884,71 @@ mod tests {
             !text.contains("artifacts"),
             "no empty artifacts field is written"
         );
+    }
+
+    #[test]
+    fn attaching_records_who_and_the_stage_as_a_snapshot() {
+        let (_dir, store, task) = project_store();
+        let column = store.snapshot().board.columns[0].id;
+        let (art, _) = store
+            .add_artifact_as(
+                Origin::Agent,
+                Some("claude-code".into()),
+                task,
+                "a.md",
+                b"x",
+                None,
+            )
+            .unwrap();
+        let first = store.snapshot().board.columns[0].title.clone();
+        assert_eq!(art.stage.as_deref(), Some(first.as_str()));
+        assert_eq!(art.added_by.as_deref(), Some("claude-code"));
+        let (mine, _) = store
+            .add_artifact_as(
+                Origin::User,
+                Some("ignored".into()),
+                task,
+                "b.md",
+                b"x",
+                None,
+            )
+            .unwrap();
+        assert_eq!(mine.added_by.as_deref(), Some("user"));
+        assert!(!mine.by_agent);
+        let (anon, _) = store
+            .add_artifact(Origin::Agent, task, "c.md", b"x", None)
+            .unwrap();
+        assert_eq!(anon.added_by.as_deref(), Some("agent"));
+
+        store
+            .apply(
+                Origin::User,
+                Command::UpdateColumn {
+                    id: column,
+                    title: Some("Renamed".into()),
+                    description: None,
+                },
+                None,
+            )
+            .unwrap();
+        let snap = store.snapshot();
+        let stored = &snap.board.task(task).unwrap().artifacts[0];
+        assert_eq!(stored.stage.as_deref(), Some(first.as_str()));
+    }
+
+    #[test]
+    fn an_old_artifact_record_loads_and_saves_without_the_new_fields() {
+        let old = serde_json::json!({
+            "id": uuid::Uuid::new_v4(),
+            "name": "n.md",
+            "kind": "markdown",
+            "added_at": "2026-01-01T00:00:00Z",
+            "by_agent": true
+        });
+        let a: Artifact = serde_json::from_value(old.clone()).unwrap();
+        assert!(a.added_by.is_none() && a.stage.is_none());
+        let back = serde_json::to_value(&a).unwrap();
+        assert!(back.get("added_by").is_none() && back.get("stage").is_none());
+        assert_eq!(back["by_agent"], true);
     }
 }

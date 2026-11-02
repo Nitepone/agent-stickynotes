@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls.Fusion
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import StickyNotes
 
 // Create or edit a task. Emits `saveRequested` with a JSON form; the caller
@@ -27,6 +28,10 @@ StickyDialog {
     property string loadedForm: ""
     // Finds misspelled words for the text fields (see SpellUnderline); null for none.
     property var spellRanges: null
+    // Why the last attach failed; shown in the Artifacts section.
+    property string attachError: ""
+    // What opens the file chooser (anything with open()); tests replace it.
+    property var chooser: fileDialog
 
     // Drafting requirements and criteria with an LLM. The owner runs it and
     // reports back through applyDraft() / showGenerationError().
@@ -58,6 +63,9 @@ StickyDialog {
     signal reloadRequested(string taskId)
     signal openTaskRequested(string taskId)
     signal artifactClicked(string name)
+    // The user chose a file to attach to this (existing) task; the owner
+    // copies it into the project and calls artifactsAttached() or sets attachError.
+    signal attachRequested(string taskId, url fileUrl)
     signal generateRequested(string formJson)
     signal cancelGenerationRequested()
     // Asks the owner to confirm; the owner then calls undoDraft().
@@ -217,6 +225,7 @@ StickyDialog {
         changedExternally = false
         deletedExternally = false
         errorText = ""
+        attachError = ""
         generationNote = ""
         categoryNote = ""
         draftSnapshot = null
@@ -252,11 +261,52 @@ StickyDialog {
             referencesModel.append({
                 tid: r.taskId, relation: r.relation, relationLabel: r.relationLabel,
                 description: r.description, columnTitle: r.columnTitle })
-        artifactsModel.clear()
-        for (const a of task.artifacts || [])
-            artifactsModel.append({ aname: a.name, akind: a.kind, byAgent: a.byAgent })
+        attachError = ""
+        setArtifacts(task.artifacts)
         targetBox.currentIndex = -1
         loadedForm = formJson()
+    }
+
+    function setArtifacts(list) {
+        artifactsModel.clear()
+        for (const a of list || [])
+            artifactsModel.append({
+                aname: a.name, akind: a.kind, byAgent: a.byAgent === true,
+                addedBy: a.addedBy || "", stage: a.stage || "", addedAt: a.addedAt || "" })
+    }
+
+    // The owner attached a file: show the task's artifacts again. Attaching
+    // touches the task, so this is not an outside change.
+    function artifactsAttached(taskJson) {
+        const task = JSON.parse(taskJson)
+        attachError = ""
+        setArtifacts(task.artifacts)
+        if (!changedExternally)
+            loadedUpdatedAt = task.updatedAt
+    }
+
+    function chooseFile() {
+        attachError = ""
+        chooser.open()
+    }
+
+    // "You · 3/5/26, 10:12 · in Backlog"; only what is known is shown.
+    function artifactMeta(addedBy, byAgent, addedAt, stage) {
+        const parts = []
+        if (addedBy === "user")
+            parts.push(qsTr("You"))
+        else if (addedBy !== "")
+            parts.push(addedBy)
+        else if (byAgent)
+            parts.push(qsTr("added by an agent"))
+        if (addedAt !== "") {
+            const d = new Date(addedAt)
+            if (!isNaN(d.getTime()))
+                parts.push(Qt.formatDateTime(d, Locale.ShortFormat))
+        }
+        if (stage !== "")
+            parts.push(qsTr("in %1").arg(stage))
+        return parts.join(" \u00b7 ")
     }
 
     // Add a link (or change the relation of an existing link to that task).
@@ -310,6 +360,17 @@ StickyDialog {
     ListModel { id: criteriaModel }
     ListModel { id: referencesModel }
     ListModel { id: artifactsModel }
+
+    FileDialog {
+        id: fileDialog
+        title: qsTr("Attach a file")
+        fileMode: FileDialog.OpenFile
+        nameFilters: [
+            qsTr("Markdown and images (*.md *.png *.jpg *.jpeg *.gif *.webp *.svg)"),
+            qsTr("Markdown (*.md)"),
+            qsTr("Images (*.png *.jpg *.jpeg *.gif *.webp *.svg)")]
+        onAccepted: dialog.attachRequested(dialog.taskId, selectedFile)
+    }
 
     contentItem: ScrollView {
         id: scroll
@@ -592,44 +653,69 @@ StickyDialog {
                 objectName: "noArtifacts"
                 Layout.fillWidth: true
                 visible: !dialog.creating && artifactsModel.count === 0
-                text: qsTr("No files attached. Agents can attach Markdown and images.")
+                text: qsTr("No files attached. You and agents can attach Markdown and images.")
                 color: Theme.subtleText
                 font.pixelSize: 12
                 wrapMode: Text.Wrap
             }
             Repeater {
                 model: artifactsModel
-                delegate: RowLayout {
+                delegate: ColumnLayout {
                     required property string aname
                     required property string akind
                     required property bool byAgent
+                    required property string addedBy
+                    required property string stage
+                    required property string addedAt
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: 0
 
-                    Button {
-                        objectName: "artifactLink"
+                    RowLayout {
                         Layout.fillWidth: true
-                        Layout.preferredWidth: 1
-                        flat: true
-                        text: parent.aname
-                        contentItem: Label {
-                            text: parent.text
-                            elide: Text.ElideRight
-                            color: Theme.link
-                            font.underline: parent.hovered
+                        spacing: 6
+
+                        Button {
+                            objectName: "artifactLink"
+                            Layout.fillWidth: true
+                            Layout.preferredWidth: 1
+                            flat: true
+                            text: parent.parent.aname
+                            contentItem: Label {
+                                text: parent.text
+                                elide: Text.ElideRight
+                                color: Theme.link
+                                font.underline: parent.hovered
+                            }
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Open in a viewer")
+                            onClicked: dialog.artifactClicked(parent.parent.aname)
                         }
-                        ToolTip.visible: hovered
-                        ToolTip.text: qsTr("Open in a viewer")
-                        onClicked: dialog.artifactClicked(parent.aname)
+                        Label {
+                            text: parent.parent.akind === "image" ? qsTr("Image") : qsTr("Markdown")
+                            color: Theme.subtleText
+                            font.pixelSize: 12
+                        }
                     }
                     Label {
-                        text: (parent.akind === "image" ? qsTr("Image") : qsTr("Markdown"))
-                              + (parent.byAgent ? qsTr(" \u00b7 by agent") : "")
+                        objectName: "artifactMeta"
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 12
+                        visible: text !== ""
+                        text: dialog.artifactMeta(parent.addedBy, parent.byAgent, parent.addedAt, parent.stage)
                         color: Theme.subtleText
                         font.pixelSize: 12
+                        elide: Text.ElideRight
                     }
                 }
             }
+            Button {
+                objectName: "attachButton"
+                visible: !dialog.creating
+                text: qsTr("Attach file\u2026")
+                flat: true
+                onClicked: dialog.chooseFile()
+            }
+            ErrorLabel { objectName: "attachError"; text: dialog.attachError }
 
             SectionLabel { text: qsTr("References") }
             Label {

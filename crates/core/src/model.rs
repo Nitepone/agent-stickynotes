@@ -132,6 +132,13 @@ pub struct Artifact {
     pub added_at: DateTime<Utc>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub by_agent: bool,
+    /// Who attached it: "user", or the agent client's name. Absent in old files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added_by: Option<String>,
+    /// Title of the task's column when it was attached (a snapshot; renaming
+    /// the column later does not change it). Absent in old files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }

@@ -154,10 +154,16 @@ impl BoardMcp {
     #[tool(
         description = "Attach a file to a task: Markdown (.md) or an image (.png .jpg .gif .webp .svg), for example a design note, a report or a diagram. Pass text as content, or bytes as content_base64. The file is stored in the project's artifacts folder and shown to the user on the task. You cannot replace an existing artifact; add a new one and detach the old."
     )]
-    fn artifact_add(&self, Parameters(a): Parameters<ArtifactAddArgs>) -> ToolResult {
+    fn artifact_add(
+        &self,
+        Parameters(a): Parameters<ArtifactAddArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> ToolResult {
+        // The MCP client's name from its initialize info, if it sent one.
+        let client = ctx.client_info().map(|i| i.name);
         json(
             self.service
-                .add_artifact(&a.task_id, a.body, a.expected_revision),
+                .add_artifact(&a.task_id, a.body, client, a.expected_revision),
         )
     }
 
