@@ -18,6 +18,10 @@ StickyDialog {
     // Every task on the board as { id, columnTitle, text, label }, supplied by
     // the owner so the dialog can offer link targets.
     property var linkCandidates: []
+    // Categories already used on the board, for the drop-down.
+    property var categories: []
+    // What is in the category box right now (typed or chosen), as typed.
+    property string categoryText: ""
     // [{ value, label }] of the relations a link can have.
     property var relationOptions: []
     property string loadedForm: ""
@@ -112,6 +116,39 @@ StickyDialog {
         changedExternally = JSON.parse(taskJson).updatedAt !== loadedUpdatedAt
     }
 
+    // The text that will be saved as the category: trimmed, in the spelling of
+    // an existing category that matches it ignoring case.
+    function resolvedCategory() {
+        const typed = categoryText.trim()
+        const at = categoryIndex(typed)
+        return at >= 0 ? categories[at] : typed
+    }
+
+    function categoryIndex(text) {
+        const wanted = text.trim().toLowerCase()
+        if (wanted === "")
+            return -1
+        return categories.findIndex(c => c.toLowerCase() === wanted)
+    }
+
+    // Put `text` in the category box without treating it as typing.
+    function showCategory(text) {
+        categoryBox.currentIndex = -1
+        categoryBox.editText = text
+        categoryText = text
+    }
+
+    // Typing "ui" when "UI" exists selects "UI" rather than making a near-duplicate.
+    function settleCategory() {
+        const at = categoryIndex(categoryText)
+        if (at >= 0) {
+            showCategory(categories[at])
+            categoryBox.currentIndex = at
+        } else {
+            showCategory(categoryText.trim())
+        }
+    }
+
     function clearForm() {
         taskId = ""
         taskNumber = 0
@@ -123,6 +160,7 @@ StickyDialog {
         generationNote = ""
         descriptionField.text = ""
         extendedField.text = ""
+        showCategory("")
         requirementsModel.clear()
         criteriaModel.clear()
         referencesModel.clear()
@@ -137,6 +175,8 @@ StickyDialog {
         changedExternally = false
         descriptionField.text = task.description
         extendedField.text = task.extendedDescription
+        showCategory(task.category || "")
+        settleCategory()
         requirementsModel.clear()
         for (const r of task.requirements)
             requirementsModel.append({ text: r })
@@ -181,6 +221,7 @@ StickyDialog {
         const form = {
             description: descriptionField.text,
             extendedDescription: extendedField.text,
+            category: resolvedCategory(),
             requirements: requirements,
             criteria: criteria,
         }
@@ -278,6 +319,55 @@ StickyDialog {
                 Layout.fillWidth: true
                 Layout.minimumHeight: 110
                 placeholderText: qsTr("Optional details, context, links…")
+            }
+
+            SectionLabel { text: qsTr("Category") }
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                ComboBox {
+                    id: categoryBox
+                    objectName: "categoryBox"
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    editable: true
+                    model: dialog.categories
+                    currentIndex: -1
+                    Accessible.name: qsTr("Category")
+                    // ComboBox selects the first entry whenever its model changes;
+                    // keep what the user typed or chose instead.
+                    onCountChanged: dialog.showCategory(dialog.categoryText)
+                    // Only the user's typing counts; the box also rewrites its own
+                    // text when the model changes.
+                    Connections {
+                        target: categoryBox.contentItem
+                        function onTextEdited() { dialog.categoryText = categoryBox.contentItem.text }
+                    }
+                    onAccepted: dialog.settleCategory()
+                    onActivated: {
+                        dialog.categoryText = currentText
+                        dialog.settleCategory()
+                    }
+                    onActiveFocusChanged: if (!activeFocus) dialog.settleCategory()
+                }
+                ToolButton {
+                    objectName: "clearCategory"
+                    text: "\u2715"
+                    enabled: dialog.categoryText.trim() !== ""
+                    Accessible.name: qsTr("Clear category")
+                    onClicked: dialog.showCategory("")
+                    ToolTip.visible: hovered
+                    ToolTip.delay: 600
+                    ToolTip.text: qsTr("Clear the category")
+                }
+            }
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("Tasks of the same category in a column stack together. Pick one or type a new name.")
+                color: Theme.subtleText
+                font.pixelSize: 12
+                wrapMode: Text.Wrap
             }
 
             RowLayout {

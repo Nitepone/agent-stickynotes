@@ -90,6 +90,10 @@ pub struct Task {
     /// Files attached to this task, kept in the project's `artifacts/` folder.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<Artifact>,
+    /// Optional group name. Tasks sharing a category within a column stack in
+    /// the UI. Spelling is unified across the board by the command layer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     /// Set when the most recent change to this task was made by an agent, so
     /// the UI can draw attention to it. A change by the user clears it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -470,6 +474,7 @@ mod tests {
             acceptance_criteria: Vec::new(),
             references: Vec::new(),
             artifacts: Vec::new(),
+            category: None,
             agent_change: None,
             created_at: at,
             updated_at: at,

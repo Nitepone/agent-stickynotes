@@ -136,6 +136,52 @@ mod tests {
     }
 
     #[test]
+    fn category_survives_save_and_reload_and_old_files_load() {
+        use crate::{Applied, Command, Origin, TaskDraft};
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("board.json");
+        let mut board = Board::new_default();
+        let mut ids = Vec::new();
+        for category in [Some("UI"), None] {
+            let Applied::Task(id) = crate::ops::execute(
+                &mut board,
+                Origin::User,
+                Command::CreateTask {
+                    column: None,
+                    position: None,
+                    draft: TaskDraft {
+                        description: "t".into(),
+                        category: category.map(String::from),
+                        ..Default::default()
+                    },
+                },
+            )
+            .unwrap() else {
+                unreachable!()
+            };
+            ids.push(id);
+        }
+        save(&path, &board).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert_eq!(
+            text.matches("\"category\"").count(),
+            1,
+            "None is not written"
+        );
+        let (loaded, _) = load(&path).unwrap();
+        assert_eq!(loaded.task(ids[0]).unwrap().category.as_deref(), Some("UI"));
+        assert_eq!(loaded.task(ids[1]).unwrap().category, None);
+
+        // A file written before categories existed has no such key.
+        let old = text.replace("\"category\": \"UI\",", "");
+        assert!(!old.contains("category"));
+        fs::write(&path, old).unwrap();
+        let (loaded, _) = load(&path).unwrap();
+        assert_eq!(loaded.task(ids[0]).unwrap().category, None);
+        assert!(loaded.task(ids[0]).unwrap().extra.is_empty());
+    }
+
+    #[test]
     fn rejects_newer_schema() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("board.json");

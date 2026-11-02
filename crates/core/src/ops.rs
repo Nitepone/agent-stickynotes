@@ -263,6 +263,7 @@ fn create_task(
         }
         None => 0,
     };
+    let category = normalize_category(board, draft.category.as_deref())?;
     let now = Utc::now();
     let task = Task {
         id: Uuid::new_v4(),
@@ -273,6 +274,7 @@ fn create_task(
         acceptance_criteria: merge_criteria(&[], draft.acceptance_criteria),
         references: Vec::new(),
         artifacts: Vec::new(),
+        category,
         agent_change: None,
         created_at: now,
         updated_at: now,
@@ -292,6 +294,11 @@ fn update_task(board: &mut Board, id: TaskId, patch: TaskPatch) -> Result<Applie
         .map(|d| required(&d, "task description"))
         .transpose()?;
     locate(board, id)?;
+    let category = patch
+        .category
+        .as_deref()
+        .map(|c| normalize_category(board, Some(c)))
+        .transpose()?;
     let references = patch
         .references
         .map(|drafts| normalize_references(board, id, drafts))
@@ -309,6 +316,9 @@ fn update_task(board: &mut Board, id: TaskId, patch: TaskPatch) -> Result<Applie
     }
     if let Some(c) = patch.acceptance_criteria {
         task.acceptance_criteria = merge_criteria(&task.acceptance_criteria, c);
+    }
+    if let Some(c) = category {
+        task.category = c;
     }
     task.updated_at = Utc::now();
     if let Some(references) = references {
@@ -442,6 +452,30 @@ fn clean_lines(lines: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+/// Longest category name, in characters.
+pub const MAX_CATEGORY_CHARS: usize = 40;
+
+/// Trim a category; blank means none. A name that matches (ignoring case) a
+/// category already used on the board takes that category's spelling, so the
+/// board never holds near-duplicates.
+fn normalize_category(board: &Board, raw: Option<&str>) -> Result<Option<String>> {
+    let name = raw.unwrap_or("").trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    if name.chars().count() > MAX_CATEGORY_CHARS {
+        return Err(Error::Validation(format!(
+            "category must be at most {MAX_CATEGORY_CHARS} characters"
+        )));
+    }
+    let wanted = name.to_lowercase();
+    let existing = board
+        .tasks()
+        .filter_map(|(_, t)| t.category.as_deref())
+        .find(|c| c.to_lowercase() == wanted);
+    Ok(Some(existing.unwrap_or(name).to_string()))
+}
+
 fn required(value: &str, what: &str) -> Result<String> {
     let v = value.trim();
     if v.is_empty() {
@@ -526,6 +560,92 @@ mod tests {
         execute(&mut b, Origin::User, cmd).unwrap();
         assert_eq!(b.columns[0].tasks[0].id, first);
         assert_eq!(b.columns[0].tasks[1].description, "second");
+    }
+
+    fn cat_task(b: &mut Board, origin: Origin, category: Option<&str>) -> Result<TaskId> {
+        match execute(
+            b,
+            origin,
+            Command::CreateTask {
+                column: None,
+                position: None,
+                draft: TaskDraft {
+                    description: "t".into(),
+                    category: category.map(String::from),
+                    ..Default::default()
+                },
+            },
+        )? {
+            Applied::Task(id) => Ok(id),
+            _ => unreachable!(),
+        }
+    }
+
+    fn set_cat(b: &mut Board, id: TaskId, c: &str) -> Result<Applied> {
+        execute(
+            b,
+            Origin::User,
+            Command::UpdateTask {
+                id,
+                patch: TaskPatch {
+                    category: Some(c.into()),
+                    ..Default::default()
+                },
+            },
+        )
+    }
+
+    #[test]
+    fn category_is_trimmed_and_matched_case_insensitively() {
+        let mut b = Board::new_default();
+        let a = cat_task(&mut b, Origin::User, Some("  UI ")).unwrap();
+        let c = cat_task(&mut b, Origin::Agent, Some("ui")).unwrap();
+        let d = cat_task(&mut b, Origin::User, None).unwrap();
+        assert_eq!(b.task(a).unwrap().category.as_deref(), Some("UI"));
+        assert_eq!(b.task(c).unwrap().category.as_deref(), Some("UI"));
+        assert_eq!(b.task(d).unwrap().category, None);
+        set_cat(&mut b, d, "uI").unwrap();
+        assert_eq!(b.task(d).unwrap().category.as_deref(), Some("UI"));
+        set_cat(&mut b, d, "Backend").unwrap();
+        assert_eq!(b.task(d).unwrap().category.as_deref(), Some("Backend"));
+    }
+
+    #[test]
+    fn blank_category_clears_and_none_keeps() {
+        let mut b = Board::new_default();
+        let a = cat_task(&mut b, Origin::User, Some("UI")).unwrap();
+        execute(
+            &mut b,
+            Origin::User,
+            Command::UpdateTask {
+                id: a,
+                patch: TaskPatch {
+                    description: Some("x".into()),
+                    ..Default::default()
+                },
+            },
+        )
+        .unwrap();
+        assert_eq!(b.task(a).unwrap().category.as_deref(), Some("UI"));
+        set_cat(&mut b, a, "   ").unwrap();
+        assert_eq!(b.task(a).unwrap().category, None);
+        // Once unused, the spelling is free again.
+        set_cat(&mut b, a, "ui").unwrap();
+        assert_eq!(b.task(a).unwrap().category.as_deref(), Some("ui"));
+    }
+
+    #[test]
+    fn too_long_category_is_rejected_and_board_unchanged() {
+        let mut b = Board::new_default();
+        let a = cat_task(&mut b, Origin::User, Some("UI")).unwrap();
+        let long = "x".repeat(MAX_CATEGORY_CHARS + 1);
+        assert!(matches!(
+            set_cat(&mut b, a, &long),
+            Err(Error::Validation(_))
+        ));
+        assert!(cat_task(&mut b, Origin::User, Some(&long)).is_err());
+        assert_eq!(b.task(a).unwrap().category.as_deref(), Some("UI"));
+        assert!(set_cat(&mut b, a, &"x".repeat(MAX_CATEGORY_CHARS)).is_ok());
     }
 
     #[test]

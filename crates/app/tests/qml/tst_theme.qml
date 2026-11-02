@@ -205,6 +205,8 @@ TestCase {
         ["subtleText", "background"], ["subtleText", "surface"], ["subtleText", "columnBackground"],
         ["subtleText", "fieldBackground"],
         ["noteText", "note"], ["noteNumber", "note"], ["noteSubtleText", "note"], ["noteDoneText", "note"],
+        ["noteChipText", "noteChip"], ["text", "stackHeaderBackground"],
+        ["stackHeaderCount", "stackHeaderBackground"],
         ["warning", "surface"], ["danger", "surface"], ["success", "surface"],
         ["text", "bannerBackground"], ["warning", "bannerBackground"],
         ["link", "surface"], ["link", "background"], ["link", "columnEditBackground"],

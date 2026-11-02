@@ -87,6 +87,12 @@ QtObject {
     readonly property color progressTrack: "#26000000"
     readonly property color progressDone: "#16a34a"
 
+    // Category label on a note, and the header of a stack of notes in a column.
+    readonly property color noteChip: mix(note, noteText, 0.12)
+    readonly property color noteChipText: legibleOn(noteText, noteChip, 4.5)
+    readonly property color stackHeaderBackground: mix(columnBackground, text, dark ? 0.14 : 0.1)
+    readonly property color stackHeaderCount: legibleOn(subtleText, stackHeaderBackground, 4.5)
+
     // ---- Notes an agent changed -------------------------------------------
     // The glow is green for now; this is the one place to change it (or to
     // derive it from a theme later).

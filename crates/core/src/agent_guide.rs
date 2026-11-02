@@ -23,7 +23,7 @@ pub const TOOLS: &[(&str, &str)] = &[
     ("task_create", "create a task (always in the first column)"),
     (
         "task_update",
-        "edit a task's text, requirements, criteria or references",
+        "edit a task's text, requirements, criteria, references or category",
     ),
     (
         "task_advance",
@@ -59,6 +59,9 @@ and every tool accepts a number such as #12 wherever it takes a task id.
 - New tasks always start in the first column.
 - Keep a task's description short (about 200 characters, sticky-note sized); put detail in \
 extended_description, requirements and acceptance_criteria.
+- Group related tasks with the optional category on task_create and task_update (an empty string \
+clears it); tasks of one category in a column stack on the board. Reuse an existing category where \
+one fits; names match case-insensitively.
 - Tick acceptance criteria with criterion_set as you complete them.
 - Link related tasks with references in task_update (blocks, blocked_by, relates_to, duplicates, \
 duplicated_by); the other task is updated to match.

@@ -16,6 +16,8 @@ Item {
     property bool glowEdited: false     // the agent edited its content
     property bool reducedMotion: false
     property bool glowActive: true      // false while scrolled out of view
+    // Show the category as a label. Off for notes in a stack, whose header says it.
+    property bool showCategory: true
     readonly property bool isTaskCard: true
     readonly property bool dragging: mouse.drag.active
 
@@ -32,6 +34,7 @@ Item {
     Accessible.role: Accessible.Button
     Accessible.name: task.cardText
     Accessible.description: "#" + task.number
+                            + (task.category ? ", " + qsTr("category %1").arg(task.category) : "")
                             + (task.total > 0 ? ", " + qsTr("%1 of %2 criteria done").arg(task.done).arg(task.total) : "")
     Accessible.focusable: true
     Accessible.onPressAction: root.clicked()
@@ -109,6 +112,27 @@ Item {
             id: content
             anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
             spacing: 10
+
+            Rectangle {
+                objectName: "cardCategory"
+                visible: root.showCategory && !!root.task.category
+                Layout.maximumWidth: content.width
+                implicitWidth: categoryLabel.implicitWidth + 12
+                implicitHeight: categoryLabel.implicitHeight + 4
+                radius: 3
+                color: Theme.noteChip
+
+                Label {
+                    id: categoryLabel
+                    anchors.centerIn: parent
+                    width: Math.min(implicitWidth, content.width - 12)
+                    text: root.task.category || ""
+                    elide: Text.ElideRight
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: Theme.noteChipText
+                }
+            }
 
             Text {
                 Layout.fillWidth: true

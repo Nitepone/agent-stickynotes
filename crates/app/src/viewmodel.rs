@@ -22,6 +22,8 @@ const CARD_MAX_LINES: usize = 6;
 #[serde(rename_all = "camelCase")]
 struct BoardVm<'a> {
     title: &'a str,
+    /// Every category in use, sorted ignoring case, for the task dialog's drop-down.
+    categories: Vec<&'a str>,
     columns: Vec<ColumnVm<'a>>,
 }
 
@@ -39,6 +41,8 @@ struct ColumnVm<'a> {
 struct CardVm {
     id: Uuid,
     number: u64,
+    /// Group name; same-category cards in a column stack (see `StackModel.qml`).
+    category: Option<String>,
     /// Set when an agent made the latest change: `{at: ms since epoch, kind}`.
     agent_change: Option<AgentChangeVm>,
     card_text: String,
@@ -61,6 +65,7 @@ struct TaskVm<'a> {
     column_id: Uuid,
     description: &'a str,
     extended_description: &'a str,
+    category: &'a str,
     requirements: &'a [String],
     criteria: Vec<CriterionVm<'a>>,
     references: Vec<ReferenceVm<'a>>,
@@ -99,6 +104,7 @@ struct CriterionVm<'a> {
 pub fn board_json(board: &Board) -> String {
     let vm = BoardVm {
         title: &board.title,
+        categories: used_categories(board),
         columns: board
             .columns
             .iter()
@@ -113,11 +119,24 @@ pub fn board_json(board: &Board) -> String {
     serde_json::to_string(&vm).expect("view model serializes")
 }
 
+/// Distinct categories on the board, sorted ignoring case.
+fn used_categories(board: &Board) -> Vec<&str> {
+    let mut seen = std::collections::HashSet::new();
+    let mut names: Vec<&str> = board
+        .tasks()
+        .filter_map(|(_, t)| t.category.as_deref())
+        .filter(|c| seen.insert(c.to_lowercase()))
+        .collect();
+    names.sort_by_key(|c| c.to_lowercase());
+    names
+}
+
 fn card(task: &Task) -> CardVm {
     let p = task.progress();
     CardVm {
         id: task.id,
         number: task.number,
+        category: task.category.clone(),
         agent_change: task.agent_change.as_ref().map(|c| AgentChangeVm {
             at: c.at.timestamp_millis(),
             kind: c.kind.as_str(),
@@ -145,6 +164,7 @@ pub fn task_json(board: &Board, id: Uuid) -> String {
         column_id: board.columns[ci].id,
         description: &t.description,
         extended_description: &t.extended_description,
+        category: t.category.as_deref().unwrap_or(""),
         requirements: &t.requirements,
         criteria: t
             .acceptance_criteria
@@ -304,6 +324,9 @@ pub struct TaskForm {
     description: String,
     #[serde(default)]
     extended_description: String,
+    /// Blank means uncategorized.
+    #[serde(default)]
+    category: String,
     #[serde(default)]
     requirements: Vec<String>,
     #[serde(default)]
@@ -369,6 +392,7 @@ impl TaskForm {
             extended_description: self.extended_description,
             requirements: self.requirements,
             acceptance_criteria: criterion_drafts(self.criteria),
+            category: Some(self.category),
         }
     }
 
@@ -378,6 +402,7 @@ impl TaskForm {
             extended_description: Some(self.extended_description),
             requirements: Some(self.requirements),
             acceptance_criteria: Some(criterion_drafts(self.criteria)),
+            category: Some(self.category),
             references: self.references.map(|refs| {
                 refs.into_iter()
                     .map(|r| ReferenceDraft {
@@ -485,6 +510,47 @@ mod tests {
         assert_eq!(card["number"], 1);
         assert_eq!(card["done"], 1);
         assert_eq!(card["total"], 2);
+    }
+
+    #[test]
+    fn categories_reach_cards_dialog_and_board_list() {
+        let store = BoardStore::new(false);
+        for (desc, cat) in [("a", "ui"), ("b", ""), ("c", "Backend"), ("d", " UI ")] {
+            let form = TaskForm::parse(&json!({"description": desc, "category": cat}).to_string())
+                .unwrap();
+            store
+                .apply(
+                    Origin::User,
+                    Command::CreateTask {
+                        column: None,
+                        position: None,
+                        draft: form.into_draft(),
+                    },
+                    None,
+                )
+                .unwrap();
+        }
+        let json: serde_json::Value =
+            serde_json::from_str(&store.read(|b, _| board_json(b))).unwrap();
+        assert_eq!(json["categories"], json!(["Backend", "ui"]));
+        let tasks = &json["columns"][0]["tasks"];
+        assert_eq!(tasks[0]["category"], "ui");
+        assert!(tasks[1]["category"].is_null());
+        assert_eq!(tasks[3]["category"], "ui", "case-insensitive reuse");
+        let id: Uuid = tasks[2]["id"].as_str().unwrap().parse().unwrap();
+        let dialog: serde_json::Value =
+            serde_json::from_str(&store.read(|b, _| task_json(b, id))).unwrap();
+        assert_eq!(dialog["category"], "Backend");
+
+        // Saving the dialog with a blank category clears it.
+        let patch = TaskForm::parse(r#"{"description":"c","category":""}"#)
+            .unwrap()
+            .into_patch();
+        store
+            .apply(Origin::User, Command::UpdateTask { id, patch }, None)
+            .unwrap();
+        let cleared = store.read(|b, _| task_json(b, id));
+        assert!(cleared.contains(r#""category":"""#));
     }
 
     #[test]

@@ -344,5 +344,106 @@ Item {
             waitForRendering(dialog.contentItem)
             verify(!fields("taskNumber")[0].visible)
         }
+
+        // ---- category ----
+
+        function openWithCategory(category) {
+            dialog.categories = ["Backend", "UI"]
+            dialog.openTask(JSON.stringify({
+                id: "t1", number: 7, columnId: "c0", description: "d", extendedDescription: "",
+                category: category, requirements: [], criteria: [], references: [],
+                updatedAt: "2026-01-01T00:00:00Z",
+            }), "Backlog")
+            waitForRendering(dialog.contentItem)
+            return fields("categoryBox")[0]
+        }
+
+        function typeCategory(box, text) {
+            box.contentItem.forceActiveFocus()
+            verify(box.contentItem.activeFocus, "the editor has focus")
+            box.contentItem.selectAll()
+            for (const ch of text)
+                keyClick(ch)
+        }
+
+        function test_the_dropdown_lists_the_categories_used_on_the_board() {
+            const box = openWithCategory("")
+            compare(box.count, 2)
+            compare(box.model, ["Backend", "UI"])
+            compare(box.textAt(0), "Backend")
+            compare(box.textAt(1), "UI")
+            compare(box.editable, true)
+            compare(form().category, "")
+        }
+
+        function test_a_task_opens_with_its_category_selected() {
+            const box = openWithCategory("UI")
+            compare(box.currentIndex, 1)
+            compare(box.editText, "UI")
+            compare(form().category, "UI")
+            verify(!dialog.isEdited())
+        }
+
+        function test_choosing_from_the_dropdown_sets_the_category() {
+            const box = openWithCategory("")
+            box.currentIndex = 0
+            box.activated(0)
+            compare(form().category, "Backend")
+            verify(dialog.isEdited())
+        }
+
+        function test_typing_a_new_category_adds_it_trimmed() {
+            const box = openWithCategory("")
+            typeCategory(box, "  Docs ")
+            compare(form().category, "Docs")
+            keyClick(Qt.Key_Return)
+            compare(box.editText, "Docs")
+            compare(box.currentIndex, -1)
+        }
+
+        function test_typing_an_existing_category_in_another_case_selects_it() {
+            const box = openWithCategory("")
+            typeCategory(box, "ui")
+            // Even before leaving the box the saved value uses the existing spelling.
+            compare(form().category, "UI")
+            keyClick(Qt.Key_Return)
+            compare(box.currentIndex, 1)
+            compare(box.editText, "UI")
+            compare(form().category, "UI")
+            // Leaving the box settles it too.
+            typeCategory(box, "bACKEND")
+            box.focus = false
+            dialog.settleCategory()
+            compare(box.currentIndex, 0)
+            compare(box.editText, "Backend")
+        }
+
+        function test_the_clear_button_removes_the_category() {
+            const box = openWithCategory("UI")
+            const [clear] = fields("clearCategory")
+            compare(clear.enabled, true)
+            mouseClick(clear)
+            compare(box.editText, "")
+            compare(form().category, "")
+            compare(clear.enabled, false)
+            verify(dialog.isEdited())
+        }
+
+        function test_new_categories_arriving_while_open_keep_what_was_typed() {
+            const box = openWithCategory("")
+            typeCategory(box, "Docs")
+            dialog.categories = ["Backend", "Docs", "UI"]
+            compare(box.count, 3)
+            compare(form().category, "Docs")
+        }
+
+        function test_a_new_task_starts_without_a_category() {
+            openWithCategory("UI")
+            dialog.close()
+            dialog.openNew({ id: "c0", title: "Backlog" })
+            waitForRendering(dialog.contentItem)
+            compare(form().category, "")
+            compare(fields("categoryBox")[0].editText, "")
+        }
     }
 }

@@ -15,6 +15,9 @@ Item {
     // Decides which notes glow (see GlowTracker); null means none do.
     property var glowTracker: null
     property bool reducedMotion: false
+    // Collapsed stacks, as { stackKey: true }. The owner keeps it across board
+    // refreshes (this view is rebuilt then) and updates it on stackToggled.
+    property var collapsedStacks: ({})
     readonly property bool isColumn: true
     readonly property bool dragging: grip.drag.active
 
@@ -24,6 +27,17 @@ Item {
     signal taskClicked(string taskId)
     signal taskDropped(string taskId, int position)
     signal taskMoveRequested(string taskId, int direction)
+    signal stackToggled(string stackKey)
+
+    StackModel {
+        id: stacks
+        columnId: root.column.id
+        tasks: root.column.tasks
+    }
+
+    function isCollapsed(stackKey) {
+        return stackKey !== "" && !!collapsedStacks[stackKey]
+    }
 
     // Vertical scroll of the cards, kept across board refreshes (see restoreScroll).
     property alias scrollY: flick.contentY
@@ -44,36 +58,58 @@ Item {
     objectName: "column-" + column.id
     width: Theme.columnWidth
 
-    // Index at which a task dropped at (x, y) in `item` coordinates lands,
-    // ignoring the dragged task itself.
+    // Index among the shown cards at which a task dropped at (x, y) in `item`
+    // coordinates lands, ignoring the dragged task itself. Use storedPosition()
+    // to turn it into a position in the column's task order.
     function dropIndex(item, x, y, draggedId) {
         const p = item.mapToItem(cards, x, y)
         let index = 0
-        for (const card of cardItems(draggedId)) {
-            if (card.y + card.height / 2 < p.y)
+        for (const card of cardItems(draggedId, true)) {
+            if (cardTop(card) + card.height / 2 < p.y)
                 index++
         }
         return index
     }
 
-    function cardItems(excludeId) {
+    function storedPosition(index, draggedId) {
+        const ids = cardItems(draggedId, true).map(c => c.task.id)
+        return stacks.storedPosition(ids, index, draggedId)
+    }
+
+    function cardTop(card) {
+        return card.mapToItem(cards, 0, 0).y
+    }
+
+    // The task cards, top to bottom; with `shownOnly`, without the ones hidden
+    // in a collapsed stack.
+    function cardItems(excludeId, shownOnly) {
         const result = []
         for (let i = 0; i < cards.children.length; i++) {
-            const c = cards.children[i]
-            if (c.isTaskCard && c.task.id !== excludeId)
+            const c = cards.children[i].card
+            if (c && c.task.id !== excludeId && (!shownOnly || cards.children[i].visible))
                 result.push(c)
         }
         return result
     }
 
+    function headerItems() {
+        const result = []
+        for (let i = 0; i < cards.children.length; i++) {
+            const h = cards.children[i].header
+            if (h)
+                result.push(h)
+        }
+        return result
+    }
+
     function indicatorY(index, draggedId) {
-        const items = cardItems(draggedId)
+        const items = cardItems(draggedId, true)
         if (index < 0 || items.length === 0)
             return 0
         if (index < items.length)
-            return items[index].y - Theme.cardSpacing / 2 - 1
+            return cardTop(items[index]) - Theme.cardSpacing / 2 - 1
         const last = items[items.length - 1]
-        return last.y + last.height + Theme.cardSpacing / 2 - 1
+        return cardTop(last) + last.height + Theme.cardSpacing / 2 - 1
     }
 
     Rectangle {
@@ -176,21 +212,66 @@ Item {
                     topPadding: 4
 
                     Repeater {
-                        model: root.column.tasks
-                        delegate: TaskCard {
+                        model: stacks.rows
+                        delegate: Item {
+                            id: rowItem
                             required property var modelData
-                            task: modelData
+                            readonly property bool inStack: modelData.stackKey !== ""
+                            readonly property var card: loader.item && loader.item.isTaskCard ? loader.item : null
+                            readonly property var header: loader.item && loader.item.isStackHeader ? loader.item : null
+
+                            visible: !(modelData.kind === "card" && root.isCollapsed(modelData.stackKey))
                             width: cards.width
-                            dragLayer: root.dragLayer
-                            dragEnabled: !root.editMode
-                            glow: root.glowTracker ? root.glowTracker.intensity(modelData.id) : 0
-                            glowEdited: root.glowTracker ? root.glowTracker.edited(modelData.id) : false
-                            reducedMotion: root.reducedMotion
-                            // Only notes near the visible part of the column animate.
-                            glowActive: y + height > flick.contentY - 80
-                                        && y < flick.contentY + flick.height + 80
-                            onClicked: root.taskClicked(modelData.id)
-                            onMoveRequested: (direction) => root.taskMoveRequested(modelData.id, direction)
+                            height: visible && loader.item ? loader.item.height : 0
+
+                            // A thin rail beside an expanded stack's notes ties them to the
+                            // header above; the header itself lines up with plain notes.
+                            Rectangle {
+                                visible: rowItem.modelData.kind === "card" && rowItem.inStack && rowItem.visible
+                                x: 2
+                                y: -Theme.cardSpacing
+                                width: 3
+                                height: rowItem.height + Theme.cardSpacing
+                                radius: 1.5
+                                color: Theme.stackHeaderBackground
+                            }
+
+                            Loader {
+                                id: loader
+                                x: rowItem.inStack && rowItem.modelData.kind === "card" ? 12 : 0
+                                width: rowItem.width - x
+                                sourceComponent: rowItem.modelData.kind === "header" ? headerComponent : cardComponent
+                            }
+
+                            Component {
+                                id: cardComponent
+                                TaskCard {
+                                    task: rowItem.modelData.task
+                                    dragLayer: root.dragLayer
+                                    dragEnabled: !root.editMode
+                                    showCategory: rowItem.modelData.showCategory
+                                    glow: root.glowTracker ? root.glowTracker.intensity(task.id) : 0
+                                    glowEdited: root.glowTracker ? root.glowTracker.edited(task.id) : false
+                                    reducedMotion: root.reducedMotion
+                                    // Only notes near the visible part of the column animate.
+                                    glowActive: rowItem.y + height > flick.contentY - 80
+                                                && rowItem.y < flick.contentY + flick.height + 80
+                                    onClicked: root.taskClicked(task.id)
+                                    onMoveRequested: (direction) => root.taskMoveRequested(task.id, direction)
+                                }
+                            }
+
+                            Component {
+                                id: headerComponent
+                                StackHeader {
+                                    category: rowItem.modelData.category
+                                    stackKey: rowItem.modelData.stackKey
+                                    count: rowItem.modelData.count
+                                    collapsed: root.isCollapsed(rowItem.modelData.stackKey)
+                                    reducedMotion: root.reducedMotion
+                                    onToggled: root.stackToggled(rowItem.modelData.stackKey)
+                                }
+                            }
                         }
                     }
                 }
@@ -241,7 +322,7 @@ Item {
             onExited: hoverIndex = -1
             onDropped: (event) => {
                 const id = event.source.task.id
-                const index = root.dropIndex(taskDrop, event.x, event.y, id)
+                const index = root.storedPosition(root.dropIndex(taskDrop, event.x, event.y, id), id)
                 hoverIndex = -1
                 event.accept()
                 root.taskDropped(id, index)

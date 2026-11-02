@@ -139,7 +139,7 @@ ApplicationWindow {
     }
 
     // Dev aid for headless UI checks: STICKYNOTES_SCREENSHOT=out.png[:scene[:delayMs[:WxH]]]
-    // where scene is board (default), projects, edit, task, newtask, column, agent, project, prefs, editor, note-demo, theme-demo, theme-reset, interact, synthetic or generate
+    // where scene is board (default), projects, edit, task, newtask, collapsed, column, agent, project, prefs, editor, note-demo, theme-demo, theme-reset, interact, synthetic or generate
     // (generate starts a draft for the first task, using settings.json's claude_command).
     Timer {
         id: screenshotTimer
@@ -159,6 +159,20 @@ ApplicationWindow {
                 else if (scene === "projects") window.openProjects(false)
                 else if (scene === "artifacts") window.openArtifactsPage()
                 else if (scene === "task" && first) boardView.taskClicked(first.tasks[0].id)
+                else if (scene === "collapsed") {
+                    // Collapse every stack, as a click on each header would.
+                    for (const column of window.board.columns) {
+                        const counts = {}
+                        for (const t of column.tasks) {
+                            const key = (t.category || "").trim().toLowerCase()
+                            if (key !== "")
+                                counts[key] = (counts[key] || 0) + 1
+                        }
+                        for (const key in counts)
+                            if (counts[key] > 1)
+                                boardView.toggleStack(column.id + "\u001f" + key)
+                    }
+                }
                 else if (scene === "newtask") taskDialog.openNew(window.board.columns[0])
                 else if (scene === "column") columnDialog.openColumn(window.board.columns[0])
                 else if (scene === "agent") agentDialog.open()
@@ -730,6 +744,7 @@ ApplicationWindow {
         onGenerateRequested: (form) => controller.startGeneration(form)
         onCancelGenerationRequested: controller.cancelGeneration()
         linkCandidates: window.linkCandidates
+        categories: window.board.categories || []
         relationOptions: JSON.parse(controller.relationOptions())
         onArtifactClicked: (name) => window.openArtifact(name)
         onOpenTaskRequested: (taskId) => {

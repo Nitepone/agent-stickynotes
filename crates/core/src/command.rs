@@ -17,6 +17,9 @@ pub struct TaskDraft {
     pub extended_description: String,
     pub requirements: Vec<String>,
     pub acceptance_criteria: Vec<CriterionDraft>,
+    /// Blank means uncategorized. Matched case-insensitively against the
+    /// categories already on the board.
+    pub category: Option<String>,
 }
 
 /// An acceptance criterion as supplied by a client. An `id` matching an
@@ -45,6 +48,8 @@ pub struct TaskPatch {
     /// Replaces the task's whole set of references. Mirrors on the other
     /// tasks are added and removed to match.
     pub references: Option<Vec<ReferenceDraft>>,
+    /// `Some("")` (or blanks) clears the category; `None` leaves it alone.
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Clone)]

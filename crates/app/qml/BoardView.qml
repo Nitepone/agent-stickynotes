@@ -12,6 +12,18 @@ Item {
     property bool editMode: false
     property var glowTracker: null
     property bool reducedMotion: false
+    // Which stacks are collapsed, { stackKey: true } (see StackModel). View
+    // state only: kept here across board refreshes, never saved.
+    property var collapsedStacks: ({})
+
+    function toggleStack(stackKey) {
+        const next = Object.assign({}, collapsedStacks)
+        if (next[stackKey])
+            delete next[stackKey]
+        else
+            next[stackKey] = true
+        collapsedStacks = next
+    }
 
     signal taskClicked(string taskId)
     signal addTaskClicked(var column)
@@ -25,12 +37,17 @@ Item {
     // Replacing `board` rebuilds every column and card. The owner takes
     // scrollState() first and hands it to restoreScroll() afterwards.
 
-    // The task card that has keyboard focus, or "".
+    // The task card that has keyboard focus (its id), or the stack header
+    // ("stack:" and its key), or "".
     function focusedTaskId() {
         for (const col of columnItems("")) {
-            for (const card of col.cardItems("")) {
+            for (const card of col.cardItems("", false)) {
                 if (card.activeFocus)
                     return card.task.id
+            }
+            for (const header of col.headerItems()) {
+                if (header.activeFocus)
+                    return "stack:" + header.stackKey
             }
         }
         return ""
@@ -50,9 +67,13 @@ Item {
             col.restoreScroll(state.columns[col.column.id] || 0)
         if (state.focus !== "") {
             for (const col of columnItems("")) {
-                for (const card of col.cardItems("")) {
+                for (const card of col.cardItems("", false)) {
                     if (card.task.id === state.focus)
                         card.forceActiveFocus()
+                }
+                for (const header of col.headerItems()) {
+                    if ("stack:" + header.stackKey === state.focus)
+                        header.forceActiveFocus()
                 }
             }
         }
@@ -151,6 +172,8 @@ Item {
                     editMode: root.editMode
                     glowTracker: root.glowTracker
                     reducedMotion: root.reducedMotion
+                    collapsedStacks: root.collapsedStacks
+                    onStackToggled: (stackKey) => root.toggleStack(stackKey)
                     onTitleClicked: root.columnTitleClicked(modelData)
                     onAddTaskClicked: root.addTaskClicked(modelData)
                     onDeleteClicked: root.deleteColumnClicked(modelData)

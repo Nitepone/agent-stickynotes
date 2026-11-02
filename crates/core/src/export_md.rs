@@ -26,6 +26,9 @@ pub fn to_markdown(board: &Board) -> String {
                 task.number,
                 single_line(&task.description)
             );
+            if let Some(category) = &task.category {
+                let _ = write!(out, "\n**Category:** {}\n", single_line(category));
+            }
             if !task.extended_description.is_empty() {
                 let _ = write!(out, "\n{}\n", task.extended_description);
             }
@@ -117,6 +120,7 @@ mod tests {
                             ..Default::default()
                         },
                     ],
+                    category: None,
                 },
             },
         )

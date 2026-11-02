@@ -10,6 +10,8 @@ attach Markdown and images to tasks.
 - **Columns are a pipeline.** Each column's description says what a task must
   satisfy to be there. Agents create tasks in the first column and advance them one
   column at a time; you can drag anything anywhere.
+- **Categories.** Tag tasks with a category; same-category tasks in a column stack
+  into a collapsible group to save vertical space.
 - **Agents are visible.** Notes an agent changed glow until you are back. Agent
   write access is **off** by default (the robot icon in the toolbar toggles it).
 - **Artifacts.** Agents attach specs, notes and diagrams to tasks. They open in a

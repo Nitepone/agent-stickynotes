@@ -410,6 +410,38 @@ mod tests {
     }
 
     #[test]
+    fn category_commands_go_through_apply() {
+        let store = BoardStore::new(true);
+        let mk = |origin, c: &str| {
+            store
+                .apply(
+                    origin,
+                    Command::CreateTask {
+                        column: None,
+                        position: None,
+                        draft: TaskDraft {
+                            description: "t".into(),
+                            category: Some(c.into()),
+                            ..Default::default()
+                        },
+                    },
+                    None,
+                )
+                .unwrap()
+        };
+        mk(Origin::User, "UI");
+        let rev = store.revision();
+        mk(Origin::Agent, " ui ");
+        assert_eq!(store.revision(), rev + 1);
+        let cats = store.read(|b, _| {
+            b.tasks()
+                .map(|(_, t)| t.category.clone())
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(cats, vec![Some("UI".to_string()), Some("UI".to_string())]);
+    }
+
+    #[test]
     fn agent_writes_are_gated() {
         let store = BoardStore::new(false);
         let rev = store.revision();

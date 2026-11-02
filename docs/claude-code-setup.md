@@ -31,8 +31,8 @@ error that tells the agent to ask you.
 | `board_get` | Columns in order (with their entry criteria), task summaries, revision, write flag |
 | `task_list` | Task summaries, optionally for one column (id or title) |
 | `task_get` | Full task plus `next_column` (where `task_advance` would move it, with its criteria) |
-| `task_create` | New task; always lands in the first column |
-| `task_update` | Change description, extended description, requirements, criteria, and `references` (links to other tasks: `blocks`, `blocked_by`, `relates_to`, `duplicates`, `duplicated_by`; the other task gets the mirrored relation) |
+| `task_create` | New task (optionally with a `category`); always lands in the first column |
+| `task_update` | Change description, extended description, requirements, criteria, `category` (empty string clears), and `references` (links to other tasks: `blocks`, `blocked_by`, `relates_to`, `duplicates`, `duplicated_by`; the other task gets the mirrored relation) |
 | `task_advance` | Move one column to the right; the agent must check `next_column.description` first |
 | `task_delete` | Delete a task |
 | `criterion_set` | Tick or untick an acceptance criterion |

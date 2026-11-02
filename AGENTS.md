@@ -63,6 +63,7 @@ columns, the board title or project settings. Those rules live in
   (`theme::tests::views_do_not_hard_code_colors`) fails on hex colors, named colors
   or `Qt.rgba`/`Qt.color` in any other QML file. Text/background pairs are
   contrast-tested (WCAG AA) in both modes; add new pairs to `tst_theme.qml`.
+- **Categories and stacks.** `Task.category` is normalized once, in `ops` (trim, case-insensitive match with an existing spelling). Stacking is view-only: `StackModel.qml` regroups a column's tasks without touching the stored order and maps a drop slot back with `storedPosition`; collapsed state lives in `BoardView` (not saved).
 - **New QML files** go in `crates/app/qml/`; `build.rs` picks up every `*.qml` there (`Theme.qml` is the singleton). Keep test-only QML under `crates/app/tests/qml`.
 - **Settings** (`~/.config/agent-stickynotes/settings.json`) are validated on load and
   fall back to defaults; keep it that way.
@@ -90,7 +91,7 @@ columns, the board title or project settings. Those rules live in
 
 `QT_QPA_PLATFORM=offscreen` works. Set `STICKYNOTES_SCREENSHOT=out.png:<scene>[:delayMs[:WxH]]` (`WxH` resizes the window, e.g. `1560x820`)
 and run `cargo run -p stickynotes -- <project-folder>`: it renders to a PNG and exits.
-Scenes: `board`, `projects`, `artifacts`, `edit`, `task`, `newtask`, `column`, `agent`, `project`, `prefs`,
+Scenes: `board`, `projects`, `artifacts`, `edit`, `task`, `newtask`, `collapsed`, `column`, `agent`, `project`, `prefs`,
 `editor`, `note-demo`, `theme-demo`, `theme-reset`, `generate`, `interact`, `synthetic`. Always point
 `XDG_CONFIG_HOME` at a scratch directory (settings, the API token and
 `last_project` live there) and set `XDG_DATA_HOME` too (the projects folder is under it); use a copy of

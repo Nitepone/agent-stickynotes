@@ -89,6 +89,8 @@ pub struct TaskView {
     pub number: u64,
     pub description: String,
     pub extended_description: String,
+    /// Optional group name; tasks of one category stack together on the board.
+    pub category: Option<String>,
     pub requirements: Vec<String>,
     pub acceptance_criteria: Vec<CriterionView>,
     pub progress: Progress,
@@ -187,6 +189,10 @@ pub struct NewTask {
     /// Acceptance criteria texts; they start unchecked.
     #[serde(default)]
     pub acceptance_criteria: Vec<String>,
+    /// Optional category, at most 40 characters. Matched case-insensitively
+    /// against the categories already on the board; the existing spelling wins.
+    #[serde(default)]
+    pub category: Option<String>,
 }
 
 // Body of an update request; omitted fields are unchanged.
@@ -203,6 +209,9 @@ pub struct TaskUpdate {
     /// them; omit the field to leave links alone). The other task gets the
     /// mirrored relation automatically.
     pub references: Option<Vec<ReferenceInput>>,
+    /// Sets the category (case-insensitive match with existing ones). An empty
+    /// string clears it; omit the field to leave it unchanged.
+    pub category: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -316,6 +325,7 @@ impl AgentService {
                     ..Default::default()
                 })
                 .collect(),
+            category: new.category,
         };
         self.apply_to_task(
             Command::CreateTask {
@@ -371,6 +381,7 @@ impl AgentService {
             requirements: update.requirements,
             acceptance_criteria: criteria,
             references,
+            category: update.category,
         };
         self.apply_to_task(Command::UpdateTask { id, patch }, expected)
     }
@@ -538,6 +549,7 @@ fn task_view(board: &Board, id: TaskId, revision: u64) -> ServiceResult<TaskView
         number: t.number,
         description: t.description.clone(),
         extended_description: t.extended_description.clone(),
+        category: t.category.clone(),
         requirements: t.requirements.clone(),
         acceptance_criteria: t.acceptance_criteria.iter().map(criterion_view).collect(),
         progress: t.progress(),

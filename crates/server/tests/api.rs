@@ -87,6 +87,44 @@ async fn requires_token() {
 }
 
 #[tokio::test]
+async fn category_is_set_matched_and_cleared_over_rest() {
+    let api = Api::new(true);
+    let (status, a) = api
+        .call(
+            "POST",
+            "/tasks",
+            Some(json!({"description": "A", "category": " UI "})),
+        )
+        .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(a["category"], "UI");
+    let (_, b) = api
+        .call("POST", "/tasks", Some(json!({"description": "B"})))
+        .await;
+    assert!(b["category"].is_null());
+    let uri = format!("/tasks/{}", b["id"].as_str().unwrap());
+
+    let (status, b) = api
+        .call("PATCH", &uri, Some(json!({"category": "ui"})))
+        .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(b["category"], "UI", "existing spelling wins");
+
+    let (_, b) = api
+        .call("PATCH", &uri, Some(json!({"description": "B2"})))
+        .await;
+    assert_eq!(b["category"], "UI", "omitted leaves it alone");
+
+    let (_, b) = api.call("PATCH", &uri, Some(json!({"category": ""}))).await;
+    assert!(b["category"].is_null());
+
+    let (status, _) = api
+        .call("PATCH", &uri, Some(json!({"category": "x".repeat(41)})))
+        .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn task_lifecycle() {
     let api = Api::new(true);
     let (status, task) = api
@@ -439,6 +477,34 @@ async fn mcp_end_to_end() {
         .read(|b, _| b.task(second_id.parse().unwrap()).cloned())
         .unwrap();
     assert_eq!(other.references.len(), 1);
+
+    // Categories over MCP: create with one, then set the other with different case.
+    let args = json!({"description": "Cat A", "category": "UI"})
+        .as_object()
+        .unwrap()
+        .clone();
+    let result = client
+        .call_tool(CallToolRequestParams::new("task_create").with_arguments(args))
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true));
+    let args = json!({"id": second_id, "category": "ui"})
+        .as_object()
+        .unwrap()
+        .clone();
+    let result = client
+        .call_tool(CallToolRequestParams::new("task_update").with_arguments(args))
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true));
+    let updated: Value = serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+    assert_eq!(updated["category"], "UI");
+    let schema = tools
+        .iter()
+        .find(|t| t.name == "task_update")
+        .map(|t| serde_json::to_string(&t.input_schema).unwrap())
+        .unwrap();
+    assert!(schema.contains("category"));
 
     store.set_agent_write(false);
     let args = json!({"id": id}).as_object().unwrap().clone();
