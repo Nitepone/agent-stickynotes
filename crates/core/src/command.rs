@@ -117,6 +117,9 @@ pub enum Command {
         document_prompt: Option<String>,
         code_guidance: Option<String>,
     },
+    /// Put entities back as they were (undo and redo). Built by the store
+    /// only; agents are refused it.
+    Restore(Box<crate::history::Snap>),
 }
 
 /// What a successfully applied command produced.

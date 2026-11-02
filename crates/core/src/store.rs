@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::command::{Applied, Command, Origin};
 use crate::error::{Error, Result};
+use crate::history::History;
 use crate::model::{Artifact, ArtifactId, Board, TaskId};
 use crate::ops;
 use crate::persist::{self, FileStamp};
@@ -52,6 +53,7 @@ struct State {
     dirty: bool,
     revision: u64,
     agent_write: bool,
+    history: History,
 }
 
 pub struct BoardStore {
@@ -69,6 +71,7 @@ impl BoardStore {
                 dirty: false,
                 revision: 1,
                 agent_write,
+                history: History::default(),
             }),
             listeners: Mutex::new(Vec::new()),
         })
@@ -133,10 +136,48 @@ impl BoardStore {
                     actual: s.revision,
                 });
             }
+            // Only the user's own changes can be undone.
+            let before = (origin == Origin::User && !matches!(cmd, Command::Restore(_)))
+                .then(|| (s.board.clone(), cmd.clone()));
             let applied = ops::execute(&mut s.board, origin, cmd)?;
+            if let Some((before, cmd)) = before {
+                s.history.record(&cmd, &applied, &before, &s.board);
+            }
             s.dirty = true;
             Ok((applied, s.revision + 1))
         })
+    }
+
+    /// What Undo and Redo would do, named for a menu ("move #12 to Review").
+    pub fn history_labels(&self) -> (Option<String>, Option<String>) {
+        self.lock().history.labels()
+    }
+
+    /// Undo the user's latest change. Refuses (leaving the history alone) if
+    /// what it touched has changed since. Returns the undone change's label.
+    pub fn undo(&self) -> Result<String> {
+        self.mutate(Origin::User, |s| {
+            let (label, snap) = s.history.plan_undo(&s.board)?;
+            ops::execute(&mut s.board, Origin::User, Command::Restore(Box::new(snap)))?;
+            s.history.finish_undo();
+            s.dirty = true;
+            Ok(label)
+        })
+    }
+
+    /// Redo the change last undone, under the same check as [`Self::undo`].
+    pub fn redo(&self) -> Result<String> {
+        self.mutate(Origin::User, |s| {
+            let (label, snap) = s.history.plan_redo(&s.board)?;
+            ops::execute(&mut s.board, Origin::User, Command::Restore(Box::new(snap)))?;
+            s.history.finish_redo();
+            s.dirty = true;
+            Ok(label)
+        })
+    }
+
+    pub fn clear_history(&self) {
+        self.lock().history.clear();
     }
 
     /// The open project's directory, if the board has been saved in one.
@@ -169,6 +210,7 @@ impl BoardStore {
         }
         project::ensure_dirs(dir)?;
         self.mutate(Origin::User, |s| {
+            s.history.clear();
             if !(s.path.is_none() && s.dirty) {
                 s.board = Board::new_default();
                 s.board.title = title.to_string();
@@ -202,6 +244,7 @@ impl BoardStore {
         // marked unsaved so the numbers are written out and stay stable.
         let backfilled = board.normalize();
         self.mutate(Origin::User, |s| {
+            s.history.clear();
             s.board = board;
             s.path = Some(path.to_path_buf());
             s.stamp = stamp;

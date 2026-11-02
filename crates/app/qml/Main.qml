@@ -472,6 +472,31 @@ ApplicationWindow {
         }
     }
 
+    // Ctrl+Z and Ctrl+Shift+Z belong to a focused text field, not the board.
+    readonly property bool textFieldFocused: window.activeFocusItem
+        && (window.activeFocusItem instanceof TextInput
+            || window.activeFocusItem instanceof TextEdit)
+
+    Action {
+        id: undoAction
+        text: controller.undoLabel === "" ? qsTr("&Undo") : qsTr("&Undo %1").arg(controller.undoLabel)
+        enabled: controller.undoLabel !== ""
+        shortcut: "Ctrl+Z"
+        onTriggered: window.result(controller.undo(), false)
+    }
+    Action {
+        id: redoAction
+        text: controller.redoLabel === "" ? qsTr("&Redo") : qsTr("&Redo %1").arg(controller.redoLabel)
+        enabled: controller.redoLabel !== ""
+        shortcut: "Ctrl+Shift+Z"
+        onTriggered: window.result(controller.redo(), false)
+    }
+    Shortcut {
+        sequences: ["Ctrl+Y"]
+        enabled: !window.textFieldFocused && controller.redoLabel !== ""
+        onActivated: redoAction.trigger()
+    }
+
     menuBar: MenuBar {
         Menu {
             title: qsTr("&File")
@@ -495,6 +520,9 @@ ApplicationWindow {
         }
         Menu {
             title: qsTr("&Board")
+            MenuItem { action: undoAction }
+            MenuItem { action: redoAction }
+            MenuSeparator {}
             MenuItem { action: editColumnsAction }
             Action {
                 text: qsTr("&Rename Board…")

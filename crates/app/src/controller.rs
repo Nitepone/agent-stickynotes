@@ -30,6 +30,8 @@ pub mod qobject {
         #[qproperty(bool, dirty)]
         #[qproperty(bool, has_path)]
         #[qproperty(bool, agent_write)]
+        #[qproperty(QString, undo_label)]
+        #[qproperty(QString, redo_label)]
         #[qproperty(QString, endpoint)]
         #[qproperty(i64, last_interaction_ms)]
         #[qproperty(QString, prefs_json)]
@@ -50,6 +52,10 @@ pub mod qobject {
         fn open_project_folder(self: Pin<&mut BoardController>, url: &QUrl) -> QString;
         #[qinvokable]
         fn save(self: Pin<&mut BoardController>, force: bool) -> QString;
+        #[qinvokable]
+        fn undo(self: &BoardController) -> QString;
+        #[qinvokable]
+        fn redo(self: &BoardController) -> QString;
         #[qinvokable]
         fn export_markdown(self: &BoardController, url: &QUrl) -> QString;
 
@@ -195,6 +201,9 @@ pub struct BoardControllerRust {
     dirty: bool,
     has_path: bool,
     agent_write: bool,
+    /// What Undo/Redo would do ("move #12 to Review"); empty when nothing to do.
+    undo_label: QString,
+    redo_label: QString,
     endpoint: QString,
     last_interaction_ms: i64,
     /// The preferences as JSON (see `Settings::prefs_json`).
@@ -269,6 +278,15 @@ impl qobject::BoardController {
         self.as_mut().set_dirty(snapshot.dirty);
         self.as_mut().set_has_path(snapshot.path.is_some());
         self.as_mut().set_agent_write(snapshot.agent_write);
+        let (undo, redo) = context::get().store.history_labels();
+        let undo = QString::from(undo.unwrap_or_default().as_str());
+        let redo = QString::from(redo.unwrap_or_default().as_str());
+        if *self.undo_label() != undo {
+            self.as_mut().set_undo_label(undo);
+        }
+        if *self.redo_label() != redo {
+            self.as_mut().set_redo_label(redo);
+        }
     }
 
     fn projects_json(&self) -> QString {
@@ -315,6 +333,18 @@ impl qobject::BoardController {
     fn save(self: Pin<&mut Self>, force: bool) -> QString {
         let result = context::get().store.save(force);
         to_qstring(viewmodel::result_json(result.map(|_| None)))
+    }
+
+    fn undo(&self) -> QString {
+        to_qstring(viewmodel::result_json(
+            context::get().store.undo().map(|_| None::<Applied>),
+        ))
+    }
+
+    fn redo(&self) -> QString {
+        to_qstring(viewmodel::result_json(
+            context::get().store.redo().map(|_| None::<Applied>),
+        ))
     }
 
     fn export_markdown(&self, url: &QUrl) -> QString {

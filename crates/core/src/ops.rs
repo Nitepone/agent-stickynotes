@@ -19,6 +19,11 @@ pub fn execute(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applie
     if origin == Origin::Agent {
         check_agent_rules(board, &cmd)?;
     }
+    if let Command::Restore(snap) = &cmd {
+        // A restore puts back exact copies, agent markers included.
+        crate::history::restore(board, snap)?;
+        return Ok(Applied::Board);
+    }
     let kind = change_kind(&cmd);
     let before = update_stamps(board);
     let applied = run(board, cmd)?;
@@ -212,6 +217,10 @@ fn run(board: &mut Board, cmd: Command) -> Result<Applied> {
             }
             Ok(Applied::Board)
         }
+        Command::Restore(snap) => {
+            crate::history::restore(board, &snap)?;
+            Ok(Applied::Board)
+        }
     }
 }
 
@@ -241,6 +250,7 @@ fn check_agent_rules(board: &Board, cmd: &Command) -> Result<()> {
         | Command::DeleteColumn { .. }
         | Command::RenameBoard { .. } => deny("agents cannot modify columns or the board"),
         Command::UpdateProject { .. } => deny("only the user can edit project settings"),
+        Command::Restore(_) => deny("agents cannot undo or redo"),
         Command::UpdateTask { .. }
         | Command::AdvanceTask { .. }
         | Command::DeleteTask { .. }

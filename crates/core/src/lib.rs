@@ -8,6 +8,7 @@ pub mod artifact;
 pub mod command;
 pub mod error;
 pub mod export_md;
+pub mod history;
 pub mod model;
 pub mod ops;
 pub mod persist;
