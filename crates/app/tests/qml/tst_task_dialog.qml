@@ -36,6 +36,7 @@ Item {
     SignalSpy { id: openSpy; target: dialog; signalName: "openTaskRequested" }
     SignalSpy { id: artifactSpy; target: dialog; signalName: "artifactClicked" }
     SignalSpy { id: attachSpy; target: dialog; signalName: "attachRequested" }
+    SignalSpy { id: pasteSpy; target: dialog; signalName: "pasteRequested" }
     SignalSpy { id: generateSpy; target: dialog; signalName: "generateRequested" }
     SignalSpy { id: cancelSpy; target: dialog; signalName: "cancelGenerationRequested" }
 
@@ -125,6 +126,58 @@ Item {
             compare(attachSpy.count, 1)
             compare(attachSpy.signalArguments[0][0], "t1")
             dialog.attachError = "too big"
+            compare(fields("attachError")[0].visible, true)
+            dialog.close()
+        }
+
+        function test_dropping_files_requests_each_one_and_the_target_is_highlighted() {
+            openWithArtifacts([])
+            const highlight = fields("dropHighlight")[0]
+            compare(highlight.visible, false)
+            dialog.dragOver = true
+            compare(highlight.visible, true)
+            dialog.dragOver = false
+            attachSpy.clear()
+            dialog.attachError = "old"
+            dialog.dropFiles(["file:///tmp/a.md", "file:///tmp/b.png", "file:///tmp/c.exe"])
+            compare(attachSpy.count, 3)
+            compare(attachSpy.signalArguments[0][0], "t1")
+            compare(String(attachSpy.signalArguments[2][1]), "file:///tmp/c.exe")
+            compare(dialog.attachError, "")
+            // Refusals from the owner are listed one per line.
+            dialog.attachFailed("c.exe: not accepted")
+            dialog.attachFailed("d.zip: not accepted")
+            compare(dialog.attachError, "c.exe: not accepted\nd.zip: not accepted")
+            dialog.close()
+        }
+
+        function test_ctrl_v_attaches_unless_a_text_field_has_focus() {
+            openWithArtifacts([])
+            pasteSpy.clear()
+            dialog.forceActiveFocus()
+            verify(!dialog.textFocused)
+            keyClick(Qt.Key_V, Qt.ControlModifier)
+            compare(pasteSpy.count, 1)
+            compare(pasteSpy.signalArguments[0][0], "t1")
+
+            // In a text field Ctrl+V pastes text and nothing is attached.
+            fields("descriptionField")[0].forceActiveFocus()
+            verify(dialog.textFocused)
+            keyClick(Qt.Key_V, Qt.ControlModifier)
+            compare(pasteSpy.count, 1)
+            dialog.close()
+        }
+
+        function test_new_task_dialog_attaches_nothing_and_says_why() {
+            dialog.openNew({ id: "c0", title: "Backlog" })
+            waitForRendering(dialog.contentItem)
+            attachSpy.clear()
+            pasteSpy.clear()
+            dialog.dropFiles(["file:///tmp/a.md"])
+            dialog.pasteFromClipboard()
+            compare(attachSpy.count, 0)
+            compare(pasteSpy.count, 0)
+            verify(dialog.attachError !== "")
             compare(fields("attachError")[0].visible, true)
             dialog.close()
         }

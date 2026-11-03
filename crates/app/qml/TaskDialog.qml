@@ -30,6 +30,12 @@ StickyDialog {
     property var spellRanges: null
     // Why the last attach failed; shown in the Artifacts section.
     property string attachError: ""
+    // A file is being dragged over the dialog (it will be attached on drop).
+    property bool dragOver: false
+    // True while a text field has the keyboard, so Ctrl+V pastes text there.
+    readonly property var focusedItem:
+        contentItem && contentItem.Window.window ? contentItem.Window.window.activeFocusItem : null
+    readonly property bool textFocused: focusedItem !== null && focusedItem.cursorPosition !== undefined
     // What opens the file chooser (anything with open()); tests replace it.
     property var chooser: fileDialog
 
@@ -66,6 +72,9 @@ StickyDialog {
     // The user chose a file to attach to this (existing) task; the owner
     // copies it into the project and calls artifactsAttached() or sets attachError.
     signal attachRequested(string taskId, url fileUrl)
+    // Ctrl+V with no text field focused: the owner attaches the clipboard's
+    // image or files, then calls artifactsAttached() or attachFailed().
+    signal pasteRequested(string taskId)
     signal generateRequested(string formJson)
     signal cancelGenerationRequested()
     // Asks the owner to confirm; the owner then calls undoDraft().
@@ -279,10 +288,39 @@ StickyDialog {
     // touches the task, so this is not an outside change.
     function artifactsAttached(taskJson) {
         const task = JSON.parse(taskJson)
-        attachError = ""
         setArtifacts(task.artifacts)
         if (!changedExternally)
             loadedUpdatedAt = task.updatedAt
+    }
+
+    // One refused file (or reason); several accumulate, one per line.
+    function attachFailed(message) {
+        attachError = attachError === "" ? message : attachError + "\n" + message
+    }
+
+    function cannotAttachYet() {
+        attachError = qsTr("Save the task first, then reopen it to attach files.")
+    }
+
+    // Files dropped on the dialog: each is checked on its own by the owner.
+    function dropFiles(urls) {
+        if (creating) {
+            cannotAttachYet()
+            return
+        }
+        attachError = ""
+        for (const u of urls || [])
+            attachRequested(taskId, u)
+    }
+
+    // Ctrl+V (no text field focused).
+    function pasteFromClipboard() {
+        if (creating) {
+            cannotAttachYet()
+            return
+        }
+        attachError = ""
+        pasteRequested(taskId)
     }
 
     function chooseFile() {
@@ -377,6 +415,44 @@ StickyDialog {
         clip: true
         contentWidth: availableWidth
 
+        // Files dragged from a file manager onto the dialog; above the
+        // content, but it only takes part in drags.
+        DropArea {
+            id: dropArea
+            parent: scroll
+            anchors.fill: parent
+            z: 10
+            onEntered: (drag) => {
+                drag.accepted = drag.hasUrls
+                dialog.dragOver = drag.hasUrls
+            }
+            onExited: dialog.dragOver = false
+            onDropped: (drop) => {
+                dialog.dragOver = false
+                if (drop.hasUrls) {
+                    drop.acceptProposedAction()
+                    dialog.dropFiles(drop.urls)
+                }
+            }
+
+            Rectangle {
+                objectName: "dropHighlight"
+                anchors.fill: parent
+                visible: dialog.dragOver
+                color: Theme.primary
+                opacity: 0.12
+                border.color: Theme.primary
+                border.width: Theme.px(2)
+            }
+            // Not enabled while a text field has focus: Ctrl+V pastes text there.
+            Shortcut {
+                objectName: "pasteShortcut"
+                sequences: [StandardKey.Paste]
+                enabled: dialog.visible && !dialog.textFocused
+                onActivated: dialog.pasteFromClipboard()
+            }
+        }
+
         ColumnLayout {
             width: scroll.availableWidth
             spacing: Theme.px(6)
@@ -424,6 +500,7 @@ StickyDialog {
             SectionLabel { text: qsTr("Description *") }
             FormTextArea {
                 id: descriptionField
+                objectName: "descriptionField"
                 spellRanges: dialog.spellRanges
                 Layout.fillWidth: true
                 Layout.minimumHeight: Theme.px(70)
@@ -653,7 +730,7 @@ StickyDialog {
                 objectName: "noArtifacts"
                 Layout.fillWidth: true
                 visible: !dialog.creating && artifactsModel.count === 0
-                text: qsTr("No files attached. You and agents can attach Markdown and images.")
+                text: qsTr("No files attached. You and agents can attach Markdown and images; drop files here or press Ctrl+V.")
                 color: Theme.subtleText
                 font.pixelSize: Theme.fs(12)
                 wrapMode: Text.Wrap

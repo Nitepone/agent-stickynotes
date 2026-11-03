@@ -257,6 +257,27 @@ pub fn task_json(board: &Board, id: Uuid) -> String {
     serde_json::to_string(&vm).expect("view model serializes")
 }
 
+/// Attach raw bytes the user supplied (a pasted image, a dropped file) to
+/// `task` under `name`: same name, type, size and content rules as for
+/// agents. Nothing is attached on error.
+pub fn attach_bytes(store: &BoardStore, task: Uuid, name: &str, data: &[u8]) -> Result<(), Error> {
+    let (clean, kind) = artifact::clean_name(name)?;
+    let limit = match kind {
+        ArtifactKind::Markdown => artifact::MAX_TEXT_BYTES,
+        ArtifactKind::Image if clean.ends_with(".svg") => artifact::MAX_TEXT_BYTES,
+        ArtifactKind::Image => artifact::MAX_IMAGE_BYTES,
+    };
+    if data.len() > limit {
+        return Err(Error::Validation(format!(
+            "{name} is too big (the limit is {} MiB)",
+            limit >> 20
+        )));
+    }
+    store
+        .add_artifact(stickynotes_core::Origin::User, task, name, data, None)
+        .map(|_| ())
+}
+
 /// Attach a file the user chose to `task`: read it (within the size limits),
 /// store a copy in `artifacts/` and record it as the user's. Nothing is
 /// attached on error.
@@ -265,7 +286,7 @@ pub fn attach_file(store: &BoardStore, task: Uuid, path: &Path) -> Result<(), Er
         .file_name()
         .and_then(|n| n.to_str())
         .ok_or_else(|| Error::Validation("that file has no usable name".into()))?;
-    // Same name and type rules as agents, checked before reading the file.
+    // Name and type are checked before the file is read.
     let (clean, kind) = artifact::clean_name(name)?;
     let limit = match kind {
         ArtifactKind::Markdown => artifact::MAX_TEXT_BYTES,
@@ -283,9 +304,44 @@ pub fn attach_file(store: &BoardStore, task: Uuid, path: &Path) -> Result<(), Er
     }
     let data =
         std::fs::read(path).map_err(|e| Error::Validation(format!("cannot read {name}: {e}")))?;
-    store
-        .add_artifact(stickynotes_core::Origin::User, task, name, &data, None)
-        .map(|_| ())
+    attach_bytes(store, task, name, &data)
+}
+
+/// Attach several files, each checked on its own. Returns one
+/// `"name: reason"` line per refused file; the others are attached.
+pub fn attach_files(store: &BoardStore, task: Uuid, paths: &[std::path::PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .filter_map(|path| {
+            let name = path.file_name().map_or_else(
+                || path.display().to_string(),
+                |n| n.to_string_lossy().into(),
+            );
+            attach_file(store, task, path)
+                .err()
+                .map(|e| refusal_line(&name, &e))
+        })
+        .collect()
+}
+
+fn refusal_line(name: &str, e: &Error) -> String {
+    let reason = e.to_string();
+    // Some reasons already name the file.
+    if reason.contains(name) {
+        reason
+    } else {
+        format!("{name}: {reason}")
+    }
+}
+
+/// The JSON result of an attach batch: ok when nothing was refused, else the
+/// refusals, one per line, as the message.
+pub fn attach_result_json(refused: &[String]) -> String {
+    if refused.is_empty() {
+        json!({ "ok": true, "id": null }).to_string()
+    } else {
+        error_json(&refused.join("\n"))
+    }
 }
 
 /// Project settings for `ProjectDialog.qml`, with every file in the
@@ -856,6 +912,55 @@ mod tests {
         let bad = root.path().join("tool.exe");
         std::fs::write(&bad, "x").unwrap();
         assert!(attach_file(&store, id, &bad).is_err());
+    }
+
+    #[test]
+    fn pasted_images_attach_and_other_bytes_are_refused() {
+        let (_root, store, id) = store_with_artifacts();
+        let png =
+            std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/qml/pixel.png")).unwrap();
+        attach_bytes(&store, id, "pasted-20260305-101200.png", &png).unwrap();
+        let snap = store.snapshot();
+        let last = snap
+            .board
+            .task(id)
+            .unwrap()
+            .artifacts
+            .last()
+            .unwrap()
+            .clone();
+        assert_eq!(last.kind, ArtifactKind::Image);
+        assert_eq!(last.added_by.as_deref(), Some("user"));
+        assert!(last.name.starts_with("pasted-"));
+        let before = snap.board.task(id).unwrap().artifacts.len();
+        assert!(attach_bytes(&store, id, "pasted-20260305-101201.png", b"not an image").is_err());
+        assert!(attach_bytes(&store, id, "pasted.exe", &png).is_err());
+        assert_eq!(
+            store.snapshot().board.task(id).unwrap().artifacts.len(),
+            before
+        );
+    }
+
+    #[test]
+    fn a_batch_attaches_the_good_files_and_lists_the_refused_ones() {
+        let (root, store, id) = store_with_artifacts();
+        let good1 = root.path().join("one.md");
+        let good2 = root.path().join("two.md");
+        let bad = root.path().join("tool.exe");
+        std::fs::write(&good1, "# one").unwrap();
+        std::fs::write(&good2, "# two").unwrap();
+        std::fs::write(&bad, "x").unwrap();
+        let before = store.snapshot().board.task(id).unwrap().artifacts.len();
+        let refused = attach_files(&store, id, &[good1, bad, good2]);
+        assert_eq!(refused.len(), 1);
+        assert!(refused[0].starts_with("tool.exe: "), "{}", refused[0]);
+        assert_eq!(
+            store.snapshot().board.task(id).unwrap().artifacts.len(),
+            before + 2
+        );
+        let v: serde_json::Value = serde_json::from_str(&attach_result_json(&refused)).unwrap();
+        assert_eq!(v["ok"], false);
+        assert!(v["message"].as_str().unwrap().contains("tool.exe"));
     }
 
     #[test]

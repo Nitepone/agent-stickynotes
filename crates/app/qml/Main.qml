@@ -847,11 +847,16 @@ ApplicationWindow {
         relationOptions: JSON.parse(controller.relationOptions())
         onArtifactClicked: (name) => window.openArtifact(name)
         onAttachRequested: (taskId, fileUrl) => {
-            const r = window.result(controller.attachArtifact(taskId, fileUrl))
-            if (r.ok)
-                artifactsAttached(controller.taskJson(taskId))
-            else
-                attachError = r.message
+            const r = window.result(controller.attachArtifact(taskId, fileUrl), true)
+            if (!r.ok)
+                attachFailed(r.message)
+            artifactsAttached(controller.taskJson(taskId))
+        }
+        onPasteRequested: (taskId) => {
+            const r = window.result(controller.attachClipboard(taskId), true)
+            if (!r.ok)
+                attachFailed(r.message)
+            artifactsAttached(controller.taskJson(taskId))
         }
         onOpenTaskRequested: (taskId) => {
             const go = () => window.openTaskFromJson(controller.taskJson(taskId))

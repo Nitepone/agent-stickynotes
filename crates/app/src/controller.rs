@@ -19,6 +19,10 @@ pub mod qobject {
         fn simulate_synthetic_activity();
         include!("stickynotes/cpp/window_icon.h");
         fn add_window_icon(png: &[u8]);
+        include!("stickynotes/cpp/clipboard.h");
+        fn clipboard_image_png() -> Vec<u8>;
+        fn clipboard_image_name() -> QString;
+        fn clipboard_file_paths() -> QString;
     }
 
     #[auto_cxx_name]
@@ -127,6 +131,10 @@ pub mod qobject {
         /// and attach it to the task, as the user.
         #[qinvokable]
         fn attach_artifact(self: &BoardController, task_id: &QString, file: &QUrl) -> QString;
+        /// Attach what the clipboard holds (an image or copied files) to the
+        /// task, as the user. Returns a result JSON.
+        #[qinvokable]
+        fn attach_clipboard(self: &BoardController, task_id: &QString) -> QString;
         #[qinvokable]
         fn update_project(
             self: &BoardController,
@@ -531,8 +539,36 @@ impl qobject::BoardController {
         else {
             return to_qstring(viewmodel::error_json("only local files are supported"));
         };
-        let result = viewmodel::attach_file(&context::get().store, task, &path);
-        to_qstring(viewmodel::result_json(result.map(|_| None::<Applied>)))
+        let refused = viewmodel::attach_files(&context::get().store, task, &[path]);
+        to_qstring(viewmodel::attach_result_json(&refused))
+    }
+
+    fn attach_clipboard(&self, task_id: &QString) -> QString {
+        let Some(task) = parse_id(task_id) else {
+            return bad_id();
+        };
+        let store = &context::get().store;
+        let png = qobject::clipboard_image_png();
+        if !png.is_empty() {
+            let name = String::from(&qobject::clipboard_image_name());
+            let refused = match viewmodel::attach_bytes(store, task, &name, &png) {
+                Ok(()) => Vec::new(),
+                Err(e) => vec![format!("{name}: {e}")],
+            };
+            return to_qstring(viewmodel::attach_result_json(&refused));
+        }
+        let paths: Vec<PathBuf> = String::from(&qobject::clipboard_file_paths())
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(PathBuf::from)
+            .collect();
+        if paths.is_empty() {
+            return to_qstring(viewmodel::error_json(
+                "The clipboard holds no image or file to attach (text is not attached).",
+            ));
+        }
+        let refused = viewmodel::attach_files(store, task, &paths);
+        to_qstring(viewmodel::attach_result_json(&refused))
     }
 
     fn update_project(&self, document_prompt: &QString, code_guidance: &QString) -> QString {
