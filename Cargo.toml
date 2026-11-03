@@ -6,3 +6,8 @@ members = ["crates/core", "crates/server", "crates/app"]
 version = "0.5.0"
 edition = "2024"
 license = "MIT"
+
+# Backtraces and panics still show file and line numbers; skipping full variable
+# debug info makes builds and links noticeably faster and the target folder smaller.
+[profile.dev]
+debug = "line-tables-only"
