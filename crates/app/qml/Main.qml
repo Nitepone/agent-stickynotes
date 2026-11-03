@@ -325,6 +325,9 @@ ApplicationWindow {
         }
         const r = result(controller.save(false), true)
         if (r.ok) {
+            const notice = controller.takeBackupNotice()
+            if (notice !== "")
+                messageDialog.inform(qsTr("Backup problem"), notice)
             if (then) then()
         } else if (r.code === "modified_on_disk") {
             messageDialog.ask(qsTr("File changed on disk"),
@@ -530,6 +533,11 @@ ApplicationWindow {
             MenuItem { action: undoAction }
             MenuItem { action: redoAction }
             MenuSeparator {}
+            Action {
+                text: qsTr("Restore from &Backup…")
+                enabled: controller.hasPath
+                onTriggered: restoreDialog.openWith(controller.backupsJson())
+            }
             MenuItem { action: editColumnsAction }
             Action {
                 text: qsTr("&Rename Board…")
@@ -847,6 +855,10 @@ ApplicationWindow {
     }
 
     ConfirmDialog { id: messageDialog }
+    RestoreDialog {
+        id: restoreDialog
+        onRestoreRequested: (name) => window.result(controller.restoreBackup(name), false)
+    }
 
     ProjectDialog {
         id: projectDialog

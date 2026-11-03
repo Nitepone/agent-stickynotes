@@ -5,6 +5,7 @@
 
 pub mod agent_guide;
 pub mod artifact;
+pub mod backup;
 pub mod command;
 pub mod error;
 pub mod export_md;

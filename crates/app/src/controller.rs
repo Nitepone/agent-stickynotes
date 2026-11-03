@@ -52,6 +52,15 @@ pub mod qobject {
         fn open_project_folder(self: Pin<&mut BoardController>, url: &QUrl) -> QString;
         #[qinvokable]
         fn save(self: Pin<&mut BoardController>, force: bool) -> QString;
+        /// A backup problem found by the last save (once per project), or "".
+        #[qinvokable]
+        fn take_backup_notice(self: &BoardController) -> QString;
+        /// JSON list of restorable backups, newest first.
+        #[qinvokable]
+        fn backups_json(self: &BoardController) -> QString;
+        /// Replace the open board with the named backup, leaving it unsaved.
+        #[qinvokable]
+        fn restore_backup(self: &BoardController, name: &QString) -> QString;
         #[qinvokable]
         fn undo(self: &BoardController) -> QString;
         #[qinvokable]
@@ -344,6 +353,26 @@ impl qobject::BoardController {
     fn save(self: Pin<&mut Self>, force: bool) -> QString {
         let result = context::get().store.save(force);
         to_qstring(viewmodel::result_json(result.map(|_| None)))
+    }
+
+    fn take_backup_notice(&self) -> QString {
+        to_qstring(
+            context::get()
+                .store
+                .take_backup_notice()
+                .unwrap_or_default(),
+        )
+    }
+
+    fn backups_json(&self) -> QString {
+        to_qstring(viewmodel::backups_json(
+            &context::get().store.list_backups(),
+        ))
+    }
+
+    fn restore_backup(&self, name: &QString) -> QString {
+        let result = context::get().store.restore_backup(&String::from(name));
+        to_qstring(viewmodel::result_json(result.map(|_| None::<Applied>)))
     }
 
     fn undo(&self) -> QString {

@@ -59,3 +59,13 @@ second code path for llama.cpp. An unreachable server shows `Cannot reach the Ol
 server at <endpoint>`, and a 401/403 shows that the server rejected the auth token.
 The same system prompt and reply parsing as for Claude Code apply.
 
+
+## Backups and restore
+
+Every save keeps the file it replaces, so a bad edit or a bad agent run is not final.
+
+- `stickynotes.json.bak` next to the board is the file as it was before the last save (there is none after the very first save).
+- `backups/` in the project holds timestamped snapshots (`board-YYYYMMDD-HHMMSS.json`) of the file on disk before a save: at most one every 10 minutes, and always on the first save after opening a project. The newest 20 are kept; older ones are deleted. The folder is created when needed.
+- If a backup cannot be made (a read-only folder, say), the save still succeeds and you get one message about it per opened project.
+
+**Board > Restore from Backup...** lists the `.bak` and the snapshots, newest first, with the time and the number of tasks. A file that cannot be read as a board is shown as unreadable and cannot be chosen. After you confirm, the current file is first snapshotted, then the chosen backup becomes the open board. It stays **unsaved** until you save, so you can still look at it and walk away, and undo history is cleared.

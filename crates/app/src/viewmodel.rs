@@ -513,6 +513,23 @@ fn criterion_drafts(criteria: Vec<CriterionForm>) -> Vec<CriterionDraft> {
         .collect()
 }
 
+/// The restorable backups, newest first, for `RestoreDialog.qml`.
+pub fn backups_json(backups: &[stickynotes_core::backup::BackupInfo]) -> String {
+    let rows: Vec<_> = backups
+        .iter()
+        .map(|b| {
+            json!({
+                "name": b.name,
+                "time": b.time_label(),
+                "tasks": b.tasks,
+                "readable": b.tasks.is_some(),
+                "isBak": b.name.ends_with(".bak"),
+            })
+        })
+        .collect();
+    serde_json::Value::Array(rows).to_string()
+}
+
 /// Result object returned by controller invokables: `{ok, id?}` or
 /// `{ok: false, code, message}`.
 pub fn result_json(result: Result<Option<Applied>, Error>) -> String {

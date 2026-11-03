@@ -14,7 +14,8 @@ use crate::model::{Artifact, ArtifactId, Board, TaskId};
 use crate::ops;
 use crate::persist::{self, FileStamp};
 use crate::project;
-use crate::{agent_guide, artifact, export_md};
+use crate::{agent_guide, artifact, backup, export_md};
+use chrono::{DateTime, Local};
 
 /// Emitted after any change to the board or session state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,6 +55,39 @@ struct State {
     revision: u64,
     agent_write: bool,
     history: History,
+    /// When the last rolling snapshot was taken; `None` until the first save
+    /// after a project is opened.
+    last_snapshot: Option<DateTime<Local>>,
+    /// A backup problem not yet shown to the user, and whether one was
+    /// already reported since the project was opened.
+    backup_notice: Option<String>,
+    backup_warned: bool,
+    clock: Clock,
+}
+
+type Clock = Box<dyn Fn() -> DateTime<Local> + Send + Sync>;
+
+impl State {
+    /// Back up the file at `path`, then write the board there. A failed
+    /// backup never fails the save: it is kept as a one-time notice.
+    fn save_to(&mut self, path: &Path) -> Result<Option<FileStamp>> {
+        let now = (self.clock)();
+        if let Err(e) = backup::before_save(path, now, &mut self.last_snapshot)
+            && !self.backup_warned
+        {
+            self.backup_warned = true;
+            self.backup_notice = Some(format!(
+                "The board was saved, but its backup could not be made: {e}"
+            ));
+        }
+        persist::save(path, &self.board)
+    }
+
+    fn reset_backups(&mut self) {
+        self.last_snapshot = None;
+        self.backup_warned = false;
+        self.backup_notice = None;
+    }
 }
 
 pub struct BoardStore {
@@ -72,6 +106,10 @@ impl BoardStore {
                 revision: 1,
                 agent_write,
                 history: History::default(),
+                last_snapshot: None,
+                backup_notice: None,
+                backup_warned: false,
+                clock: Box::new(Local::now),
             }),
             listeners: Mutex::new(Vec::new()),
         })
@@ -211,12 +249,13 @@ impl BoardStore {
         project::ensure_dirs(dir)?;
         self.mutate(Origin::User, |s| {
             s.history.clear();
+            s.reset_backups();
             if !(s.path.is_none() && s.dirty) {
                 s.board = Board::new_default();
                 s.board.title = title.to_string();
             }
             let path = project::board_path(dir);
-            s.stamp = persist::save(&path, &s.board)?;
+            s.stamp = s.save_to(&path)?;
             s.path = Some(path);
             s.dirty = false;
             Ok(())
@@ -245,6 +284,7 @@ impl BoardStore {
         let backfilled = board.normalize();
         self.mutate(Origin::User, |s| {
             s.history.clear();
+            s.reset_backups();
             s.board = board;
             s.path = Some(path.to_path_buf());
             s.stamp = stamp;
@@ -261,15 +301,52 @@ impl BoardStore {
             if !force && s.stamp.is_some() && FileStamp::of(&path) != s.stamp {
                 return Err(Error::ModifiedOnDisk(path));
             }
-            s.stamp = persist::save(&path, &s.board)?;
+            s.stamp = s.save_to(&path)?;
             s.dirty = false;
+            Ok(())
+        })
+    }
+
+    /// Replace the clock used to name and space backups (for tests).
+    pub fn set_clock(&self, clock: impl Fn() -> DateTime<Local> + Send + Sync + 'static) {
+        self.lock().clock = Box::new(clock);
+    }
+
+    /// A backup problem found by a save, reported once per opened project.
+    pub fn take_backup_notice(&self) -> Option<String> {
+        self.lock().backup_notice.take()
+    }
+
+    /// The backups of the open board, newest first.
+    pub fn list_backups(&self) -> Vec<backup::BackupInfo> {
+        self.lock()
+            .path
+            .as_deref()
+            .map(backup::list)
+            .unwrap_or_default()
+    }
+
+    /// Replace the open board with the backup `name`. The file on disk is
+    /// snapshotted first; the restored board is left unsaved and the undo
+    /// history is cleared.
+    pub fn restore_backup(&self, name: &str) -> Result<()> {
+        self.mutate(Origin::User, |s| {
+            let path = s.path.clone().ok_or(Error::NoPath)?;
+            let mut board = backup::read(&path, name)?;
+            backup::snapshot_now(&path, (s.clock)())?;
+            board.normalize();
+            s.board = board;
+            s.stamp = FileStamp::of(&path);
+            s.dirty = true;
+            s.history.clear();
             Ok(())
         })
     }
 
     pub fn save_as(&self, path: &Path) -> Result<()> {
         self.mutate(Origin::User, |s| {
-            s.stamp = persist::save(path, &s.board)?;
+            s.reset_backups();
+            s.stamp = s.save_to(path)?;
             s.path = Some(path.to_path_buf());
             s.dirty = false;
             Ok(())
