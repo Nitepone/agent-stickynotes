@@ -8,6 +8,17 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_PORT: u16 = 7317;
+pub const MIN_UI_SCALE: f64 = 0.7;
+pub const MAX_UI_SCALE: f64 = 2.0;
+
+/// A scale clamped to the supported range and rounded to whole percent;
+/// anything that is not a number is actual size.
+pub fn normalize_ui_scale(scale: f64) -> f64 {
+    if !scale.is_finite() {
+        return 1.0;
+    }
+    (scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE) * 100.0).round() / 100.0
+}
 
 /// A credential kept in the settings file. Its `Debug` output hides the value
 /// so it cannot end up in a log by accident.
@@ -71,6 +82,8 @@ pub struct Settings {
     /// Display style of the Markdown viewer (`default`, `reading`, ...); the
     /// viewer falls back to the default for an id it does not know.
     pub markdown_style: String,
+    /// Interface scale: 1.0 is actual size (`MIN_UI_SCALE` to `MAX_UI_SCALE`).
+    pub ui_scale: f64,
     /// Fields this version does not know, kept so a newer version's settings
     /// survive a load and save.
     #[serde(flatten, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -100,6 +113,7 @@ impl Default for Settings {
             ollama_endpoint: crate::editor::DEFAULT_OLLAMA_ENDPOINT.into(),
             ollama_token: Secret::default(),
             markdown_style: "default".into(),
+            ui_scale: 1.0,
             extra: serde_json::Map::new(),
         }
     }
@@ -135,6 +149,7 @@ impl Settings {
         self.draft_effort = crate::editor::effort(&self.draft_effort)
             .unwrap_or_default()
             .into();
+        self.ui_scale = normalize_ui_scale(self.ui_scale);
         self
     }
 
@@ -150,6 +165,7 @@ impl Settings {
             "note_style": self.note_style,
             "note_palette": self.note_palette,
             "markdown_style": self.markdown_style,
+            "ui_scale": self.ui_scale,
             "spell_check": self.spell_check,
             "draft_agent": self.draft_agent,
             "draft_system_prompt": self.draft_system_prompt,
@@ -197,7 +213,7 @@ fn exact(normalized: &str, value: &str) -> Option<String> {
 
 /// Preferences changed by the UI. Keys are the `prefs_json` keys, except
 /// that `motion_setting` is stored as the `reduce_motion` setting.
-pub const PREFS: [Pref; 15] = [
+pub const PREFS: [Pref; 16] = [
     Pref {
         key: "theme_mode",
         validate: |v| exact(crate::theme::normalize_mode(v), v),
@@ -272,6 +288,14 @@ pub const PREFS: [Pref; 15] = [
         key: "motion_setting",
         validate: |v| exact(crate::motion::normalize_setting(v), v),
         set: |s, v| s.reduce_motion = v,
+    },
+    Pref {
+        key: "ui_scale",
+        validate: |v| {
+            let n: f64 = v.trim().parse().ok()?;
+            n.is_finite().then(|| normalize_ui_scale(n).to_string())
+        },
+        set: |s, v| s.ui_scale = v.parse().unwrap_or(1.0),
     },
 ];
 
@@ -713,6 +737,12 @@ mod tests {
         ok("motion_setting", "system", "system");
         bad("motion_setting", "maybe");
         bad("motion_setting", "");
+        ok("ui_scale", "1.2", "1.2");
+        ok("ui_scale", "0.1", "0.7");
+        ok("ui_scale", "5", "2");
+        bad("ui_scale", "big");
+        bad("ui_scale", "NaN");
+        bad("ui_scale", "");
         assert!(pref("port").is_none());
     }
 
@@ -748,5 +778,23 @@ mod tests {
         assert_eq!(v["reduce_motion"], true);
         let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
         assert_eq!(v["reduce_motion"], false);
+    }
+
+    #[test]
+    fn ui_scale_defaults_loads_old_files_and_is_clamped() {
+        assert_eq!(Settings::default().ui_scale, 1.0);
+        let dir = tempfile::tempdir().unwrap();
+        // A settings file from before the scale existed.
+        fs::write(dir.path().join("settings.json"), r#"{"port": 9000}"#).unwrap();
+        assert_eq!(config_in(dir.path()).load_settings().ui_scale, 1.0);
+        fs::write(dir.path().join("settings.json"), r#"{"ui_scale": 9}"#).unwrap();
+        assert_eq!(config_in(dir.path()).load_settings().ui_scale, 2.0);
+        fs::write(dir.path().join("settings.json"), r#"{"ui_scale": 0.2}"#).unwrap();
+        assert_eq!(config_in(dir.path()).load_settings().ui_scale, 0.7);
+        let mut s = Settings::default();
+        let p = pref("ui_scale").unwrap();
+        (p.set)(&mut s, (p.validate)("1.5").unwrap());
+        let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
+        assert_eq!(v["ui_scale"], 1.5);
     }
 }

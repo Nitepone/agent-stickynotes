@@ -12,9 +12,10 @@ ApplicationWindow {
 
     width: 1320
     height: 820
-    minimumWidth: 640
-    minimumHeight: 420
+    minimumWidth: Theme.px(640)
+    minimumHeight: Theme.px(420)
     visible: true
+    font.pointSize: Theme.basePointSize * Theme.scale
     title: controller.windowTitle
     color: Theme.background
 
@@ -49,6 +50,7 @@ ApplicationWindow {
 
     // The user's theme settings, from the controller.
     Binding { target: Theme; property: "mode"; value: prefs.theme_mode }
+    Binding { target: Theme; property: "scale"; value: prefs.ui_scale }
     Binding { target: Theme; property: "primaryColor"; value: prefs.primary_color }
     Binding { target: Theme; property: "secondaryColor"; value: prefs.secondary_color }
     Binding { target: Theme; property: "noteColor"; value: prefs.note_color }
@@ -70,6 +72,8 @@ ApplicationWindow {
     property bool refreshPending: false
     property bool preferencesOpen: false
     property bool artifactsOpen: false
+    // Artifact viewer windows showing; they own Ctrl+= / Ctrl+- / Ctrl+0 meanwhile.
+    property int viewersOpen: 0
     // Misspelled words in the task editor, or null with spell check off.
     readonly property var spellRanges: prefs.spell_check
         ? (text) => JSON.parse(controller.misspelledRanges(text)) : null
@@ -348,6 +352,7 @@ ApplicationWindow {
         ArtifactViewer {
             styleId: prefs.markdown_style
             onStyleChosen: (id) => controller.choosePref("markdown_style", id)
+            onVisibleChanged: window.viewersOpen += visible ? 1 : -1
             onClosing: Qt.callLater(destroy)
         }
     }
@@ -434,6 +439,13 @@ ApplicationWindow {
         sequences: [StandardKey.Find]
         enabled: !window.preferencesOpen && !window.artifactsOpen
         onActivated: filterBar.focusField()
+    }
+
+    ZoomActions {
+        id: zoom
+        current: Theme.scale
+        active: window.viewersOpen === 0
+        onScaleRequested: (value) => controller.choosePref("ui_scale", String(value))
     }
 
     Action {
@@ -549,6 +561,12 @@ ApplicationWindow {
             }
         }
         Menu {
+            title: qsTr("&View")
+            MenuItem { action: zoom.zoomInAction }
+            MenuItem { action: zoom.zoomOutAction }
+            MenuItem { action: zoom.actualSizeAction }
+        }
+        Menu {
             title: qsTr("&Agent")
             MenuItem { action: agentWriteAction }
             MenuSeparator {}
@@ -572,22 +590,22 @@ ApplicationWindow {
 
     // No bar of its own: the title and icons sit on the window background.
     header: ToolBar {
-        implicitHeight: 60
+        implicitHeight: Theme.px(60)
         background: Item {}
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            anchors.topMargin: 8
-            anchors.bottomMargin: 4
-            spacing: 8
+            anchors.leftMargin: Theme.px(16)
+            anchors.rightMargin: Theme.px(16)
+            anchors.topMargin: Theme.px(8)
+            anchors.bottomMargin: Theme.px(4)
+            spacing: Theme.px(8)
 
             FocusLabel {
                 objectName: "boardTitle"
                 text: window.board.title
                 accessibleName: qsTr("Board title: %1. Rename").arg(window.board.title)
-                font.pixelSize: 24
+                font.pixelSize: Theme.fs(24)
                 font.bold: true
                 onClicked: renameDialog.openWith(window.board.title)
             }
@@ -595,7 +613,7 @@ ApplicationWindow {
                 visible: controller.dirty
                 text: qsTr("unsaved")
                 color: Theme.warning
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
             }
             // Only there when there is something to save.
             IconButton {
@@ -650,7 +668,7 @@ ApplicationWindow {
             // Agent access: green when agents may write, yellow when they may only read.
             IconButton {
                 objectName: "agentButton"
-                Layout.leftMargin: 4
+                Layout.leftMargin: Theme.px(4)
                 glyph: "robot"
                 badge: true
                 badgeColor: controller.agentWrite ? Theme.agentReadWrite : Theme.agentReadOnly
@@ -701,12 +719,12 @@ ApplicationWindow {
 
     footer: ToolBar {
         visible: !window.preferencesOpen && !window.artifactsOpen
-        implicitHeight: 60
+        implicitHeight: Theme.px(60)
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
+            anchors.leftMargin: Theme.px(16)
+            anchors.rightMargin: Theme.px(16)
 
             Label {
                 Layout.fillWidth: true

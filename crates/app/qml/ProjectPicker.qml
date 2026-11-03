@@ -36,12 +36,12 @@ StickyDialog {
 
     title: saving ? qsTr("Save as a new project") : qsTr("Projects")
     maxWidth: 520
-    height: Math.min(520, (parent ? parent.height : 520) - 40)
+    height: Math.min(Theme.px(520), (parent ? parent.height : Theme.px(520)) - Theme.px(40))
     acceptText: ""
     rejectText: qsTr("Close")
 
     contentItem: ColumnLayout {
-        spacing: 10
+        spacing: Theme.px(10)
 
         Label {
             Layout.fillWidth: true
@@ -80,7 +80,7 @@ StickyDialog {
                     Label {
                         Layout.fillWidth: true
                         text: modelData.dir
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fs(11)
                         elide: Text.ElideMiddle
                         color: modelData.current ? Theme.textOnPrimary : Theme.subtleText
                     }
@@ -89,7 +89,7 @@ StickyDialog {
 
             Label {
                 anchors.centerIn: parent
-                width: parent.width - 32
+                width: parent.width - Theme.px(32)
                 visible: dialog.projects.length === 0
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
@@ -122,7 +122,7 @@ StickyDialog {
             visible: !dialog.saving
             wrapMode: Text.WrapAnywhere
             color: Theme.subtleText
-            font.pixelSize: 11
+            font.pixelSize: Theme.fs(11)
             text: qsTr("Projects are kept in %1").arg(dialog.root)
         }
     }

@@ -351,8 +351,8 @@ StickyDialog {
     }
 
     title: creating ? qsTr("New task in %1").arg(columnTitle) : qsTr("Task in %1").arg(columnTitle)
-    maxWidth: 640
-    height: Math.min(760, (parent ? parent.height : 760) - 40)
+    maxWidth: Theme.px(640)
+    height: Math.min(Theme.px(760), (parent ? parent.height : Theme.px(760)) - Theme.px(40))
     acceptEnabled: descriptionField.text.trim().length > 0 && !deletedExternally
     onAcceptClicked: saveRequested(taskId, columnId, formJson())
 
@@ -379,20 +379,20 @@ StickyDialog {
 
         ColumnLayout {
             width: scroll.availableWidth
-            spacing: 6
+            spacing: Theme.px(6)
 
             Rectangle {
                 Layout.fillWidth: true
                 visible: dialog.changedExternally || dialog.deletedExternally
-                implicitHeight: bannerRow.implicitHeight + 16
-                radius: 6
+                implicitHeight: bannerRow.implicitHeight + Theme.px(16)
+                radius: Theme.px(6)
                 color: Theme.bannerBackground
                 border.color: Theme.warning
 
                 RowLayout {
                     id: bannerRow
                     anchors.fill: parent
-                    anchors.margins: 8
+                    anchors.margins: Theme.px(8)
                     Label {
                         Layout.fillWidth: true
                         wrapMode: Text.Wrap
@@ -414,7 +414,7 @@ StickyDialog {
                 visible: !dialog.creating
                 text: "#" + dialog.taskNumber
                 color: Theme.subtleText
-                font.pixelSize: 13
+                font.pixelSize: Theme.fs(13)
                 font.bold: true
                 ToolTip.visible: numberHover.hovered
                 ToolTip.text: qsTr("Task number: use it to refer to this task, for example when talking to an agent.")
@@ -426,7 +426,7 @@ StickyDialog {
                 id: descriptionField
                 spellRanges: dialog.spellRanges
                 Layout.fillWidth: true
-                Layout.minimumHeight: 70
+                Layout.minimumHeight: Theme.px(70)
                 placeholderText: qsTr("Short, sticky-note sized summary")
             }
             Label {
@@ -434,7 +434,7 @@ StickyDialog {
                 readonly property int length: descriptionField.text.trim().length
                 text: qsTr("%1 / %2 suggested").arg(length).arg(Theme.suggestedDescriptionChars)
                 color: length > Theme.suggestedDescriptionChars ? Theme.warning : Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
             }
 
             SectionLabel { text: qsTr("Extended description") }
@@ -442,14 +442,14 @@ StickyDialog {
                 id: extendedField
                 spellRanges: dialog.spellRanges
                 Layout.fillWidth: true
-                Layout.minimumHeight: 110
+                Layout.minimumHeight: Theme.px(110)
                 placeholderText: qsTr("Optional details, context, links…")
             }
 
             RowLayout {
                 Layout.fillWidth: true
-                Layout.topMargin: 8
-                spacing: 8
+                Layout.topMargin: Theme.px(8)
+                spacing: Theme.px(8)
 
                 Button {
                     objectName: "generateButton"
@@ -480,8 +480,8 @@ StickyDialog {
                     objectName: "generatingIndicator"
                     visible: dialog.generating
                     running: dialog.generating
-                    implicitWidth: 28
-                    implicitHeight: 28
+                    implicitWidth: Theme.px(28)
+                    implicitHeight: Theme.px(28)
                 }
                 Label {
                     objectName: "generatingLabel"
@@ -516,7 +516,7 @@ StickyDialog {
             SectionLabel { text: qsTr("Category") }
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: Theme.px(6)
 
                 ComboBox {
                     id: categoryBox
@@ -558,7 +558,7 @@ StickyDialog {
                 Layout.fillWidth: true
                 text: qsTr("Tasks of the same category in a column stack together. Pick one or type a new name.")
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 wrapMode: Text.Wrap
             }
             Label {
@@ -567,7 +567,7 @@ StickyDialog {
                 visible: dialog.categoryNote !== ""
                 text: dialog.categoryNote
                 color: Theme.warning
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 wrapMode: Text.Wrap
             }
 
@@ -578,10 +578,10 @@ StickyDialog {
                     required property int index
                     required property string text
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Theme.px(6)
                     Label {
                         Layout.alignment: Qt.AlignTop
-                        Layout.topMargin: 8
+                        Layout.topMargin: Theme.px(8)
                         text: "•"
                         color: Theme.subtleText
                     }
@@ -619,7 +619,7 @@ StickyDialog {
                     required property string text
                     required property bool done
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Theme.px(6)
                     CheckBox {
                         Layout.alignment: Qt.AlignTop
                         objectName: "criterionCheck"
@@ -655,7 +655,7 @@ StickyDialog {
                 visible: !dialog.creating && artifactsModel.count === 0
                 text: qsTr("No files attached. You and agents can attach Markdown and images.")
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 wrapMode: Text.Wrap
             }
             Repeater {
@@ -672,7 +672,7 @@ StickyDialog {
 
                     RowLayout {
                         Layout.fillWidth: true
-                        spacing: 6
+                        spacing: Theme.px(6)
 
                         Button {
                             objectName: "artifactLink"
@@ -693,17 +693,17 @@ StickyDialog {
                         Label {
                             text: parent.parent.akind === "image" ? qsTr("Image") : qsTr("Markdown")
                             color: Theme.subtleText
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fs(12)
                         }
                     }
                     Label {
                         objectName: "artifactMeta"
                         Layout.fillWidth: true
-                        Layout.leftMargin: 12
+                        Layout.leftMargin: Theme.px(12)
                         visible: text !== ""
                         text: dialog.artifactMeta(parent.addedBy, parent.byAgent, parent.addedAt, parent.stage)
                         color: Theme.subtleText
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fs(12)
                         elide: Text.ElideRight
                     }
                 }
@@ -723,7 +723,7 @@ StickyDialog {
                 visible: dialog.creating
                 text: qsTr("Save the task first, then reopen it to link it to other tasks.")
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 wrapMode: Text.Wrap
             }
             Repeater {
@@ -735,13 +735,13 @@ StickyDialog {
                     required property string description
                     required property string columnTitle
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Theme.px(6)
 
                     Label {
                         objectName: "referenceRelation"
                         text: parent.relationLabel
                         color: Theme.subtleText
-                        Layout.minimumWidth: 100
+                        Layout.minimumWidth: Theme.px(100)
                     }
                     Button {
                         objectName: "referenceLink"
@@ -762,7 +762,7 @@ StickyDialog {
                     Label {
                         text: parent.columnTitle
                         color: Theme.subtleText
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fs(12)
                     }
                     ToolButton {
                         objectName: "removeReference"
@@ -774,12 +774,12 @@ StickyDialog {
             RowLayout {
                 Layout.fillWidth: true
                 visible: !dialog.creating
-                spacing: 6
+                spacing: Theme.px(6)
 
                 ComboBox {
                     id: relationBox
                     objectName: "relationBox"
-                    Layout.preferredWidth: 140
+                    Layout.preferredWidth: Theme.px(140)
                     model: dialog.relationOptions
                     textRole: "label"
                     valueRole: "value"

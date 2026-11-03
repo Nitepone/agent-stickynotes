@@ -26,7 +26,7 @@ Item {
 
     // Static glow: three rings, fading outward.
     Repeater {
-        model: [ { grow: 0, alpha: 0.95 }, { grow: 2, alpha: 0.45 }, { grow: 4, alpha: 0.2 } ]
+        model: [ { grow: 0, alpha: 0.95 }, { grow: 2 * Theme.scale, alpha: 0.45 }, { grow: 4 * Theme.scale, alpha: 0.2 } ]
         delegate: Rectangle {
             required property var modelData
             objectName: "glowRing"
@@ -45,7 +45,7 @@ Item {
     // the trail bends round the corners instead of sticking out of them.
     property real cometProgress: 0      // 0 to 1: where the head is along the outline
     readonly property int cometPieces: 14
-    readonly property real cometLength: 48          // arc length of the whole trail
+    readonly property real cometLength: 48 * Theme.scale          // arc length of the whole trail
     readonly property real outlineLength: Math.max(1,
         2 * Math.max(0, width - 2 * cornerRadius) + 2 * Math.max(0, height - 2 * cornerRadius)
         + 2 * Math.PI * cornerRadius)
@@ -91,7 +91,7 @@ Item {
                 readonly property point spot: root.outlinePoint(root.cometProgress
                     - index * root.cometLength / (root.cometPieces - 1) / root.outlineLength)
                 objectName: "cometPiece"
-                width: 7 - 4.5 * fade
+                width: (7 - 4.5 * fade) * Theme.scale
                 height: width
                 radius: width / 2
                 x: spot.x - width / 2
@@ -123,7 +123,7 @@ Item {
         Rectangle {
             id: sheen
             objectName: "sheen"
-            width: 36
+            width: Theme.px(36)
             height: parent.height * 1.8
             y: -parent.height * 0.4
             x: -width

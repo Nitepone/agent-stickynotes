@@ -11,7 +11,7 @@ TextField {
     selectByMouse: true
     onTextEdited: invalid = false
     background: Rectangle {
-        radius: 3
+        radius: Theme.px(3)
         color: Theme.fieldBackground
         border.color: field.invalid ? Theme.danger
                       : field.activeFocus ? Theme.primary : Theme.fieldBorder

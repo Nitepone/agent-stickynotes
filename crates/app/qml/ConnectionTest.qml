@@ -16,10 +16,10 @@ ColumnLayout {
     signal testRequested()
 
     Layout.fillWidth: true
-    spacing: 4
+    spacing: Theme.px(4)
 
     RowLayout {
-        spacing: 8
+        spacing: Theme.px(8)
         Button {
             objectName: "testButton"
             visible: root.status === "idle" || root.status === "testing"

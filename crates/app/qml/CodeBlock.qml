@@ -13,7 +13,7 @@ ColumnLayout {
     readonly property bool copied: copiedLabel.visible
 
     Layout.fillWidth: true
-    spacing: 4
+    spacing: Theme.px(4)
 
     TextArea {
         id: area

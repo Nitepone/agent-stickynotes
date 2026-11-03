@@ -166,7 +166,7 @@ Item {
         Drag.keys: ["column"]
         Drag.source: root
         Drag.hotSpot.x: width / 2
-        Drag.hotSpot.y: 20
+        Drag.hotSpot.y: Theme.px(20)
 
         // The slim form of a collapsed column.
         Item {
@@ -180,11 +180,11 @@ Item {
                 objectName: "expandColumn"
                 anchors.top: parent.top
                 anchors.horizontalCenter: parent.horizontalCenter
-                anchors.topMargin: 6
+                anchors.topMargin: Theme.px(6)
                 text: "›"
-                font.pixelSize: 16
-                implicitWidth: 32
-                implicitHeight: 32
+                font.pixelSize: Theme.fs(16)
+                implicitWidth: Theme.px(32)
+                implicitHeight: Theme.px(32)
                 Accessible.name: qsTr("Expand column %1").arg(root.column.title)
                 onClicked: root.collapseToggled()
                 ToolTip.visible: hovered
@@ -197,17 +197,17 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: root.countText
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
             }
             Label {
                 objectName: "slimTitle"
                 transformOrigin: Item.TopLeft
                 rotation: 90
                 x: (slim.width + height) / 2
-                y: slimCount.y + slimCount.height + 8
-                width: Math.max(0, slim.height - y - 8)
+                y: slimCount.y + slimCount.height + Theme.px(8)
+                width: Math.max(0, slim.height - y - Theme.px(8))
                 text: root.column.title
-                font.pixelSize: 15
+                font.pixelSize: Theme.fs(15)
                 font.bold: true
                 color: Theme.text
                 elide: Text.ElideRight
@@ -217,28 +217,28 @@ Item {
         ColumnLayout {
             visible: !root.collapsed
             anchors.fill: parent
-            anchors.margins: 10
-            spacing: 8
+            anchors.margins: Theme.px(10)
+            spacing: Theme.px(8)
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 6
+                spacing: Theme.px(6)
 
                 Label {
                     visible: root.editMode
                     text: "☰"
-                    font.pixelSize: 16
+                    font.pixelSize: Theme.fs(16)
                     color: Theme.link
 
                     MouseArea {
                         id: grip
                         objectName: "grip"
                         anchors.fill: parent
-                        anchors.margins: -6
+                        anchors.margins: -Theme.px(6)
                         preventStealing: true
                         cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                         drag.target: body
-                        drag.threshold: 4
+                        drag.threshold: Theme.px(4)
                         onReleased: if (drag.active) body.Drag.drop()
                     }
                 }
@@ -248,7 +248,7 @@ Item {
                     objectName: "title"
                     Layout.fillWidth: true
                     text: root.column.title
-                    font.pixelSize: 15
+                    font.pixelSize: Theme.fs(15)
                     font.bold: true
                     color: Theme.text
                     elide: Text.ElideRight
@@ -264,16 +264,16 @@ Item {
                     objectName: "count"
                     text: root.countText
                     color: Theme.subtleText
-                    font.pixelSize: 13
+                    font.pixelSize: Theme.fs(13)
                 }
 
                 ToolButton {
                     objectName: "collapseColumn"
                     visible: !root.editMode
                     text: "‹"
-                    font.pixelSize: 16
-                    implicitWidth: 28
-                    implicitHeight: 28
+                    font.pixelSize: Theme.fs(16)
+                    implicitWidth: Theme.px(28)
+                    implicitHeight: Theme.px(28)
                     Accessible.name: qsTr("Collapse column %1").arg(root.column.title)
                     onClicked: root.collapseToggled()
                     ToolTip.visible: hovered
@@ -283,9 +283,9 @@ Item {
                 ToolButton {
                     visible: root.editMode
                     text: "✕"
-                    font.pixelSize: 14
-                    implicitWidth: 28
-                    implicitHeight: 28
+                    font.pixelSize: Theme.fs(14)
+                    implicitWidth: Theme.px(28)
+                    implicitHeight: Theme.px(28)
                     onClicked: root.deleteClicked()
                     ToolTip.visible: hovered
                     ToolTip.text: qsTr("Delete column")
@@ -306,7 +306,7 @@ Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 contentWidth: width
-                contentHeight: cards.height + 8
+                contentHeight: cards.height + Theme.px(8)
                 clip: true
                 boundsBehavior: Flickable.StopAtBounds
                 flickableDirection: Flickable.VerticalFlick
@@ -315,10 +315,10 @@ Item {
                 Column {
                     id: cards
                     // Inset so a focused note's ring is not clipped.
-                    x: 3
-                    width: flick.width - 6
+                    x: Theme.px(3)
+                    width: flick.width - Theme.px(6)
                     spacing: Theme.cardSpacing
-                    topPadding: 4
+                    topPadding: Theme.px(4)
 
                     Repeater {
                         model: rowModel
@@ -338,9 +338,9 @@ Item {
                             // header above; the header itself lines up with plain notes.
                             Rectangle {
                                 visible: rowItem.modelData.kind === "card" && rowItem.inStack && rowItem.visible
-                                x: 2
+                                x: Theme.px(2)
                                 y: -Theme.cardSpacing
-                                width: 3
+                                width: Theme.px(3)
                                 height: rowItem.height + Theme.cardSpacing
                                 radius: 1.5
                                 color: Theme.stackHeaderBackground
@@ -348,7 +348,7 @@ Item {
 
                             Loader {
                                 id: loader
-                                x: rowItem.inStack && rowItem.modelData.kind === "card" ? 12 : 0
+                                x: rowItem.inStack && rowItem.modelData.kind === "card" ? Theme.px(12) : 0
                                 width: rowItem.width - x
                                 sourceComponent: rowItem.modelData.kind === "header" ? headerComponent : cardComponent
                             }
@@ -364,8 +364,8 @@ Item {
                                     glowEdited: root.glowTracker ? root.glowTracker.edited(task.id) : false
                                     reducedMotion: root.reducedMotion
                                     // Only notes near the visible part of the column animate.
-                                    glowActive: rowItem.y + height > flick.contentY - 80
-                                                && rowItem.y < flick.contentY + flick.height + 80
+                                    glowActive: rowItem.y + height > flick.contentY - Theme.px(80)
+                                                && rowItem.y < flick.contentY + flick.height + Theme.px(80)
                                     onClicked: root.taskClicked(task.id)
                                     onMoveRequested: (direction) => root.taskMoveRequested(task.id, direction)
                                 }
@@ -396,7 +396,7 @@ Item {
                     x: cards.x
                     y: root.indicatorY(taskDrop.hoverIndex, taskDrop.draggedId)
                     width: cards.width
-                    height: 3
+                    height: Theme.px(3)
                     radius: 1.5
                     color: Theme.dropIndicator
                 }
@@ -408,9 +408,9 @@ Item {
                 Layout.fillWidth: true
                 visible: !root.editMode
                 text: "+"
-                font.pixelSize: 20
+                font.pixelSize: Theme.fs(20)
                 background: Rectangle {
-                    radius: 6
+                    radius: Theme.px(6)
                     color: addButton.down ? Theme.controlDown : addButton.hovered ? Theme.controlHover : "transparent"
                     border.color: addButton.visualFocus ? Theme.focusRing : Theme.fieldBorder
                     border.width: addButton.visualFocus ? 2 : 1

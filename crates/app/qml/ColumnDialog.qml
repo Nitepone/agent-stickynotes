@@ -33,12 +33,12 @@ StickyDialog {
     }
 
     title: creating ? qsTr("New column") : qsTr("Column")
-    maxWidth: 520
+    maxWidth: Theme.px(520)
     acceptEnabled: titleField.text.trim().length > 0
     onAcceptClicked: saveRequested(columnId, position, titleField.text, descriptionField.text)
 
     contentItem: ColumnLayout {
-        spacing: 6
+        spacing: Theme.px(6)
 
         SectionLabel { text: qsTr("Title *"); Layout.topMargin: 0 }
         TextField {
@@ -53,12 +53,12 @@ StickyDialog {
             text: qsTr("Describe what must be true for a task to be in this column. Agents check this before advancing a task here.")
             wrapMode: Text.Wrap
             color: Theme.subtleText
-            font.pixelSize: 12
+            font.pixelSize: Theme.fs(12)
         }
         FormTextArea {
             id: descriptionField
             Layout.fillWidth: true
-            Layout.minimumHeight: 120
+            Layout.minimumHeight: Theme.px(120)
             placeholderText: qsTr("e.g. Implementation is complete and all acceptance criteria are checked off.")
         }
 

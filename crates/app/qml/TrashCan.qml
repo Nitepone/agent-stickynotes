@@ -11,8 +11,8 @@ Rectangle {
 
     signal taskDropped(string taskId)
 
-    implicitWidth: 48
-    implicitHeight: 48
+    implicitWidth: Theme.px(48)
+    implicitHeight: Theme.px(48)
     radius: width / 2
     color: hot ? Theme.danger : Theme.fieldBackground
     border.color: Theme.danger
@@ -28,7 +28,7 @@ Rectangle {
         anchors.centerIn: parent
         width: 30
         height: 34
-        scale: 0.7
+        scale: 0.7 * Theme.scale   // drawn on a fixed 30 x 34 grid
 
         Rectangle { x: 10; y: 0; width: 10; height: 4; radius: 1; color: root.ink }
         Rectangle { x: 0; y: 4; width: 30; height: 4; radius: 1; color: root.ink }

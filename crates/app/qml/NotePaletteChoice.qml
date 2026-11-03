@@ -15,7 +15,7 @@ ColumnLayout {
 
     signal chosen(string id)
 
-    spacing: 6
+    spacing: Theme.px(6)
 
     Label {
         text: qsTr("Note palette")
@@ -27,7 +27,7 @@ ColumnLayout {
         text: qsTr("Each category gets the next color of the palette, in alphabetical order. Uncategorized notes keep your note color.")
         wrapMode: Text.Wrap
         color: Theme.subtleText
-        font.pixelSize: 12
+        font.pixelSize: Theme.fs(12)
     }
 
     Repeater {
@@ -39,7 +39,7 @@ ColumnLayout {
 
             objectName: "palette-" + modelData.id
             Layout.fillWidth: true
-            implicitHeight: 44
+            implicitHeight: Theme.px(44)
             checkable: true
             checked: selected
             activeFocusOnTab: true
@@ -64,8 +64,8 @@ ColumnLayout {
                 Rectangle {
                     objectName: "focusRing"
                     anchors.fill: parent
-                    anchors.margins: -3
-                    radius: Theme.radius + 3
+                    anchors.margins: -Theme.px(3)
+                    radius: Theme.radius + Theme.px(3)
                     color: "transparent"
                     border.width: 2
                     border.color: Theme.focusRing
@@ -74,10 +74,10 @@ ColumnLayout {
             }
 
             contentItem: RowLayout {
-                spacing: 12
+                spacing: Theme.px(12)
 
                 Label {
-                    Layout.preferredWidth: 90
+                    Layout.preferredWidth: Theme.px(90)
                     text: (row.selected ? "✓  " : "") + row.modelData.name
                     font.bold: row.selected
                     color: Theme.text
@@ -87,9 +87,9 @@ ColumnLayout {
                     delegate: Rectangle {
                         required property string modelData
                         objectName: "paletteColor"
-                        implicitWidth: 18
-                        implicitHeight: 18
-                        radius: 9
+                        implicitWidth: Theme.px(18)
+                        implicitHeight: Theme.px(18)
+                        radius: Theme.px(9)
                         color: modelData
                         border.width: 1
                         border.color: Theme.fieldBorder

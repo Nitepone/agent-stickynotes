@@ -75,11 +75,11 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 16
-        spacing: 12
+        anchors.margins: Theme.px(16)
+        spacing: Theme.px(12)
 
         RowLayout {
-            spacing: 12
+            spacing: Theme.px(12)
             Button {
                 objectName: "backButton"
                 text: qsTr("← Back to board")
@@ -88,7 +88,7 @@ Item {
             Label {
                 objectName: "artifactsTitle"
                 text: qsTr("Artifacts")
-                font.pixelSize: 20
+                font.pixelSize: Theme.fs(20)
                 font.bold: true
                 color: Theme.text
             }
@@ -119,7 +119,7 @@ Item {
             Layout.fillHeight: true
             visible: root.artifacts.length > 0
             clip: true
-            spacing: 6
+            spacing: Theme.px(6)
             model: root.entries
             ScrollBar.vertical: ScrollBar {}
 
@@ -129,15 +129,15 @@ Item {
                 readonly property bool isHeader: modelData.header !== ""
                 readonly property var file: modelData.file
 
-                width: list.width - 12
-                height: isHeader ? 30 : 48
+                width: list.width - Theme.px(12)
+                height: isHeader ? Theme.px(30) : Theme.px(48)
 
                 // Divider
                 RowLayout {
                     visible: entry.isHeader
                     anchors.fill: parent
-                    anchors.topMargin: 6
-                    spacing: 10
+                    anchors.topMargin: Theme.px(6)
+                    spacing: Theme.px(10)
                     Label {
                         objectName: "sectionHeader"
                         text: entry.modelData.header
@@ -155,7 +155,7 @@ Item {
                 Rectangle {
                     visible: !entry.isHeader
                     anchors.fill: parent
-                    radius: 6
+                    radius: Theme.px(6)
                     color: open.containsMouse ? Theme.controlHover : Theme.controlBackground
 
                     MouseArea {
@@ -169,14 +169,14 @@ Item {
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
-                        spacing: 10
+                        anchors.leftMargin: Theme.px(12)
+                        anchors.rightMargin: Theme.px(12)
+                        spacing: Theme.px(10)
 
                         ToolIcon {
                             objectName: "artifactIcon"
-                            implicitWidth: 24
-                            implicitHeight: 24
+                            implicitWidth: Theme.px(24)
+                            implicitHeight: Theme.px(24)
                             kind: entry.file && entry.file.kind === "image" ? "image" : "document"
                             color: Theme.text
                         }
@@ -194,7 +194,7 @@ Item {
                             visible: entry.file !== null && entry.file.tasks.length === 0
                             text: qsTr("not attached")
                             color: Theme.subtleText
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fs(12)
                         }
                         Repeater {
                             model: entry.file ? entry.file.tasks.slice(0, root.maxPills) : []
@@ -202,9 +202,9 @@ Item {
                                 id: pill
                                 required property var modelData
                                 objectName: "artifactPill"
-                                implicitWidth: pillText.implicitWidth + 16
-                                implicitHeight: 22
-                                radius: 11
+                                implicitWidth: pillText.implicitWidth + Theme.px(16)
+                                implicitHeight: Theme.px(22)
+                                radius: Theme.px(11)
                                 color: Theme.secondary
                                 border.width: pillArea.containsMouse ? 2 : 0
                                 border.color: Theme.text
@@ -216,7 +216,7 @@ Item {
                                     anchors.centerIn: parent
                                     text: "#" + pill.modelData.number
                                     color: Theme.textOnSecondary
-                                    font.pixelSize: 12
+                                    font.pixelSize: Theme.fs(12)
                                     font.bold: true
                                 }
                                 MouseArea {
@@ -233,16 +233,16 @@ Item {
                             visible: entry.file !== null && entry.file.tasks.length > root.maxPills
                             text: entry.file ? "+" + (entry.file.tasks.length - root.maxPills) : ""
                             color: Theme.subtleText
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fs(12)
                         }
 
                         Label {
                             objectName: "artifactDate"
-                            Layout.preferredWidth: 90
+                            Layout.preferredWidth: Theme.px(90)
                             horizontalAlignment: Text.AlignRight
                             text: entry.file ? root.dateText(entry.file.at, root.now) : ""
                             color: Theme.subtleText
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.fs(12)
                         }
                     }
                 }

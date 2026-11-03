@@ -46,14 +46,14 @@ Item {
         spacing: 0
 
         Rectangle {
-            Layout.preferredWidth: 230
+            Layout.preferredWidth: Theme.px(230)
             Layout.fillHeight: true
             color: Theme.surface
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 12
-                spacing: 12
+                anchors.margins: Theme.px(12)
+                spacing: Theme.px(12)
 
                 Button {
                     objectName: "backButton"
@@ -64,7 +64,7 @@ Item {
 
                 Label {
                     text: qsTr("Preferences")
-                    font.pixelSize: 18
+                    font.pixelSize: Theme.fs(18)
                     font.bold: true
                     color: Theme.text
                 }
@@ -81,7 +81,7 @@ Item {
                     activeFocusOnTab: true
                     keyNavigationEnabled: true
                     keyNavigationWraps: false
-                    spacing: 2
+                    spacing: Theme.px(2)
 
                     delegate: ItemDelegate {
                         id: entry
@@ -96,7 +96,7 @@ Item {
                         }
 
                         background: Rectangle {
-                            radius: 6
+                            radius: Theme.px(6)
                             color: entry.highlighted ? Theme.primary
                                    : entry.hovered ? Theme.controlHover : "transparent"
                             border.width: sidebar.activeFocus && entry.highlighted ? 2 : 0

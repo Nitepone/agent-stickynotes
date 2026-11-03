@@ -33,7 +33,7 @@ StickyDialog {
         open()
     }
 
-    maxWidth: 460
+    maxWidth: Theme.px(460)
     acceptText: confirmText
     acceptDanger: destructive
     acceptCloses: true

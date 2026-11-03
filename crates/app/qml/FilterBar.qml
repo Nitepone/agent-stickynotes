@@ -13,7 +13,7 @@ RowLayout {
     property var categories: []           // categories in use on the board
     property string lastColumnTitle: ""
 
-    spacing: 4
+    spacing: Theme.px(4)
 
     function focusField() {
         field.forceActiveFocus()
@@ -23,7 +23,7 @@ RowLayout {
     TextField {
         id: field
         objectName: "filterField"
-        Layout.preferredWidth: 200
+        Layout.preferredWidth: Theme.px(200)
         placeholderText: qsTr("Filter (Ctrl+F)")
         text: root.filter.text
         onTextEdited: root.filter.text = text
@@ -42,8 +42,8 @@ RowLayout {
         objectName: "clearFilterButton"
         visible: root.filter.active
         text: "✕"
-        implicitWidth: 28
-        implicitHeight: 28
+        implicitWidth: Theme.px(28)
+        implicitHeight: Theme.px(28)
         Accessible.name: qsTr("Clear the filter")
         onClicked: root.filter.clear()
         ToolTip.visible: hovered
@@ -66,11 +66,11 @@ RowLayout {
         id: popup
         parent: options
         y: options.height
-        padding: 12
+        padding: Theme.px(12)
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
         ColumnLayout {
-            spacing: 6
+            spacing: Theme.px(6)
 
             Label {
                 text: qsTr("Categories")
@@ -94,7 +94,7 @@ RowLayout {
             }
 
             Label {
-                Layout.topMargin: 6
+                Layout.topMargin: Theme.px(6)
                 text: qsTr("Age")
                 font.bold: true
                 color: Theme.text
@@ -106,7 +106,7 @@ RowLayout {
                 Accessible.name: qsTr("Hide %1 tasks not changed for the chosen number of days").arg(root.lastColumnTitle)
             }
             ComboBox {
-                Layout.leftMargin: 28
+                Layout.leftMargin: Theme.px(28)
                 model: [7, 30, 90]
                 displayText: qsTr("%n day(s)", "", currentValue)
                 currentIndex: Math.max(0, model.indexOf(root.filter.days))

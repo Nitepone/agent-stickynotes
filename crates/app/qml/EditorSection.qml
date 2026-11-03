@@ -94,14 +94,14 @@ PreferencesSection {
         clip: true
 
         ColumnLayout {
-            x: 32
-            y: 24
-            width: Math.min(scroll.availableWidth - 64, 640)
-            spacing: 14
+            x: Theme.px(32)
+            y: Theme.px(24)
+            width: Math.min(scroll.availableWidth - Theme.px(64), Theme.px(640))
+            spacing: Theme.px(14)
 
             Label {
                 text: qsTr("Spell check")
-                font.pixelSize: 22
+                font.pixelSize: Theme.fs(22)
                 font.bold: true
                 color: Theme.text
             }
@@ -126,9 +126,9 @@ PreferencesSection {
             }
 
             Label {
-                Layout.topMargin: 12
+                Layout.topMargin: Theme.px(12)
                 text: qsTr("Draft agent")
-                font.pixelSize: 22
+                font.pixelSize: Theme.fs(22)
                 font.bold: true
                 color: Theme.text
             }
@@ -143,7 +143,7 @@ PreferencesSection {
             ComboBox {
                 id: agentBox
                 objectName: "agentBox"
-                Layout.preferredWidth: 260
+                Layout.preferredWidth: Theme.px(260)
                 textRole: "label"
                 valueRole: "value"
                 model: [
@@ -164,13 +164,13 @@ PreferencesSection {
                 text: qsTr("Added to the built-in prompt, which already asks for requirements and criteria in the format the app reads. Use it for tone, language or house style.")
                 wrapMode: Text.Wrap
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
             }
             FormTextArea {
                 id: promptField
                 objectName: "promptField"
                 Layout.fillWidth: true
-                Layout.minimumHeight: 110
+                Layout.minimumHeight: Theme.px(110)
                 placeholderText: qsTr("For example: Write in British English. Keep each item short.")
                 text: section.draftSystemPrompt
                 onTextChanged: if (activeFocus) saveTimer.restart()
@@ -182,20 +182,20 @@ PreferencesSection {
                 objectName: "ollamaOptions"
                 Layout.fillWidth: true
                 visible: section.draftAgent === "ollama"
-                spacing: 14
+                spacing: Theme.px(14)
 
                 Label {
                     Layout.fillWidth: true
                     text: qsTr("Works with Ollama, llama.cpp's llama-server and other servers that offer the OpenAI-compatible /v1/chat/completions endpoint.")
                     wrapMode: Text.Wrap
                     color: Theme.subtleText
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fs(12)
                 }
 
                 SectionLabel { text: qsTr("Endpoint") }
                 RowLayout {
                     Layout.fillWidth: true
-                    spacing: 8
+                    spacing: Theme.px(8)
                     FormTextField {
                         id: endpointField
                         objectName: "endpointField"
@@ -281,7 +281,7 @@ PreferencesSection {
                     text: qsTr("Sent as a Bearer token. It is saved in the app's settings file in plain text.")
                     wrapMode: Text.Wrap
                     color: Theme.subtleText
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fs(12)
                 }
             }
 
@@ -289,13 +289,13 @@ PreferencesSection {
                 objectName: "claudeCodeOptions"
                 Layout.fillWidth: true
                 visible: section.draftAgent === "claude_code"
-                spacing: 14
+                spacing: Theme.px(14)
 
                 SectionLabel { text: qsTr("Model") }
                 ComboBox {
                     id: modelBox
                     objectName: "modelBox"
-                    Layout.preferredWidth: 260
+                    Layout.preferredWidth: Theme.px(260)
                     textRole: "label"
                     valueRole: "value"
                     model: [
@@ -317,7 +317,7 @@ PreferencesSection {
                 ComboBox {
                     id: effortBox
                     objectName: "effortBox"
-                    Layout.preferredWidth: 260
+                    Layout.preferredWidth: Theme.px(260)
                     textRole: "label"
                     valueRole: "value"
                     model: [

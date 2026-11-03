@@ -10,13 +10,13 @@ TextArea {
     // `[[start, length], ...]` (see SpellUnderline), or null for none.
     property var spellRanges: null
     wrapMode: TextEdit.Wrap
-    leftPadding: 8
-    rightPadding: 8
-    topPadding: 6
-    bottomPadding: 6
+    leftPadding: Theme.px(8)
+    rightPadding: Theme.px(8)
+    topPadding: Theme.px(6)
+    bottomPadding: Theme.px(6)
     background: Rectangle {
         color: Theme.fieldBackground
-        radius: 3
+        radius: Theme.px(3)
         border.color: area.activeFocus ? Theme.primary : Theme.fieldBorder
     }
 

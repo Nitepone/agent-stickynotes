@@ -33,11 +33,11 @@ Dialog {
 
     modal: true
     anchors.centerIn: Overlay.overlay
-    padding: 16
+    padding: Theme.px(16)
 
     Binding on width {
         when: dialog.maxWidth > 0
-        value: Math.min(dialog.maxWidth, (dialog.parent ? dialog.parent.width : dialog.maxWidth) - 40)
+        value: Math.min(dialog.maxWidth, (dialog.parent ? dialog.parent.width : dialog.maxWidth) - Theme.px(40))
     }
 
     // A hidden button would still take up a slot in the button box, so a

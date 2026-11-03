@@ -10,19 +10,19 @@ PreferencesSection {
     property string version: ""
 
     ColumnLayout {
-        x: 32
-        y: 24
-        spacing: 8
+        x: Theme.px(32)
+        y: Theme.px(24)
+        spacing: Theme.px(8)
 
         Label {
             text: qsTr("About")
-            font.pixelSize: 22
+            font.pixelSize: Theme.fs(22)
             font.bold: true
             color: Theme.text
         }
         Label {
             text: qsTr("Agent Stickynotes")
-            font.pixelSize: 16
+            font.pixelSize: Theme.fs(16)
             color: Theme.text
         }
         Label {

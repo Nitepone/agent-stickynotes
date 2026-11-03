@@ -18,8 +18,8 @@ ToolButton {
     readonly property color glyphColor: badge ? badgeGlyphColor
                                         : checked ? Theme.textOnPrimary : Theme.text
 
-    implicitWidth: 36
-    implicitHeight: 32
+    implicitWidth: Theme.px(36)
+    implicitHeight: Theme.px(32)
     focusPolicy: Qt.StrongFocus
 
     Accessible.name: tip
@@ -28,7 +28,7 @@ ToolButton {
     ToolTip.text: tip
 
     background: Rectangle {
-        radius: 4
+        radius: Theme.px(4)
         color: button.badge ? button.badgeColor
                : button.checked ? Theme.primary
                : button.down ? Theme.controlDown

@@ -29,8 +29,8 @@ Item {
     signal moveRequested(int direction)
 
     objectName: "stackHeader-" + category.toLowerCase()
-    implicitWidth: Theme.columnWidth - 20
-    implicitHeight: 32
+    implicitWidth: Theme.columnWidth - Theme.px(20)
+    implicitHeight: Theme.px(32)
 
     activeFocusOnTab: true
     Accessible.role: Accessible.Button
@@ -56,8 +56,8 @@ Item {
     Rectangle {
         objectName: "focusRing"
         anchors.fill: parent
-        anchors.margins: -3
-        radius: 8
+        anchors.margins: -Theme.px(3)
+        radius: Theme.px(8)
         color: "transparent"
         border.color: Theme.focusRing
         border.width: 2
@@ -77,21 +77,21 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            radius: 5
+            radius: Theme.px(5)
             color: Theme.stackHeaderBackground
             border.color: mouse.containsMouse ? Theme.subtleText : "transparent"
         }
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 6
+            anchors.leftMargin: Theme.px(8)
+            anchors.rightMargin: Theme.px(8)
+            spacing: Theme.px(6)
 
             Label {
                 objectName: "stackChevron"
                 text: "▸"      // right-pointing; rotated down when expanded
-                font.pixelSize: 13
+                font.pixelSize: Theme.fs(13)
                 color: Theme.text
                 rotation: root.collapsed ? 0 : 90
                 Behavior on rotation {
@@ -104,7 +104,7 @@ Item {
                 objectName: "stackName"
                 Layout.fillWidth: true
                 text: root.category
-                font.pixelSize: 13
+                font.pixelSize: Theme.fs(13)
                 font.bold: true
                 color: Theme.text
                 elide: Text.ElideRight
@@ -113,7 +113,7 @@ Item {
             Label {
                 objectName: "stackCount"
                 text: root.count
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 font.bold: true
                 color: Theme.stackHeaderCount
             }

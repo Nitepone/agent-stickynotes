@@ -26,13 +26,13 @@ Item {
         id: column
         anchors.left: parent.left
         anchors.right: parent.right
-        spacing: 8
+        spacing: Theme.px(8)
 
         Item {
             id: header
             objectName: "sectionHeader"
             Layout.fillWidth: true
-            implicitHeight: headerRow.implicitHeight + 8
+            implicitHeight: headerRow.implicitHeight + Theme.px(8)
             activeFocusOnTab: true
 
             Accessible.role: Accessible.Button
@@ -53,7 +53,7 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
+                spacing: Theme.px(8)
 
                 Label {
                     id: chevron
@@ -77,7 +77,7 @@ Item {
             Rectangle {
                 objectName: "focusRing"
                 anchors.fill: parent
-                radius: 4
+                radius: Theme.px(4)
                 color: "transparent"
                 border.color: Theme.focusRing
                 border.width: 2
@@ -95,9 +95,9 @@ Item {
             id: body
             objectName: "sectionBody"
             Layout.fillWidth: true
-            Layout.leftMargin: 20
+            Layout.leftMargin: Theme.px(20)
             visible: root.expanded
-            spacing: 8
+            spacing: Theme.px(8)
         }
     }
 }

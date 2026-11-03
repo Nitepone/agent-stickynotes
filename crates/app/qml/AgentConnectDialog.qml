@@ -40,21 +40,21 @@ StickyDialog {
     }
 
     title: qsTr("Connect Agent")
-    maxWidth: 760
+    maxWidth: Theme.px(760)
     acceptText: ""
     rejectText: qsTr("Close")
 
     contentItem: ScrollView {
         id: scroll
         implicitHeight: Math.min(sections.implicitHeight,
-                                 Math.max(240, (dialog.parent ? dialog.parent.height : 720) - 160))
+                                 Math.max(Theme.px(240), (dialog.parent ? dialog.parent.height : Theme.px(720)) - Theme.px(160)))
         contentWidth: availableWidth
         clip: true
 
         ColumnLayout {
             id: sections
             width: scroll.availableWidth
-            spacing: 8
+            spacing: Theme.px(8)
 
             Label {
                 Layout.fillWidth: true

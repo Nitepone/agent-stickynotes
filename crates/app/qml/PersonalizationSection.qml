@@ -35,14 +35,14 @@ PreferencesSection {
         clip: true
 
         ColumnLayout {
-            x: 32
-            y: 24
-            width: Math.min(scroll.availableWidth - 64, 640)
-            spacing: 14
+            x: Theme.px(32)
+            y: Theme.px(24)
+            width: Math.min(scroll.availableWidth - Theme.px(64), Theme.px(640))
+            spacing: Theme.px(14)
 
             Label {
                 text: qsTr("Color theme")
-                font.pixelSize: 22
+                font.pixelSize: Theme.fs(22)
                 font.bold: true
                 color: Theme.text
             }
@@ -54,7 +54,7 @@ PreferencesSection {
             }
 
             RowLayout {
-                spacing: 12
+                spacing: Theme.px(12)
 
                 Repeater {
                     model: [
@@ -69,8 +69,8 @@ PreferencesSection {
                         objectName: "mode-" + modelData.value
                         checkable: true
                         checked: selected
-                        implicitWidth: 150
-                        implicitHeight: 64
+                        implicitWidth: Theme.px(150)
+                        implicitHeight: Theme.px(64)
                         // Checked state is driven by the setting, not by clicking.
                         onClicked: {
                             checked = Qt.binding(() => option.selected)
@@ -89,7 +89,7 @@ PreferencesSection {
                         }
                         contentItem: Label {
                             text: (option.selected ? "✓  " : "") + option.modelData.label
-                            font.pixelSize: 16
+                            font.pixelSize: Theme.fs(16)
                             font.bold: option.selected
                             color: Theme.text
                             horizontalAlignment: Text.AlignHCenter
@@ -100,9 +100,9 @@ PreferencesSection {
             }
 
             Label {
-                Layout.topMargin: 12
+                Layout.topMargin: Theme.px(12)
                 text: qsTr("Accent colors")
-                font.pixelSize: 22
+                font.pixelSize: Theme.fs(22)
                 font.bold: true
                 color: Theme.text
             }
@@ -135,9 +135,9 @@ PreferencesSection {
             }
 
             Label {
-                Layout.topMargin: 12
+                Layout.topMargin: Theme.px(12)
                 text: qsTr("Sticky notes")
-                font.pixelSize: 22
+                font.pixelSize: Theme.fs(22)
                 font.bold: true
                 color: Theme.text
             }
@@ -150,7 +150,7 @@ PreferencesSection {
             ComboBox {
                 id: styleBox
                 objectName: "noteStyleBox"
-                Layout.preferredWidth: 260
+                Layout.preferredWidth: Theme.px(260)
                 textRole: "label"
                 valueRole: "value"
                 model: [
@@ -175,7 +175,7 @@ PreferencesSection {
                       : qsTr("All notes use the one color you choose.")
                 wrapMode: Text.Wrap
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
             }
 
             // Style "User color": the single note color.
@@ -183,7 +183,7 @@ PreferencesSection {
                 objectName: "userNoteControls"
                 Layout.fillWidth: true
                 visible: section.noteStyle !== "variable"
-                spacing: 14
+                spacing: Theme.px(14)
 
                 ColorChoice {
                     objectName: "noteChoice"
@@ -214,9 +214,9 @@ PreferencesSection {
             }
 
             Label {
-                Layout.topMargin: 12
+                Layout.topMargin: Theme.px(12)
                 text: qsTr("Motion")
-                font.pixelSize: 22
+                font.pixelSize: Theme.fs(22)
                 font.bold: true
                 color: Theme.text
             }
@@ -229,7 +229,7 @@ PreferencesSection {
             ComboBox {
                 id: motionBox
                 objectName: "motionBox"
-                Layout.preferredWidth: 260
+                Layout.preferredWidth: Theme.px(260)
                 textRole: "label"
                 valueRole: "value"
                 model: [

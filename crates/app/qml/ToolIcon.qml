@@ -11,8 +11,8 @@ Canvas {
     property color color: Theme.text
     property real strokeWidth: 1.8      // in the 24 x 24 drawing grid
 
-    implicitWidth: 22
-    implicitHeight: 22
+    implicitWidth: Theme.px(22)
+    implicitHeight: Theme.px(22)
 
     onKindChanged: requestPaint()
     onColorChanged: requestPaint()

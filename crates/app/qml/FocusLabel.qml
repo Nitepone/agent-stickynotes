@@ -41,8 +41,8 @@ Item {
     Rectangle {
         objectName: "focusRing"
         anchors.fill: parent
-        anchors.margins: -3
-        radius: 4
+        anchors.margins: -Theme.px(3)
+        radius: Theme.px(4)
         color: "transparent"
         border.color: Theme.focusRing
         border.width: 2

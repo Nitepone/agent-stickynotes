@@ -22,6 +22,8 @@ ApplicationWindow {
     // ---- Markdown display ----
     property string styleId: "default"
     property real zoom: 1
+    // The document zoom on top of the app's interface scale.
+    readonly property real shownZoom: zoom * Theme.scale
     property bool showContents: true
     property var headings: []           // [{title, level, position}] in document order
     property int activeHeading: -1
@@ -29,6 +31,9 @@ ApplicationWindow {
     property var matches: []            // start positions of the query in the text
     property int currentMatch: -1
     signal styleChosen(string id)
+
+    // This window is not a child of the main one, so it follows the scale itself.
+    font.pointSize: Theme.basePointSize * Theme.scale
 
     readonly property bool isImage: kind === "image"
     readonly property real minZoom: 0.5
@@ -83,7 +88,7 @@ ApplicationWindow {
     // worth of space between blocks, headings with more space above than below.
     function stylesheet() {
         const st = displayStyle
-        const px = (n) => (Math.round(n * zoom * 10) / 10) + "px"
+        const px = (n) => (Math.round(n * shownZoom * 10) / 10) + "px"
         const mono = pickFamily(monoFamilies)
         const monoFamily = mono !== "" ? "font-family:'" + mono + "';" : ""
         const lead = "line-height:" + st.leading + "%;"
@@ -110,7 +115,7 @@ ApplicationWindow {
     // `code` tint would stripe each line and the final newline would add an
     // empty one, so the block is a bare `pre` with its own background.
     function page() {
-        const after = 'style="margin-bottom:' + Math.round(displayStyle.gap * zoom) + 'px"'
+        const after = 'style="margin-bottom:' + Math.round(displayStyle.gap * shownZoom) + 'px"'
         const body = html
             .replace(/<pre><code[^>]*>/g, "<pre>")
             .replace(/\n?<\/code><\/pre>/g, "</pre>")
@@ -209,7 +214,7 @@ ApplicationWindow {
         const start = matches[currentMatch]
         markdownText.select(start, start + query.length)
         const y = markdownText.positionToRectangle(start).y
-        if (y < scroller.contentY || y > scroller.contentY + scroller.height - 40)
+        if (y < scroller.contentY || y > scroller.contentY + scroller.height - Theme.px(40))
             scrollToPosition(start)
     }
 
@@ -237,8 +242,8 @@ ApplicationWindow {
 
     width: isImage ? 900 : 720
     height: isImage ? 700 : 640
-    minimumWidth: 320
-    minimumHeight: 240
+    minimumWidth: Theme.px(320)
+    minimumHeight: Theme.px(240)
     title: name + " — Sticky Notes"
     color: Theme.background
 
@@ -255,7 +260,7 @@ ApplicationWindow {
     }
 
     header: ToolBar {
-        implicitHeight: 40
+        implicitHeight: Theme.px(40)
         background: Rectangle { color: Theme.surface }
 
         // Markdown: contents, search, zoom, style
@@ -263,9 +268,9 @@ ApplicationWindow {
             objectName: "markdownBar"
             visible: !viewer.isImage
             anchors.fill: parent
-            anchors.leftMargin: 8
-            anchors.rightMargin: 8
-            spacing: 6
+            anchors.leftMargin: Theme.px(8)
+            anchors.rightMargin: Theme.px(8)
+            spacing: Theme.px(6)
 
             ToolButton {
                 objectName: "contentsButton"
@@ -279,7 +284,7 @@ ApplicationWindow {
                 id: searchField
                 objectName: "searchField"
                 Layout.fillWidth: true
-                Layout.maximumWidth: 260
+                Layout.maximumWidth: Theme.px(260)
                 placeholderText: qsTr("Search (Ctrl+F)")
                 selectByMouse: true
                 onTextChanged: viewer.search(text, true)
@@ -357,8 +362,8 @@ ApplicationWindow {
         RowLayout {
             visible: viewer.isImage
             anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
+            anchors.leftMargin: Theme.px(12)
+            anchors.rightMargin: Theme.px(12)
             Label {
                 objectName: "imageInfo"
                 Layout.fillWidth: true
@@ -394,14 +399,14 @@ ApplicationWindow {
             id: contents
             objectName: "contentsView"
             visible: viewer.showContents && viewer.headings.length > 0
-            Layout.preferredWidth: 210
+            Layout.preferredWidth: Theme.px(210)
             Layout.fillHeight: true
             clip: true
             model: viewer.headings
             ScrollBar.vertical: ScrollBar {}
             Rectangle { z: -1; anchors.fill: parent; color: Theme.surface }
             header: Label {
-                padding: 10
+                padding: Theme.px(10)
                 text: qsTr("Contents")
                 font.bold: true
                 color: Theme.subtleText
@@ -411,7 +416,7 @@ ApplicationWindow {
                 required property var modelData
                 required property int index
                 width: contents.width
-                leftPadding: 10 + (modelData.level - 1) * 12
+                leftPadding: Theme.px(10) + (modelData.level - 1) * Theme.px(12)
                 highlighted: index === viewer.activeHeading
                 text: modelData.title
                 background: Rectangle {
@@ -445,11 +450,11 @@ ApplicationWindow {
                 id: markdownText
                 objectName: "markdownText"
                 readonly property real column: viewer.displayStyle.maxWidth > 0
-                    ? Math.min(textScroll.availableWidth, viewer.displayStyle.maxWidth * viewer.zoom)
+                    ? Math.min(textScroll.availableWidth, viewer.displayStyle.maxWidth * viewer.shownZoom)
                     : textScroll.availableWidth
                 width: column
                 x: Math.max(0, (textScroll.availableWidth - column) / 2)
-                padding: 28
+                padding: Theme.px(28)
                 readOnly: true
                 selectByMouse: true
                 persistentSelection: true
@@ -459,7 +464,7 @@ ApplicationWindow {
                 color: Theme.text
                 selectionColor: Theme.primary
                 selectedTextColor: Theme.textOnPrimary
-                font.pixelSize: Math.round(viewer.displayStyle.size * viewer.zoom)
+                font.pixelSize: Math.round(viewer.displayStyle.size * viewer.shownZoom)
                 font.family: viewer.pickFamily(viewer.displayStyle.families)
                 onTextChanged: viewer.rebuildOutline()
 

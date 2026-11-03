@@ -198,13 +198,44 @@ QtObject {
     readonly property color focusRing: ensureContrast(
         primary, [background, surface, columnBackground, columnEditBackground], 3)
 
+    // ---- Interface scale ---------------------------------------------------
+    // Main.qml sets `scale` from the user's preference (Ctrl+= / Ctrl+- / Ctrl+0).
+    // Every font size goes through fs() and every fixed length through px(), so
+    // at scale 1 they are unchanged and at other scales everything follows.
+
+    property real scale: 1.0
+    readonly property real minScale: 0.7
+    readonly property real maxScale: 2.0
+    readonly property real scaleStep: 0.1
+    // The default font size of the application, which scales with the rest.
+    readonly property real basePointSize: Qt.application.font.pointSize > 0
+                                          ? Qt.application.font.pointSize : 9
+
+    function fs(n) { return Math.round(n * scale) }
+    function px(n) { return Math.round(n * scale) }
+
+    // A scale clamped to the supported range, in whole percent.
+    function clampScale(value) {
+        if (!isFinite(value))
+            return 1
+        return Math.round(Math.max(minScale, Math.min(maxScale, value)) * 100) / 100
+    }
+    // The next step up or down from `value` (`direction` > 0 zooms in, < 0 out,
+    // 0 is actual size); steps are whole tenths, so 1.0 stays reachable.
+    function steppedScale(value, direction) {
+        if (direction === 0)
+            return 1
+        const tenths = Math.round(clampScale(value) * 10)
+        return clampScale((tenths + (direction > 0 ? 1 : -1)) / 10)
+    }
+
     // ---- Layout constants (not colors, but shared by every view) ----------
 
-    readonly property int columnWidth: 284
-    readonly property int collapsedColumnWidth: 48
-    readonly property int columnSpacing: 12
-    readonly property int cardSpacing: 8
-    readonly property int radius: 8
+    readonly property int columnWidth: px(284)
+    readonly property int collapsedColumnWidth: px(48)
+    readonly property int columnSpacing: px(12)
+    readonly property int cardSpacing: px(8)
+    readonly property int radius: px(8)
     readonly property int suggestedDescriptionChars: 200
 
     // ---- Color helpers ----------------------------------------------------

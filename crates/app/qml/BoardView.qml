@@ -205,7 +205,7 @@ Item {
     Flickable {
         id: flick
         anchors.fill: parent
-        contentWidth: row.width + 32
+        contentWidth: row.width + Theme.px(32)
         contentHeight: height
         clip: true
         boundsBehavior: Flickable.StopAtBounds
@@ -214,9 +214,9 @@ Item {
 
         Row {
             id: row
-            x: 16
-            y: 16
-            height: flick.height - 36
+            x: Theme.px(16)
+            y: Theme.px(16)
+            height: flick.height - Theme.px(36)
             spacing: Theme.columnSpacing
 
             Repeater {
@@ -254,7 +254,7 @@ Item {
                 objectName: "addColumn"
                 visible: root.editMode
                 width: Theme.columnWidth
-                height: 96
+                height: Theme.px(96)
                 radius: Theme.radius
                 color: addColumnMouse.containsMouse ? Theme.columnEditBackground : "transparent"
                 border.color: addColumn.activeFocus ? Theme.focusRing : Theme.secondary
@@ -275,7 +275,7 @@ Item {
                 Label {
                     anchors.centerIn: parent
                     text: qsTr("+  Add column")
-                    font.pixelSize: 15
+                    font.pixelSize: Theme.fs(15)
                     color: Theme.link
                 }
                 MouseArea {
@@ -293,9 +293,9 @@ Item {
             visible: columnDrop.containsDrag && columnDrop.hoverIndex >= 0
             x: row.x + root.indicatorX(columnDrop.hoverIndex, columnDrop.draggedId)
             y: row.y
-            width: 4
+            width: Theme.px(4)
             height: row.height
-            radius: 2
+            radius: Theme.px(2)
             color: Theme.dropIndicator
         }
     }
@@ -315,12 +315,12 @@ Item {
         onTriggered: {
             const item = root.dragLayer.children[0]
             const p = item.mapToItem(root, item.width / 2, item.height / 2)
-            const edge = 60
+            const edge = Theme.px(60)
             const maxX = Math.max(0, flick.contentWidth - flick.width)
             if (p.x < edge)
-                flick.contentX = Math.max(0, flick.contentX - 14)
+                flick.contentX = Math.max(0, flick.contentX - Theme.px(14))
             else if (p.x > root.width - edge)
-                flick.contentX = Math.min(maxX, flick.contentX + 14)
+                flick.contentX = Math.min(maxX, flick.contentX + Theme.px(14))
         }
     }
 

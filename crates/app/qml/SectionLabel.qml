@@ -5,7 +5,7 @@ import StickyNotes
 
 Label {
     Layout.fillWidth: true
-    Layout.topMargin: 8
+    Layout.topMargin: Theme.px(8)
     font.bold: true
     color: Theme.text
 }

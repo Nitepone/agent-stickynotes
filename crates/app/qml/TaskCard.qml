@@ -29,7 +29,7 @@ Item {
     signal moveRequested(int direction)
 
     objectName: "card-" + task.id
-    implicitWidth: Theme.columnWidth - 20
+    implicitWidth: Theme.columnWidth - Theme.px(20)
     implicitHeight: note.height
 
     // Keyboard and screen-reader access.
@@ -57,8 +57,8 @@ Item {
     Rectangle {
         objectName: "focusRing"
         anchors.fill: parent
-        anchors.margins: -3
-        radius: 7
+        anchors.margins: -Theme.px(3)
+        radius: Theme.px(7)
         color: "transparent"
         border.color: Theme.focusRing
         border.width: 2
@@ -68,7 +68,7 @@ Item {
     // Faint outline left behind while the note is being dragged.
     Rectangle {
         anchors.fill: parent
-        radius: 4
+        radius: Theme.px(4)
         color: "transparent"
         border.color: Theme.subtleText
         border.width: 1
@@ -79,7 +79,7 @@ Item {
     Item {
         id: note
         width: root.width
-        height: Math.max(64, content.implicitHeight + 24)
+        height: Math.max(Theme.px(64), content.implicitHeight + Theme.px(24))
         anchors.left: root.left
         anchors.top: root.top
 
@@ -88,16 +88,16 @@ Item {
         Drag.source: root
 
         Rectangle {
-            x: 2; y: 3
+            x: Theme.px(2); y: Theme.px(3)
             width: parent.width; height: parent.height
-            radius: 4
+            radius: Theme.px(4)
             color: Theme.noteShadow
         }
 
         Rectangle {
             objectName: "notePaper"
             anchors.fill: parent
-            radius: 4
+            radius: Theme.px(4)
             color: root.noteBg
             border.color: mouse.containsMouse ? Theme.noteHoverBorderOn(root.noteBg) : "transparent"
         }
@@ -109,30 +109,30 @@ Item {
             edited: root.glowEdited
             reducedMotion: root.reducedMotion
             active: root.glowActive
-            cornerRadius: 4
+            cornerRadius: Theme.px(4)
         }
 
         ColumnLayout {
             id: content
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-            spacing: 10
+            anchors { left: parent.left; right: parent.right; top: parent.top; margins: Theme.px(12) }
+            spacing: Theme.px(10)
 
             Rectangle {
                 objectName: "cardCategory"
                 visible: root.showCategory && !!root.task.category
                 Layout.maximumWidth: content.width
-                implicitWidth: categoryLabel.implicitWidth + 12
-                implicitHeight: categoryLabel.implicitHeight + 4
-                radius: 3
+                implicitWidth: categoryLabel.implicitWidth + Theme.px(12)
+                implicitHeight: categoryLabel.implicitHeight + Theme.px(4)
+                radius: Theme.px(3)
                 color: Theme.noteChipOn(root.noteBg)
 
                 Label {
                     id: categoryLabel
                     anchors.centerIn: parent
-                    width: Math.min(implicitWidth, content.width - 12)
+                    width: Math.min(implicitWidth, content.width - Theme.px(12))
                     text: root.task.category || ""
                     elide: Text.ElideRight
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fs(11)
                     font.bold: true
                     color: Theme.noteChipTextOn(root.noteBg)
                 }
@@ -143,14 +143,14 @@ Item {
                 text: root.task.cardText
                 wrapMode: Text.Wrap
                 color: Theme.noteTextOn(root.noteBg)
-                font.pixelSize: 14
+                font.pixelSize: Theme.fs(14)
             }
 
             // Footer: the task number at the bottom left, progress (if the
             // task has criteria) to its right.
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 8
+                spacing: Theme.px(8)
 
                 readonly property bool hasProgress: root.task.total > 0
                 readonly property bool complete: hasProgress && root.task.done === root.task.total
@@ -158,7 +158,7 @@ Item {
                 Label {
                     objectName: "cardNumber"
                     text: "#" + root.task.number
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fs(11)
                     color: Theme.noteNumberOn(root.noteBg)
                 }
 
@@ -166,21 +166,21 @@ Item {
                     objectName: "cardArtifacts"
                     visible: (root.task.artifactCount || 0) > 0
                     text: root.task.artifactCount === 1 ? qsTr("1 file") : qsTr("%1 files").arg(root.task.artifactCount)
-                    font.pixelSize: 11
+                    font.pixelSize: Theme.fs(11)
                     color: Theme.noteSubtleTextOn(root.noteBg)
                 }
 
                 Rectangle {
                     Layout.fillWidth: true
                     visible: parent.hasProgress
-                    implicitHeight: 6
-                    radius: 3
+                    implicitHeight: Theme.px(6)
+                    radius: Theme.px(3)
                     color: Theme.progressTrack
 
                     Rectangle {
                         width: parent.width * root.task.done / Math.max(1, root.task.total)
                         height: parent.height
-                        radius: 3
+                        radius: Theme.px(3)
                         color: parent.parent.complete ? Theme.progressDone : Theme.primary
                     }
                 }
@@ -190,7 +190,7 @@ Item {
                 Label {
                     visible: parent.hasProgress
                     text: "\u2713 " + root.task.done + "/" + root.task.total
-                    font.pixelSize: 12
+                    font.pixelSize: Theme.fs(12)
                     font.bold: true
                     color: parent.complete ? Theme.noteDoneTextOn(root.noteBg) : Theme.noteSubtleTextOn(root.noteBg)
                 }
@@ -204,7 +204,7 @@ Item {
             preventStealing: true
             cursorShape: drag.active ? Qt.ClosedHandCursor : Qt.PointingHandCursor
             drag.target: root.dragEnabled ? note : null
-            drag.threshold: 6
+            drag.threshold: Theme.px(6)
 
             onPressed: (event) => {
                 note.Drag.hotSpot.x = event.x

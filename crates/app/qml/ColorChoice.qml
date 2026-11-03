@@ -20,7 +20,7 @@ ColumnLayout {
 
     signal chosen(string color)
 
-    spacing: 6
+    spacing: Theme.px(6)
 
     function apply(text) {
         const value = text.trim()
@@ -45,12 +45,12 @@ ColumnLayout {
         text: choice.description
         wrapMode: Text.Wrap
         color: Theme.subtleText
-        font.pixelSize: 12
+        font.pixelSize: Theme.fs(12)
     }
 
     Flow {
         Layout.fillWidth: true
-        spacing: 8
+        spacing: Theme.px(8)
 
         Repeater {
             model: choice.presets
@@ -60,9 +60,9 @@ ColumnLayout {
                 readonly property bool selected: Theme.sameColor(modelData, choice.effective)
 
                 objectName: "swatch-" + modelData
-                width: 30
-                height: 30
-                radius: 15
+                width: Theme.px(30)
+                height: Theme.px(30)
+                radius: Theme.px(15)
                 color: modelData
                 border.width: selected ? 3 : 1
                 border.color: selected ? Theme.text : Theme.fieldBorder
@@ -88,13 +88,13 @@ ColumnLayout {
     }
 
     RowLayout {
-        spacing: 8
+        spacing: Theme.px(8)
 
         TextField {
             id: hexField
             objectName: "hexField"
             property bool invalid: false
-            Layout.preferredWidth: 120
+            Layout.preferredWidth: Theme.px(120)
             text: choice.effective.toString()
             placeholderText: "#rrggbb"
             maximumLength: 7
@@ -102,7 +102,7 @@ ColumnLayout {
             onEditingFinished: choice.apply(text)
             onTextEdited: invalid = false
             background: Rectangle {
-                radius: 3
+                radius: Theme.px(3)
                 color: Theme.fieldBackground
                 border.color: hexField.invalid ? Theme.danger
                               : hexField.activeFocus ? Theme.primary : Theme.fieldBorder

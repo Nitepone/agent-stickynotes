@@ -147,6 +147,55 @@ mod tests {
         );
     }
 
+    /// Every font size must go through `Theme.fs()`, or it would ignore the
+    /// interface scale (Ctrl+= / Ctrl+- / Ctrl+0).
+    #[test]
+    fn views_do_not_hard_code_font_sizes() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("qml");
+        let mut offences = Vec::new();
+        let mut checked = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            if !name.ends_with(".qml") || name == "Theme.qml" {
+                continue;
+            }
+            checked += 1;
+            for (n, line) in std::fs::read_to_string(&path).unwrap().lines().enumerate() {
+                if has_literal_font_size(line) {
+                    offences.push(format!("{name}:{}: {}", n + 1, line.trim()));
+                }
+            }
+        }
+        assert!(checked >= 10, "expected to scan the views, found {checked}");
+        assert!(
+            offences.is_empty(),
+            "literal font sizes outside Theme.qml (use Theme.fs):\n{}",
+            offences.join("\n")
+        );
+    }
+
+    /// True if `line` sets `pixelSize` or `pointSize` to a bare number.
+    fn has_literal_font_size(line: &str) -> bool {
+        let code = line.split("//").next().unwrap();
+        ["pixelSize", "pointSize"].iter().any(|key| {
+            code.match_indices(key).any(|(i, _)| {
+                let rest = code[i + key.len()..].trim_start();
+                rest.strip_prefix(':')
+                    .or_else(|| rest.strip_prefix('='))
+                    .is_some_and(|v| v.trim_start().starts_with(|c: char| c.is_ascii_digit()))
+            })
+        })
+    }
+
+    #[test]
+    fn the_font_size_scan_would_catch_a_literal() {
+        assert!(has_literal_font_size("    font.pixelSize: 12"));
+        assert!(has_literal_font_size("font.pixelSize: 12 // note"));
+        assert!(!has_literal_font_size("    font.pixelSize: Theme.fs(12)"));
+        assert!(!has_literal_font_size("// font.pixelSize: 12"));
+    }
+
     /// The style must not depend on the platform default or on the
     /// `QT_QUICK_CONTROLS_STYLE` variable: a plain `import QtQuick.Controls`
     /// lets Windows pick its own (light) style, and windeployqt only ships

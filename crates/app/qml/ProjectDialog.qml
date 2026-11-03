@@ -25,8 +25,8 @@ StickyDialog {
     }
 
     title: qsTr("Project settings")
-    maxWidth: 680
-    height: Math.min(640, (parent ? parent.height : 640) - 40)
+    maxWidth: Theme.px(680)
+    height: Math.min(Theme.px(640), (parent ? parent.height : Theme.px(640)) - Theme.px(40))
     acceptObjectName: "saveProject"
     onAcceptClicked: saveRequested(documentField.text, codeField.text)
 
@@ -37,13 +37,13 @@ StickyDialog {
 
         ColumnLayout {
             width: scroll.availableWidth
-            spacing: 6
+            spacing: Theme.px(6)
 
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 text: qsTr("Agents read these through the project_get tool before they work, and they are included when you export the Claude Code skill. Agents cannot change them.")
             }
 
@@ -52,14 +52,14 @@ StickyDialog {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 text: qsTr("How agents should write documents: specs, reports, release notes, tone, structure.")
             }
             FormTextArea {
                 id: documentField
                 objectName: "documentField"
                 Layout.fillWidth: true
-                Layout.minimumHeight: 150
+                Layout.minimumHeight: Theme.px(150)
                 placeholderText: qsTr("e.g. Write in plain English. Start every spec with a one-paragraph summary.")
             }
 
@@ -68,14 +68,14 @@ StickyDialog {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 text: qsTr("How code for this project should be written: languages, style, structure, testing.")
             }
             FormTextArea {
                 id: codeField
                 objectName: "codeField"
                 Layout.fillWidth: true
-                Layout.minimumHeight: 150
+                Layout.minimumHeight: Theme.px(150)
                 placeholderText: qsTr("e.g. Rust 2024. Keep functions small. Every change needs a test.")
             }
 
@@ -84,7 +84,7 @@ StickyDialog {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 color: Theme.subtleText
-                font.pixelSize: 12
+                font.pixelSize: Theme.fs(12)
                 text: dialog.artifacts.length === 0
                     ? qsTr("No files in this project's artifacts folder yet.")
                     : qsTr("Every file in this project's artifacts folder. Detached files stay here until you delete them from the folder.")
@@ -94,7 +94,7 @@ StickyDialog {
                 delegate: RowLayout {
                     required property var modelData
                     Layout.fillWidth: true
-                    spacing: 6
+                    spacing: Theme.px(6)
 
                     Button {
                         objectName: "artifactLink"
@@ -116,7 +116,7 @@ StickyDialog {
                             ? modelData.tasks.map(n => "#" + n).join(", ")
                             : qsTr("not attached")
                         color: Theme.subtleText
-                        font.pixelSize: 12
+                        font.pixelSize: Theme.fs(12)
                     }
                 }
             }
