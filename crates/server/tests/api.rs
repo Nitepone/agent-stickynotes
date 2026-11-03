@@ -698,3 +698,40 @@ async fn a_large_image_can_be_attached_over_mcp() {
     client.cancel().await.unwrap();
     handle.shutdown();
 }
+
+#[tokio::test]
+async fn the_activity_log_names_the_mcp_client_and_rest_is_agent() {
+    let (root, api) = Api::in_project();
+    let handle = stickynotes_server::start(api.store.clone(), TOKEN.into(), 0)
+        .await
+        .unwrap();
+    let config =
+        StreamableHttpClientTransportConfig::with_uri(format!("http://{}/mcp", handle.addr))
+            .auth_header(TOKEN);
+    let client = ().serve(StreamableHttpClientTransport::from_config(config)).await.unwrap();
+    client
+        .call_tool(
+            CallToolRequestParams::new("task_create").with_arguments(
+                json!({"description": "Via MCP"})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await
+        .unwrap();
+    client.cancel().await.unwrap();
+    handle.shutdown();
+    api.call("POST", "/tasks", Some(json!({"description": "Via REST"})))
+        .await;
+
+    let entries = stickynotes_core::activity::read(&root.path().join("p"));
+    assert_eq!(entries.len(), 2);
+    assert_eq!(entries[0].title, "Via MCP");
+    assert_ne!(entries[0].agent, "agent");
+    assert!(!entries[0].agent.is_empty());
+    assert_eq!(
+        (entries[1].title.as_str(), entries[1].agent.as_str()),
+        ("Via REST", "agent")
+    );
+}

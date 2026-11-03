@@ -14,7 +14,7 @@ use crate::model::{Artifact, ArtifactId, Board, TaskId};
 use crate::ops;
 use crate::persist::{self, FileStamp};
 use crate::project;
-use crate::{agent_guide, artifact, backup, export_md};
+use crate::{activity, agent_guide, artifact, backup, export_md};
 use chrono::{DateTime, Local};
 
 /// Emitted after any change to the board or session state.
@@ -162,6 +162,18 @@ impl BoardStore {
         cmd: Command,
         expected_revision: Option<u64>,
     ) -> Result<(Applied, u64)> {
+        self.apply_as(origin, None, cmd, expected_revision)
+    }
+
+    /// Like [`apply`](Self::apply), naming the agent (the MCP client) that
+    /// issued the command for the activity log (`activity.jsonl`).
+    pub fn apply_as(
+        &self,
+        origin: Origin,
+        agent: Option<&str>,
+        cmd: Command,
+        expected_revision: Option<u64>,
+    ) -> Result<(Applied, u64)> {
         self.mutate(origin, |s| {
             if origin == Origin::Agent && !s.agent_write {
                 return Err(Error::AgentWriteDisabled);
@@ -177,7 +189,26 @@ impl BoardStore {
             // Only the user's own changes can be undone.
             let before = (origin == Origin::User && !matches!(cmd, Command::Restore(_)))
                 .then(|| (s.board.clone(), cmd.clone()));
+            let log_before =
+                (origin == Origin::Agent).then(|| activity::Before::capture(&s.board, &cmd));
+            let log_cmd = (origin == Origin::Agent).then(|| cmd.clone());
             let applied = ops::execute(&mut s.board, origin, cmd)?;
+            if let (Some(b), Some(c), Some(dir)) = (
+                log_before,
+                log_cmd,
+                s.path.as_deref().and_then(Path::parent),
+            ) && let Some(entry) = activity::entry_for(
+                origin,
+                agent,
+                &b,
+                &c,
+                &applied,
+                &s.board,
+                chrono::Utc::now(),
+            ) {
+                // Best effort: the log must never fail a board change.
+                let _ = activity::append(dir, &entry);
+            }
             if let Some((before, cmd)) = before {
                 s.history.record(&cmd, &applied, &before, &s.board);
             }
@@ -402,9 +433,9 @@ impl BoardStore {
         let cmd = Command::AttachArtifact {
             task,
             artifact: record,
-            added_by: client,
+            added_by: client.clone(),
         };
-        match self.apply(origin, cmd, expected_revision) {
+        match self.apply_as(origin, client.as_deref(), cmd, expected_revision) {
             Ok((_, revision)) => {
                 // The core filled in who and stage; read the stored record.
                 let record = self
@@ -1027,5 +1058,124 @@ mod tests {
         let back = serde_json::to_value(&a).unwrap();
         assert!(back.get("added_by").is_none() && back.get("stage").is_none());
         assert_eq!(back["by_agent"], true);
+    }
+
+    fn activity_store() -> (tempfile::TempDir, Arc<BoardStore>) {
+        let root = tempfile::tempdir().unwrap();
+        let store = BoardStore::new(true);
+        store.create_project(&root.path().join("p"), "P").unwrap();
+        (root, store)
+    }
+
+    fn log(root: &tempfile::TempDir) -> Vec<crate::activity::Entry> {
+        crate::activity::read(&root.path().join("p"))
+    }
+
+    #[test]
+    fn each_kind_of_agent_command_writes_one_entry() {
+        use crate::command::{CriterionDraft, TaskPatch};
+        let (root, store) = activity_store();
+        let agent = |cmd| {
+            store
+                .apply_as(Origin::Agent, Some("claude-code"), cmd, None)
+                .unwrap()
+        };
+        let (Applied::Task(id), _) = agent(Command::CreateTask {
+            column: None,
+            position: None,
+            draft: TaskDraft {
+                description: "Fix login".into(),
+                extended_description: "SECRET detail".into(),
+                acceptance_criteria: vec![CriterionDraft {
+                    text: "SECRET criterion".into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        }) else {
+            panic!()
+        };
+        agent(Command::UpdateTask {
+            id,
+            patch: TaskPatch {
+                description: Some("Fix the login".into()),
+                ..Default::default()
+            },
+        });
+        let cid = store.snapshot().board.task(id).unwrap().acceptance_criteria[0].id;
+        for done in [true, true, false] {
+            agent(Command::SetCriterion {
+                task: id,
+                criterion: cid,
+                done,
+            });
+        }
+        agent(Command::AdvanceTask { id });
+        let record = Artifact {
+            id: uuid::Uuid::new_v4(),
+            name: "n.md".into(),
+            kind: crate::model::ArtifactKind::Markdown,
+            added_at: chrono::Utc::now(),
+            by_agent: true,
+            added_by: None,
+            stage: None,
+            extra: Default::default(),
+        };
+        let aid = record.id;
+        agent(Command::AttachArtifact {
+            task: id,
+            artifact: record,
+            added_by: None,
+        });
+        agent(Command::DetachArtifact {
+            task: id,
+            artifact: aid,
+        });
+        agent(Command::DeleteTask { id });
+        let entries = log(&root);
+        let actions: Vec<_> = entries.iter().map(|e| e.action.as_str()).collect();
+        assert_eq!(
+            actions,
+            [
+                "created", "updated", "ticked", "unticked", "advanced", "attached", "detached",
+                "deleted"
+            ]
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|e| e.agent == "claude-code" && e.task == 1)
+        );
+        assert_eq!(entries[1].title, "Fix the login");
+        assert_eq!(entries[7].title, "Fix the login");
+        assert_eq!(entries[4].to.as_deref(), Some("To Do"));
+        let raw = std::fs::read_to_string(root.path().join("p").join("activity.jsonl")).unwrap();
+        assert!(!raw.contains("SECRET"));
+    }
+
+    #[test]
+    fn unnamed_agent_is_called_agent() {
+        let (root, store) = activity_store();
+        store.apply(Origin::Agent, create(), None).unwrap();
+        assert_eq!(log(&root)[0].agent, "agent");
+    }
+
+    #[test]
+    fn user_rejected_and_unsaved_write_nothing() {
+        let (root, store) = activity_store();
+        store.apply(Origin::User, create(), None).unwrap();
+        let rev = store.snapshot().revision;
+        let bad = Command::AdvanceTask {
+            id: uuid::Uuid::new_v4(),
+        };
+        assert!(store.apply(Origin::Agent, bad, None).is_err());
+        assert!(store.apply(Origin::Agent, create(), Some(rev + 9)).is_err());
+        store.set_agent_write(false);
+        assert!(store.apply(Origin::Agent, create(), None).is_err());
+        assert!(log(&root).is_empty());
+        assert!(!root.path().join("p").join("activity.jsonl").exists());
+        // No project folder: applying still works and nothing is written.
+        let loose = BoardStore::new(true);
+        loose.apply(Origin::Agent, create(), None).unwrap();
     }
 }

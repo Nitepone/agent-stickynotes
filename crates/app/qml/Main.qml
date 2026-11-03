@@ -557,6 +557,13 @@ ApplicationWindow {
                 onTriggered: agentDialog.open()
             }
             Action {
+                text: qsTr("&Activity…")
+                onTriggered: {
+                    activityDialog.activityJson = controller.activityJson()
+                    activityDialog.open()
+                }
+            }
+            Action {
                 text: qsTr("Export Claude Code &Skill…")
                 onTriggered: skillDialog.open()
             }
@@ -877,6 +884,8 @@ ApplicationWindow {
         id: renameDialog
         onRenameRequested: (title) => window.result(controller.renameBoard(title))
     }
+
+    ActivityDialog { id: activityDialog }
 
     AgentConnectDialog {
         id: agentDialog

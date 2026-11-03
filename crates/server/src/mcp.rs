@@ -97,6 +97,13 @@ fn json<T: Serialize>(result: ServiceResult<T>) -> ToolResult {
         .map_err(|e| e.to_string())
 }
 
+impl BoardMcp {
+    /// The service acting as the MCP client that made this call.
+    fn agent(&self, ctx: &RequestContext<RoleServer>) -> AgentService {
+        self.service.for_client(ctx.client_info().map(|i| i.name))
+    }
+}
+
 #[tool_router]
 impl BoardMcp {
     #[tool(
@@ -128,27 +135,46 @@ impl BoardMcp {
     #[tool(
         description = "Create a task in the first column. Keep description short (~200 chars); put detail in extended_description, requirements and acceptance_criteria."
     )]
-    fn task_create(&self, Parameters(a): Parameters<TaskCreateArgs>) -> ToolResult {
-        json(self.service.create_task(a.body, a.expected_revision))
+    fn task_create(
+        &self,
+        Parameters(a): Parameters<TaskCreateArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> ToolResult {
+        json(self.agent(&ctx).create_task(a.body, a.expected_revision))
     }
 
     #[tool(
         description = "Update a task. Omitted fields are unchanged; lists (requirements, acceptance_criteria, references) replace the existing list. Keep description short (~200 chars). To link tasks, pass references like [{\"task_id\": \"...\", \"relation\": \"blocks\"}]; the other task is updated to match."
     )]
-    fn task_update(&self, Parameters(a): Parameters<TaskUpdateArgs>) -> ToolResult {
-        json(self.service.update_task(&a.id, a.body, a.expected_revision))
+    fn task_update(
+        &self,
+        Parameters(a): Parameters<TaskUpdateArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> ToolResult {
+        json(
+            self.agent(&ctx)
+                .update_task(&a.id, a.body, a.expected_revision),
+        )
     }
 
     #[tool(
         description = "Move a task one column to the right. First call task_get and confirm the task meets next_column.description; only advance when it does."
     )]
-    fn task_advance(&self, Parameters(a): Parameters<TaskIdArgs>) -> ToolResult {
-        json(self.service.advance_task(&a.id, a.expected_revision))
+    fn task_advance(
+        &self,
+        Parameters(a): Parameters<TaskIdArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> ToolResult {
+        json(self.agent(&ctx).advance_task(&a.id, a.expected_revision))
     }
 
     #[tool(description = "Delete a task permanently.")]
-    fn task_delete(&self, Parameters(a): Parameters<TaskIdArgs>) -> ToolResult {
-        json(self.service.delete_task(&a.id, a.expected_revision))
+    fn task_delete(
+        &self,
+        Parameters(a): Parameters<TaskIdArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> ToolResult {
+        json(self.agent(&ctx).delete_task(&a.id, a.expected_revision))
     }
 
     #[tool(
@@ -162,7 +188,7 @@ impl BoardMcp {
         // The MCP client's name from its initialize info, if it sent one.
         let client = ctx.client_info().map(|i| i.name);
         json(
-            self.service
+            self.agent(&ctx)
                 .add_artifact(&a.task_id, a.body, client, a.expected_revision),
         )
     }
@@ -177,19 +203,29 @@ impl BoardMcp {
     #[tool(
         description = "Detach an artifact from a task. The file stays in the project's artifacts folder; only the user can remove it."
     )]
-    fn artifact_detach(&self, Parameters(a): Parameters<ArtifactRefArgs>) -> ToolResult {
+    fn artifact_detach(
+        &self,
+        Parameters(a): Parameters<ArtifactRefArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> ToolResult {
         json(
-            self.service
+            self.agent(&ctx)
                 .detach_artifact(&a.task_id, &a.artifact, a.expected_revision),
         )
     }
 
     #[tool(description = "Mark an acceptance criterion as done or not done.")]
-    fn criterion_set(&self, Parameters(a): Parameters<CriterionSetArgs>) -> ToolResult {
-        json(
-            self.service
-                .set_criterion(&a.task_id, &a.criterion_id, a.done, a.expected_revision),
-        )
+    fn criterion_set(
+        &self,
+        Parameters(a): Parameters<CriterionSetArgs>,
+        ctx: RequestContext<RoleServer>,
+    ) -> ToolResult {
+        json(self.agent(&ctx).set_criterion(
+            &a.task_id,
+            &a.criterion_id,
+            a.done,
+            a.expected_revision,
+        ))
     }
 }
 

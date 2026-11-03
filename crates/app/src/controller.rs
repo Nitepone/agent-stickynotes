@@ -120,6 +120,9 @@ pub mod qobject {
         fn artifacts_json(self: &BoardController) -> QString;
         #[qinvokable]
         fn artifact_json(self: &BoardController, name: &QString) -> QString;
+        /// What agents changed, per day, from the project's activity log.
+        #[qinvokable]
+        fn activity_json(self: &BoardController) -> QString;
         /// Copy the chosen local file into the project's `artifacts/` folder
         /// and attach it to the task, as the user.
         #[qinvokable]
@@ -504,6 +507,11 @@ impl qobject::BoardController {
         to_qstring(viewmodel::artifacts_json(
             &context::get().store.artifact_files(),
         ))
+    }
+
+    fn activity_json(&self) -> QString {
+        let dir = context::get().store.project_dir();
+        to_qstring(stickynotes_core::activity::json_for_dir(dir.as_deref()))
     }
 
     fn artifact_json(&self, name: &QString) -> QString {

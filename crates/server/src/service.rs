@@ -244,11 +244,24 @@ pub struct CriterionInput {
 #[derive(Clone)]
 pub struct AgentService {
     store: Arc<BoardStore>,
+    /// The calling agent's name (the MCP client), for the activity log.
+    client: Option<String>,
 }
 
 impl AgentService {
     pub fn new(store: Arc<BoardStore>) -> Self {
-        AgentService { store }
+        AgentService {
+            store,
+            client: None,
+        }
+    }
+
+    /// The same service acting for the named client (`None`: REST, unnamed).
+    pub fn for_client(&self, client: Option<String>) -> Self {
+        AgentService {
+            store: self.store.clone(),
+            client,
+        }
     }
 
     pub fn board(&self) -> BoardView {
@@ -490,9 +503,12 @@ impl AgentService {
 
     pub fn delete_task(&self, id: &str, expected: Option<u64>) -> ServiceResult<Deleted> {
         let id = self.resolve_task(id)?;
-        let (_, revision) =
-            self.store
-                .apply(Origin::Agent, Command::DeleteTask { id }, expected)?;
+        let (_, revision) = self.store.apply_as(
+            Origin::Agent,
+            self.client.as_deref(),
+            Command::DeleteTask { id },
+            expected,
+        )?;
         Ok(Deleted {
             deleted: id,
             revision,
@@ -500,7 +516,9 @@ impl AgentService {
     }
 
     fn apply_to_task(&self, cmd: Command, expected: Option<u64>) -> ServiceResult<TaskView> {
-        let (applied, _) = self.store.apply(Origin::Agent, cmd, expected)?;
+        let (applied, _) =
+            self.store
+                .apply_as(Origin::Agent, self.client.as_deref(), cmd, expected)?;
         let Applied::Task(id) = applied else {
             unreachable!("task commands produce tasks")
         };

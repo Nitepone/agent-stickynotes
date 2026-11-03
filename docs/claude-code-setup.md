@@ -162,6 +162,21 @@ from the task; the file stays in `artifacts/` and the user decides what to do
 with it. Task views list each artifact's `path` relative to the project folder,
 and the Markdown export lists them under each task.
 
+## Activity log
+
+Every change an agent successfully makes (task created, updated, advanced,
+criterion ticked or unticked, task deleted, artifact attached or detached)
+appends one JSON line to `activity.jsonl` in the project folder: `time` (UTC,
+RFC 3339), `agent`, `action`, the task number (`task`), the task's title (its
+description, shortened) at that moment and, for `advanced`, the column it moved
+to (`to`). Descriptions, criteria text and file contents are never written.
+`agent` is the MCP client's name (for example `claude-code`), or `agent` over
+REST or when the client sent no name. Reads, rejected requests and the user's
+own changes write nothing, and a failed log write never fails the change.
+There is no log until a project folder is open. Past about 1 MB the file is
+renamed to `activity.jsonl.1` (replacing an older one) and a new file starts.
+**Agent ▸ Activity…** shows it per day; unreadable lines are skipped.
+
 ## Project instructions and the Claude Code skill
 
 **Board ▸ Project Settings…** stores two texts in the board file: a document

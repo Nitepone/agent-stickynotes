@@ -3,6 +3,7 @@
 //!
 //! This crate has no UI or network dependencies.
 
+pub mod activity;
 pub mod agent_guide;
 pub mod artifact;
 pub mod backup;
