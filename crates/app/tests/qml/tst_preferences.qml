@@ -32,6 +32,7 @@ Item {
     SignalSpy { id: styleSpy; target: personalization; signalName: "noteStyleChosen" }
     SignalSpy { id: paletteSpy; target: personalization; signalName: "notePaletteChosen" }
     SignalSpy { id: motionSpy; target: personalization; signalName: "motionSettingChosen" }
+    SignalSpy { id: barSpy; target: personalization; signalName: "showBottomBarChosen" }
 
     TestCase {
         name: "Preferences"
@@ -39,13 +40,14 @@ Item {
 
         function init() {
             for (const spy of [backSpy, modeSpy, primarySpy, secondarySpy, resetSpy, motionSpy, noteSpy, noteResetSpy,
-                               styleSpy, paletteSpy])
+                               styleSpy, paletteSpy, barSpy])
                 spy.clear()
             page.currentIndex = 0
             personalization.themeMode = "light"
             personalization.primaryColor = ""
             personalization.secondaryColor = ""
             personalization.motionSetting = "system"
+            personalization.showBottomBar = true
             personalization.noteColor = ""
             personalization.noteStyle = "user"
             personalization.notePalette = ""
@@ -389,6 +391,34 @@ Item {
             box.activated(1)
             compare(motionSpy.count, 1)
             compare(motionSpy.signalArguments[0][0], "on")
+        }
+
+        // ---- bottom bar --------------------------------------------------
+
+        function test_show_bottom_bar_checkbox_shows_the_setting() {
+            const box = find("showBottomBarBox")
+            verify(box.checked)
+            compare(box.Accessible.name, "Show bottom bar")
+            verify(box.activeFocusOnTab)
+            personalization.showBottomBar = false
+            verify(!box.checked)
+        }
+
+        function test_toggling_show_bottom_bar_reports_and_follows_the_owner() {
+            const box = find("showBottomBarBox")
+            // The option is at the foot of a long page: scroll it into view for a real click.
+            const flick = find("personalizationScroll").contentItem
+            flick.contentY = flick.contentHeight - flick.height
+            waitForRendering(page)
+            verify(box.activeFocusOnTab, "reachable by keyboard; a CheckBox toggles on Space")
+            mouseClick(box)
+            compare(barSpy.count, 1)
+            compare(barSpy.signalArguments[0][0], false)
+            verify(box.checked, "shows the stored value until the owner applies it")
+            personalization.showBottomBar = false
+            verify(!box.checked)
+            mouseClick(box)
+            compare(barSpy.signalArguments[1][0], true)
         }
     }
 }

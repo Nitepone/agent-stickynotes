@@ -84,6 +84,8 @@ pub struct Settings {
     pub markdown_style: String,
     /// Interface scale: 1.0 is actual size (`MIN_UI_SCALE` to `MAX_UI_SCALE`).
     pub ui_scale: f64,
+    /// Show the bar at the bottom of the window (hint and trash can).
+    pub show_bottom_bar: bool,
     /// Fields this version does not know, kept so a newer version's settings
     /// survive a load and save.
     #[serde(flatten, skip_serializing_if = "serde_json::Map::is_empty")]
@@ -114,6 +116,7 @@ impl Default for Settings {
             ollama_token: Secret::default(),
             markdown_style: "default".into(),
             ui_scale: 1.0,
+            show_bottom_bar: true,
             extra: serde_json::Map::new(),
         }
     }
@@ -166,6 +169,7 @@ impl Settings {
             "note_palette": self.note_palette,
             "markdown_style": self.markdown_style,
             "ui_scale": self.ui_scale,
+            "show_bottom_bar": self.show_bottom_bar,
             "spell_check": self.spell_check,
             "draft_agent": self.draft_agent,
             "draft_system_prompt": self.draft_system_prompt,
@@ -213,7 +217,7 @@ fn exact(normalized: &str, value: &str) -> Option<String> {
 
 /// Preferences changed by the UI. Keys are the `prefs_json` keys, except
 /// that `motion_setting` is stored as the `reduce_motion` setting.
-pub const PREFS: [Pref; 16] = [
+pub const PREFS: [Pref; 17] = [
     Pref {
         key: "theme_mode",
         validate: |v| exact(crate::theme::normalize_mode(v), v),
@@ -253,6 +257,11 @@ pub const PREFS: [Pref; 16] = [
         key: "spell_check",
         validate: |v| matches!(v, "true" | "false").then(|| v.to_string()),
         set: |s, v| s.spell_check = v == "true",
+    },
+    Pref {
+        key: "show_bottom_bar",
+        validate: |v| matches!(v, "true" | "false").then(|| v.to_string()),
+        set: |s, v| s.show_bottom_bar = v == "true",
     },
     Pref {
         key: "draft_agent",
@@ -796,5 +805,36 @@ mod tests {
         (p.set)(&mut s, (p.validate)("1.5").unwrap());
         let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
         assert_eq!(v["ui_scale"], 1.5);
+    }
+
+    #[test]
+    fn show_bottom_bar_is_validated_defaults_on_and_loads_old_files() {
+        assert!(Settings::default().show_bottom_bar);
+        let (ok, bad) = (
+            |v: &str| (pref("show_bottom_bar").unwrap().validate)(v),
+            |v: &str| (pref("show_bottom_bar").unwrap().validate)(v).is_none(),
+        );
+        assert_eq!(ok("true").as_deref(), Some("true"));
+        assert_eq!(ok("false").as_deref(), Some("false"));
+        assert!(bad("yes") && bad("") && bad("False"));
+
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("settings.json"),
+            r#"{"port": 9000, "future": 1}"#,
+        )
+        .unwrap();
+        let loaded = config_in(dir.path()).load_settings();
+        assert!(loaded.show_bottom_bar, "an old file shows the bar");
+        assert!(loaded.extra.contains_key("future"));
+
+        let mut s = Settings::default();
+        let p = pref("show_bottom_bar").unwrap();
+        (p.set)(&mut s, (p.validate)("false").unwrap());
+        assert!(!s.show_bottom_bar);
+        let v: serde_json::Value = serde_json::from_str(&s.prefs_json(false)).unwrap();
+        assert_eq!(v["show_bottom_bar"], false);
+        config_in(dir.path()).save_settings(&s).unwrap();
+        assert!(!config_in(dir.path()).load_settings().show_bottom_bar);
     }
 }

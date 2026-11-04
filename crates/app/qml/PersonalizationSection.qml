@@ -17,6 +17,7 @@ PreferencesSection {
     property string noteStyle: "user"       // "user" or "variable" (a palette color per category)
     property string notePalette: ""         // palette id for "variable"; "" is the first
     property string motionSetting: "system"     // "system", "on" or "off"
+    property bool showBottomBar: true
 
     signal themeModeChosen(string mode)
     signal primaryColorChosen(string color)
@@ -27,9 +28,11 @@ PreferencesSection {
     signal noteStyleChosen(string style)
     signal notePaletteChosen(string id)
     signal motionSettingChosen(string setting)
+    signal showBottomBarChosen(bool shown)
 
     ScrollView {
         id: scroll
+        objectName: "personalizationScroll"
         anchors.fill: parent
         contentWidth: availableWidth
         clip: true
@@ -246,6 +249,32 @@ PreferencesSection {
                     property: "currentIndex"
                     value: motionBox.count >= 0 ? Math.max(0, motionBox.indexOfValue(section.motionSetting)) : 0
                 }
+            }
+
+            Label {
+                Layout.topMargin: Theme.px(12)
+                text: qsTr("Layout")
+                font.pixelSize: Theme.fs(22)
+                font.bold: true
+                color: Theme.text
+            }
+            CheckBox {
+                id: barBox
+                objectName: "showBottomBarBox"
+                text: qsTr("Show bottom bar")
+                checked: section.showBottomBar
+                onToggled: {
+                    section.showBottomBarChosen(checked)
+                    checked = Qt.binding(() => section.showBottomBar)
+                }
+                Accessible.name: qsTr("Show bottom bar")
+            }
+            Label {
+                Layout.fillWidth: true
+                text: qsTr("The bar at the bottom shows a hint and the trash can. When hidden, the trash can appears over the board while you drag a task.")
+                wrapMode: Text.Wrap
+                color: Theme.subtleText
+                font.pixelSize: Theme.fs(12)
             }
         }
     }

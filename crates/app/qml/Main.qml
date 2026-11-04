@@ -717,33 +717,24 @@ ApplicationWindow {
         }
     }
 
-    footer: ToolBar {
-        visible: !window.preferencesOpen && !window.artifactsOpen
-        implicitHeight: Theme.px(60)
+    footer: BottomBar {
+        visible: prefs.show_bottom_bar && !window.preferencesOpen && !window.artifactsOpen
+        dragging: window.dragging
+        editMode: window.editMode
+        onTaskDropped: (taskId) => window.confirmDeleteTask(taskId)
+    }
 
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: Theme.px(16)
-            anchors.rightMargin: Theme.px(16)
-
-            Label {
-                Layout.fillWidth: true
-                elide: Text.ElideMiddle
-                color: window.dragging ? Theme.text : Theme.subtleText
-                text: window.dragging && !window.editMode
-                      ? qsTr("Drop on a column to move the task, or on the trash can to delete it.")
-                      : window.editMode
-                        ? qsTr("Editing columns: drag ☰ to reorder, ✕ to delete.")
-                        : qsTr("Click a task or column title to edit it. Drag tasks between columns.")
-            }
-
-            TrashCan {
-                Layout.alignment: Qt.AlignVCenter
-                visible: !window.editMode
-                dragInProgress: window.dragging
-                onTaskDropped: (taskId) => window.confirmDeleteTask(taskId)
-            }
-        }
+    // With the bottom bar hidden the trash can floats over the board's corner
+    // while a task is dragged. Below the drag layer, above the board.
+    FloatingTrash {
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: Theme.px(20)
+        z: 10
+        barShown: prefs.show_bottom_bar
+        dragging: window.dragging && !window.preferencesOpen && !window.artifactsOpen
+        editMode: window.editMode
+        onTaskDropped: (taskId) => window.confirmDeleteTask(taskId)
     }
 
     ArtifactsPage {
@@ -780,6 +771,8 @@ ApplicationWindow {
             onNotePaletteChosen: (id) => controller.choosePref("note_palette", id)
             motionSetting: prefs.motion_setting
             onMotionSettingChosen: (setting) => controller.choosePref("motion_setting", setting)
+            showBottomBar: prefs.show_bottom_bar
+            onShowBottomBarChosen: (shown) => controller.choosePref("show_bottom_bar", String(shown))
         }
 
         EditorSection {
