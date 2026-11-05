@@ -779,6 +779,7 @@ mod tests {
             .apply(
                 Origin::User,
                 Command::UpdateProject {
+                    title: None,
                     document_prompt: Some("Be brief.".into()),
                     code_guidance: None,
                 },

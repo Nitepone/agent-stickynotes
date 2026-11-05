@@ -411,6 +411,32 @@ mod tests {
     }
 
     #[test]
+    fn one_undo_restores_the_name_and_the_instructions_together() {
+        let (store, ..) = setup();
+        let title = store.read(|b, _| b.title.clone());
+        store
+            .apply(
+                Origin::User,
+                Command::UpdateProject {
+                    title: Some("Renamed".into()),
+                    document_prompt: Some("Be brief.".into()),
+                    code_guidance: Some("Use Rust.".into()),
+                },
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            store.history_labels().0.as_deref(),
+            Some("edit project settings")
+        );
+        store.undo().unwrap();
+        let after = store.read(|b, _| (b.title.clone(), b.project.clone()));
+        assert_eq!(after.0, title);
+        assert_eq!(after.1.document_prompt, "");
+        assert_eq!(after.1.code_guidance, "");
+    }
+
+    #[test]
     fn undo_and_redo_a_move_an_edit_and_a_delete() {
         let (store, a, b, _) = setup();
         let (col2, title2) = store.read(|b, _| (b.columns[1].id, b.columns[1].title.clone()));

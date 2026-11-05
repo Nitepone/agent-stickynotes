@@ -270,6 +270,7 @@ async fn project_settings_are_readable_but_not_writable_by_agents() {
         .apply(
             Origin::User,
             Command::UpdateProject {
+                title: None,
                 document_prompt: Some("Write in plain English.".into()),
                 code_guidance: Some("Prefer small functions.".into()),
             },
@@ -415,6 +416,7 @@ async fn mcp_end_to_end() {
         .apply(
             Origin::User,
             Command::UpdateProject {
+                title: None,
                 document_prompt: Some("Be brief.".into()),
                 code_guidance: None,
             },

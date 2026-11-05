@@ -10,13 +10,11 @@ Item {
     height: 800
 
     UnsavedDialog { id: unsaved }
-    RenameDialog { id: rename }
     ConfirmDialog { id: confirm }
     AgentConnectDialog { id: agent; setupCommand: "claude mcp add x"; endpoint: "http://h:1" }
 
     SignalSpy { id: saveSpy; target: unsaved; signalName: "saveRequested" }
     SignalSpy { id: discardSpy; target: unsaved; signalName: "discardRequested" }
-    SignalSpy { id: renameSpy; target: rename; signalName: "renameRequested" }
 
     TestCase {
         name: "Dialogs"
@@ -26,8 +24,8 @@ Item {
             const found = TestHelpers.findWhere(dialog.footer, i => i.text === text && i.visible)
             return found.length ? found[0] : null
         }
-        function init() { saveSpy.clear(); discardSpy.clear(); renameSpy.clear() }
-        function cleanup() { unsaved.close(); rename.close(); confirm.close(); agent.close() }
+        function init() { saveSpy.clear(); discardSpy.clear() }
+        function cleanup() { unsaved.close(); confirm.close(); agent.close() }
 
         function test_unsaved_save_hands_back_the_pending_action() {
             unsaved.pending = "next"
@@ -50,15 +48,6 @@ Item {
             compare(discardSpy.signalArguments[0][0], "later")
             compare(unsaved.visible, false)
             compare(saveSpy.count, 0)
-        }
-
-        function test_rename_emits_the_new_title() {
-            rename.openWith("Old")
-            tryCompare(rename, "visible", true)
-            wait(50)
-            mouseClick(button(rename, "Save"))
-            compare(renameSpy.count, 1)
-            compare(renameSpy.signalArguments[0][0], "Old")
         }
 
         function test_agent_dialog_shows_only_close() {

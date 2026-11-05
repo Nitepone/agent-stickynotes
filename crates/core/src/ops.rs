@@ -228,9 +228,14 @@ fn run(board: &mut Board, origin: Origin, cmd: Command) -> Result<Applied> {
             Ok(Applied::Board)
         }
         Command::UpdateProject {
+            title,
             document_prompt,
             code_guidance,
         } => {
+            // Checked first, so a refused title changes nothing else.
+            if let Some(t) = title {
+                board.title = required(&t, "board title")?;
+            }
             if let Some(p) = document_prompt {
                 board.project.document_prompt = p.trim().to_string();
             }
@@ -1030,6 +1035,7 @@ mod tests {
             Command::DeleteColumn { id, force: true },
             Command::RenameBoard { title: "x".into() },
             Command::UpdateProject {
+                title: None,
                 document_prompt: Some("x".into()),
                 code_guidance: None,
             },
@@ -1404,6 +1410,7 @@ mod tests {
             &mut b,
             Origin::User,
             Command::UpdateProject {
+                title: None,
                 document_prompt: Some("  Write in plain English.  ".into()),
                 code_guidance: None,
             },
@@ -1413,6 +1420,7 @@ mod tests {
             &mut b,
             Origin::User,
             Command::UpdateProject {
+                title: None,
                 document_prompt: None,
                 code_guidance: Some("Prefer small functions.\n".into()),
             },
@@ -1420,6 +1428,36 @@ mod tests {
         .unwrap();
         assert_eq!(b.project.document_prompt, "Write in plain English.");
         assert_eq!(b.project.code_guidance, "Prefer small functions.");
+    }
+
+    #[test]
+    fn project_settings_can_rename_the_board_in_the_same_step() {
+        let mut b = Board::new_default();
+        execute(
+            &mut b,
+            Origin::User,
+            Command::UpdateProject {
+                title: Some("  Launch  ".into()),
+                document_prompt: Some("Be brief.".into()),
+                code_guidance: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(b.title, "Launch");
+        assert_eq!(b.project.document_prompt, "Be brief.");
+
+        let before = b.clone();
+        let refused = execute(
+            &mut b,
+            Origin::User,
+            Command::UpdateProject {
+                title: Some("   ".into()),
+                document_prompt: Some("changed".into()),
+                code_guidance: Some("changed".into()),
+            },
+        );
+        assert!(matches!(refused, Err(Error::Validation(_))));
+        assert_eq!(b, before, "an empty name changes nothing");
     }
 
     #[test]

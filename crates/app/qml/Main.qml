@@ -552,10 +552,6 @@ ApplicationWindow {
             }
             MenuItem { action: editColumnsAction }
             Action {
-                text: qsTr("&Rename Board…")
-                onTriggered: renameDialog.openWith(window.board.title)
-            }
-            Action {
                 text: qsTr("&Project Settings…")
                 onTriggered: projectDialog.openProject(controller.projectJson())
             }
@@ -604,10 +600,10 @@ ApplicationWindow {
             FocusLabel {
                 objectName: "boardTitle"
                 text: window.board.title
-                accessibleName: qsTr("Board title: %1. Rename").arg(window.board.title)
+                accessibleName: qsTr("Board title: %1. Project settings").arg(window.board.title)
                 font.pixelSize: Theme.fs(24)
                 font.bold: true
-                onClicked: renameDialog.openWith(window.board.title)
+                onClicked: projectDialog.openProject(controller.projectJson(), true)
             }
             Label {
                 visible: controller.dirty
@@ -886,19 +882,15 @@ ApplicationWindow {
     ProjectDialog {
         id: projectDialog
         onArtifactClicked: (name) => window.openArtifact(name)
-        onSaveRequested: (documentPrompt, codeGuidance) =>
-            window.finishSave(projectDialog, controller.updateProject(documentPrompt, codeGuidance))
+        onSaveRequested: (title, documentPrompt, codeGuidance) =>
+            window.finishSave(projectDialog,
+                              controller.updateProject(title, documentPrompt, codeGuidance))
     }
 
     UnsavedDialog {
         id: unsavedDialog
         onSaveRequested: (next) => window.save(next)
         onDiscardRequested: (next) => { if (next) next() }
-    }
-
-    RenameDialog {
-        id: renameDialog
-        onRenameRequested: (title) => window.result(controller.renameBoard(title))
     }
 
     ActivityDialog { id: activityDialog }

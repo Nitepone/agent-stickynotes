@@ -3,32 +3,51 @@ import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import StickyNotes
 
-// Project-level instructions that agents read (via the project_get tool and
-// the exported skill). Only the user can edit these.
+// The project's name (the board title) and the instructions agents read (via
+// the project_get tool and the exported skill). Only the user can edit these.
 StickyDialog {
     id: dialog
 
     // Every file in the project's artifacts folder: [{ name, kind, size, tasks: [numbers] }].
     property var artifacts: []
 
-    signal saveRequested(string documentPrompt, string codeGuidance)
+    signal saveRequested(string title, string documentPrompt, string codeGuidance)
     signal artifactClicked(string name)
 
-    function openProject(projectJson) {
+    // With `focusName` the name is selected, ready to type over (clicking the
+    // board title); otherwise the cursor starts in the document prompt.
+    function openProject(projectJson, focusName) {
         const project = JSON.parse(projectJson)
+        nameField.text = project.title || ""
+        nameField.invalid = false
         documentField.text = project.documentPrompt
         codeField.text = project.codeGuidance
         artifacts = project.artifacts || []
         errorText = ""
         open()
-        documentField.forceActiveFocus()
+        if (focusName === true) {
+            nameField.selectAll()
+            nameField.forceActiveFocus()
+        } else {
+            documentField.forceActiveFocus()
+        }
+    }
+
+    function save() {
+        if (nameField.text.trim().length === 0) {
+            nameField.invalid = true
+            errorText = qsTr("The project needs a name.")
+            nameField.forceActiveFocus()
+            return
+        }
+        saveRequested(nameField.text, documentField.text, codeField.text)
     }
 
     title: qsTr("Project settings")
     maxWidth: Theme.px(680)
-    height: Math.min(Theme.px(640), (parent ? parent.height : Theme.px(640)) - Theme.px(40))
+    height: Math.min(Theme.px(700), (parent ? parent.height : Theme.px(700)) - Theme.px(40))
     acceptObjectName: "saveProject"
-    onAcceptClicked: saveRequested(documentField.text, codeField.text)
+    onAcceptClicked: save()
 
     contentItem: ScrollView {
         id: scroll
@@ -39,6 +58,18 @@ StickyDialog {
             width: scroll.availableWidth
             spacing: Theme.px(6)
 
+            SectionLabel { text: qsTr("Name *"); Layout.topMargin: 0 }
+            FormTextField {
+                id: nameField
+                objectName: "nameField"
+                Layout.fillWidth: true
+                Accessible.name: qsTr("Project name")
+                placeholderText: qsTr("Shown as the board title and in the project list")
+                onAccepted: dialog.save()
+                onTextEdited: if (dialog.errorText !== "") dialog.errorText = ""
+            }
+
+            SectionLabel { text: qsTr("Agent instructions") }
             Label {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap

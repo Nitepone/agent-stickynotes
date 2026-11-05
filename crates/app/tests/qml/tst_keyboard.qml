@@ -17,7 +17,7 @@ Item {
         id: titleButton
         objectName: "boardTitle"
         text: "Test"
-        accessibleName: "Board title: Test. Rename"
+        accessibleName: "Board title: Test. Project settings"
     }
 
     BoardView {

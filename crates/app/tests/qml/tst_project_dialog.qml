@@ -31,8 +31,31 @@ Item {
             dialog.openProject(JSON.stringify({
                 title: "T", documentPrompt: "Be brief.", codeGuidance: "Use Rust." }))
             tryCompare(dialog, "visible", true)
+            compare(find("nameField").text, "T")
             compare(find("documentField").text, "Be brief.")
             compare(find("codeField").text, "Use Rust.")
+            verify(find("documentField").activeFocus, "the menu starts in the instructions")
+        }
+
+        function test_opening_from_the_title_selects_the_name() {
+            dialog.openProject(JSON.stringify({ title: "Launch", documentPrompt: "", codeGuidance: "" }), true)
+            tryCompare(dialog, "visible", true)
+            const name = find("nameField")
+            tryCompare(name, "activeFocus", true)
+            compare(name.selectedText, "Launch")
+            keyClick(Qt.Key_N)
+            compare(name.text, "n", "typing replaces the name")
+        }
+
+        function test_an_empty_name_is_refused_inline() {
+            dialog.openProject(JSON.stringify({ title: "T", documentPrompt: "", codeGuidance: "" }))
+            tryCompare(dialog, "visible", true)
+            find("nameField").text = "   "
+            mouseClick(find("saveProject"))
+            compare(saveSpy.count, 0)
+            verify(dialog.errorText.length > 0)
+            verify(find("nameField").invalid)
+            compare(dialog.visible, true)
         }
 
         function findAll(name) {
@@ -61,23 +84,27 @@ Item {
             compare(findAll("artifactLink").length, 0)
         }
 
-        function test_save_emits_both_texts() {
+        function test_save_emits_the_name_and_both_texts() {
             dialog.openProject(JSON.stringify({ title: "T", documentPrompt: "", codeGuidance: "" }))
             tryCompare(dialog, "visible", true)
+            find("nameField").text = "Renamed"
             find("documentField").text = "New doc prompt"
             find("codeField").text = "New code guidance\nsecond line"
             mouseClick(find("saveProject"))
             compare(saveSpy.count, 1)
-            compare(saveSpy.signalArguments[0][0], "New doc prompt")
-            compare(saveSpy.signalArguments[0][1], "New code guidance\nsecond line")
+            compare(saveSpy.signalArguments[0][0], "Renamed")
+            compare(saveSpy.signalArguments[0][1], "New doc prompt")
+            compare(saveSpy.signalArguments[0][2], "New code guidance\nsecond line")
         }
 
         function test_cancel_discards_edits() {
             dialog.openProject(JSON.stringify({ title: "T", documentPrompt: "keep", codeGuidance: "" }))
             tryCompare(dialog, "visible", true)
+            find("nameField").text = "edited name"
             find("documentField").text = "edited"
             dialog.close()
             dialog.openProject(JSON.stringify({ title: "T", documentPrompt: "keep", codeGuidance: "" }))
+            compare(find("nameField").text, "T")
             compare(find("documentField").text, "keep")
             compare(saveSpy.count, 0)
         }

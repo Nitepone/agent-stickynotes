@@ -124,8 +124,10 @@ pub enum Command {
     RenameBoard {
         title: String,
     },
-    /// `None` fields are left untouched.
+    /// `None` fields are left untouched. The title is the board's (and the
+    /// project's) name, so one save of Project Settings is one undo step.
     UpdateProject {
+        title: Option<String>,
         document_prompt: Option<String>,
         code_guidance: Option<String>,
     },

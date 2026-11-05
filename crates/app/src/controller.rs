@@ -116,8 +116,6 @@ pub mod qobject {
         #[qinvokable]
         fn delete_column(self: &BoardController, id: &QString, force: bool) -> QString;
         #[qinvokable]
-        fn rename_board(self: &BoardController, title: &QString) -> QString;
-        #[qinvokable]
         fn project_json(self: &BoardController) -> QString;
         /// Every file in the project's `artifacts/` folder, newest first.
         #[qinvokable]
@@ -135,9 +133,12 @@ pub mod qobject {
         /// task, as the user. Returns a result JSON.
         #[qinvokable]
         fn attach_clipboard(self: &BoardController, task_id: &QString) -> QString;
+        /// Save Project Settings: the name (board title) and both
+        /// instructions, as one change (one undo step).
         #[qinvokable]
         fn update_project(
             self: &BoardController,
+            title: &QString,
             document_prompt: &QString,
             code_guidance: &QString,
         ) -> QString;
@@ -498,12 +499,6 @@ impl qobject::BoardController {
         with_id(id, |id| Command::DeleteColumn { id, force })
     }
 
-    fn rename_board(&self, title: &QString) -> QString {
-        apply(Command::RenameBoard {
-            title: title.into(),
-        })
-    }
-
     fn project_json(&self) -> QString {
         let store = &context::get().store;
         // Listed first: the store is locked while `read` runs.
@@ -571,8 +566,14 @@ impl qobject::BoardController {
         to_qstring(viewmodel::attach_result_json(&refused))
     }
 
-    fn update_project(&self, document_prompt: &QString, code_guidance: &QString) -> QString {
+    fn update_project(
+        &self,
+        title: &QString,
+        document_prompt: &QString,
+        code_guidance: &QString,
+    ) -> QString {
         apply(Command::UpdateProject {
+            title: Some(title.into()),
             document_prompt: Some(document_prompt.into()),
             code_guidance: Some(code_guidance.into()),
         })
