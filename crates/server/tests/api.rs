@@ -528,8 +528,13 @@ async fn mcp_end_to_end() {
 
 /// A PNG header followed by `len` bytes, base64 encoded.
 fn png_base64(len: usize) -> String {
+    base64_of(b"\x89PNG\r\n\x1a\n", len)
+}
+
+/// `head` padded to `len` bytes, base64 encoded.
+fn base64_of(head: &[u8], len: usize) -> String {
     use base64::Engine as _;
-    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut bytes = head.to_vec();
     bytes.resize(len, 7);
     base64::engine::general_purpose::STANDARD.encode(bytes)
 }
@@ -621,6 +626,7 @@ async fn artifact_requests_are_validated() {
         json!({"name": "a.md"}),
         json!({"name": "a.md", "content": "x", "content_base64": "eA=="}),
         json!({"name": "a.md", "content": ""}),
+        json!({"name": "a.pdf", "content": "not a pdf"}),
     ] {
         let (status, err) = api.call("POST", &uri, Some(body.clone())).await;
         assert_eq!(status, StatusCode::BAD_REQUEST, "{body}: {err}");
@@ -650,7 +656,7 @@ async fn artifact_requests_are_validated() {
 }
 
 #[tokio::test]
-async fn a_large_image_can_be_attached_over_mcp() {
+async fn a_large_image_and_a_large_pdf_can_be_attached_over_mcp() {
     let (_root, api) = Api::in_project();
     let handle = stickynotes_server::start(api.store.clone(), TOKEN.into(), 0)
         .await
@@ -686,6 +692,34 @@ async fn a_large_image_can_be_attached_over_mcp() {
     let added: Value = serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
     assert!(added["artifact"]["added_by"].is_string());
     assert_ne!(added["artifact"]["added_by"], "user");
+
+    // A PDF just under its 10 MiB limit: about 14 MB once encoded.
+    let big_pdf = 10 * 1024 * 1024 - 16;
+    let args = json!({"task_id": id, "name": "datasheet.pdf", "content_base64": base64_of(b"%PDF-1.7", big_pdf)});
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("artifact_add")
+                .with_arguments(args.as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true), "{:?}", result.content);
+    assert_eq!(
+        api.store.read_artifact("datasheet.pdf").unwrap().len(),
+        big_pdf
+    );
+    let args = json!({"task_id": id, "artifact": "datasheet.pdf"});
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("artifact_get")
+                .with_arguments(args.as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let got: Value = serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+    assert_eq!(got["kind"], "pdf");
+    assert!(got["content"].is_null());
+    assert!(got["path"].as_str().unwrap().ends_with("datasheet.pdf"));
 
     let args = json!({"task_id": id, "artifact": "big.png"});
     let result = client

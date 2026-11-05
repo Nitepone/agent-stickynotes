@@ -110,6 +110,8 @@ pub struct Task {
 pub enum ArtifactKind {
     Markdown,
     Image,
+    /// Opened in the system's PDF viewer, not inside the app.
+    Pdf,
 }
 
 impl ArtifactKind {
@@ -117,6 +119,7 @@ impl ArtifactKind {
         match self {
             ArtifactKind::Markdown => "markdown",
             ArtifactKind::Image => "image",
+            ArtifactKind::Pdf => "pdf",
         }
     }
 }

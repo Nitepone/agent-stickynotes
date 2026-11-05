@@ -357,10 +357,18 @@ ApplicationWindow {
         }
     }
 
+    // Markdown and images open in the app's viewer; PDFs in the system's viewer.
     function openArtifact(name) {
         const r = result(controller.artifactJson(name))
-        if (r.ok)
+        if (!r.ok)
+            return
+        if (r.kind === "pdf") {
+            if (!Qt.openUrlExternally(r.url))
+                messageDialog.inform(qsTr("Cannot open %1").arg(name),
+                                     qsTr("No application is set up to open PDF files. The file is at %1").arg(r.path))
+        } else {
             viewerComponent.createObject(null).showArtifact(r)
+        }
     }
 
     // The project picker. With `forSaving` the board has no project yet and

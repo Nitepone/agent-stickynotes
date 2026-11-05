@@ -969,6 +969,52 @@ mod tests {
     }
 
     #[test]
+    fn a_pdf_attaches_survives_a_reload_and_detaches_leaving_the_file() {
+        use crate::model::ArtifactKind;
+        let (_root, store, task) = project_store();
+        let (artifact, _) = store
+            .add_artifact(Origin::User, task, "Spec.pdf", b"%PDF-1.4 body", None)
+            .unwrap();
+        assert_eq!(
+            (artifact.name.as_str(), artifact.kind),
+            ("Spec.pdf", ArtifactKind::Pdf)
+        );
+        assert!(
+            store
+                .add_artifact(Origin::User, task, "fake.pdf", b"<html>", None)
+                .is_err()
+        );
+        store.save(false).unwrap();
+
+        let dir = store.project_dir().unwrap();
+        let reopened = BoardStore::new(true);
+        reopened.open_project(&dir).unwrap();
+        let kinds = reopened.read(|b, _| {
+            b.task(task)
+                .unwrap()
+                .artifacts
+                .iter()
+                .map(|a| a.kind)
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(kinds, [ArtifactKind::Pdf]);
+        assert!(reopened.artifact_path("Spec.pdf").is_ok());
+
+        reopened
+            .apply(
+                Origin::User,
+                Command::DetachArtifact {
+                    task,
+                    artifact: artifact.id,
+                },
+                None,
+            )
+            .unwrap();
+        assert!(reopened.read(|b, _| b.task(task).unwrap().artifacts.is_empty()));
+        assert!(reopened.artifact_path("Spec.pdf").is_ok(), "the file stays");
+    }
+
+    #[test]
     fn a_task_has_a_limited_number_of_artifacts() {
         let (_root, store, task) = project_store();
         for i in 0..artifact::MAX_PER_TASK {

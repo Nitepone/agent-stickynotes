@@ -3,7 +3,7 @@
 A local, Trello-style kanban board for humans and AI agents. One Rust binary with
 a QML UI; while it runs it also serves an MCP server and a REST API on loopback,
 so Claude Code (or any agent) can read the board, add tasks, tick criteria, and
-attach Markdown and images to tasks.
+attach Markdown, images and PDFs to tasks.
 
 ![A board for writing a Linux driver for an I2C audio codec](docs/screenshot.png)
 

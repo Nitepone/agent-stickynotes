@@ -1,7 +1,7 @@
 //! Files attached to tasks: which names and contents are accepted, and how
 //! they are written to and read from a project's `artifacts/` folder.
 //!
-//! Artifacts are Markdown and images. Names are reduced to a safe file name
+//! Artifacts are Markdown, images and PDFs. Names are reduced to a safe file name
 //! (no folders), contents are checked against their type, and a file that
 //! already exists is never overwritten.
 
@@ -17,6 +17,8 @@ use crate::project;
 pub const MAX_TEXT_BYTES: usize = 1 << 20;
 /// Largest raster image.
 pub const MAX_IMAGE_BYTES: usize = 5 << 20;
+/// Largest PDF.
+pub const MAX_PDF_BYTES: usize = 10 << 20;
 /// Most artifacts one task can have.
 pub const MAX_PER_TASK: usize = 50;
 
@@ -29,6 +31,7 @@ const TYPES: &[(&str, ArtifactKind)] = &[
     ("gif", ArtifactKind::Image),
     ("webp", ArtifactKind::Image),
     ("svg", ArtifactKind::Image),
+    ("pdf", ArtifactKind::Pdf),
 ];
 
 fn invalid(msg: impl Into<String>) -> Error {
@@ -74,18 +77,32 @@ fn accepted_list() -> String {
         .join(", ")
 }
 
-/// Check that `data` is plausibly what `file_name`'s extension says.
-pub fn validate_content(file_name: &str, kind: ArtifactKind, data: &[u8]) -> Result<()> {
-    let ext = file_name
+fn extension(file_name: &str) -> String {
+    file_name
         .rsplit_once('.')
         .map(|(_, e)| e.to_ascii_lowercase())
-        .unwrap_or_default();
-    let is_text = kind == ArtifactKind::Markdown || ext == "svg";
-    let limit = if is_text {
-        MAX_TEXT_BYTES
-    } else {
-        MAX_IMAGE_BYTES
-    };
+        .unwrap_or_default()
+}
+
+/// Whether the file is text (Markdown or SVG) rather than binary.
+pub fn is_text(file_name: &str, kind: ArtifactKind) -> bool {
+    kind == ArtifactKind::Markdown || (kind == ArtifactKind::Image && extension(file_name) == "svg")
+}
+
+/// The size limit for a file of this name and kind.
+pub fn max_bytes(file_name: &str, kind: ArtifactKind) -> usize {
+    match kind {
+        _ if is_text(file_name, kind) => MAX_TEXT_BYTES,
+        ArtifactKind::Pdf => MAX_PDF_BYTES,
+        _ => MAX_IMAGE_BYTES,
+    }
+}
+
+/// Check that `data` is plausibly what `file_name`'s extension says.
+pub fn validate_content(file_name: &str, kind: ArtifactKind, data: &[u8]) -> Result<()> {
+    let ext = extension(file_name);
+    let is_text = is_text(file_name, kind);
+    let limit = max_bytes(file_name, kind);
     if data.is_empty() {
         return Err(invalid("the artifact is empty"));
     }
@@ -103,6 +120,15 @@ pub fn validate_content(file_name: &str, kind: ArtifactKind, data: &[u8]) -> Res
             return Err(invalid(format!("'{file_name}' is not an SVG image")));
         }
         return Ok(());
+    }
+    if kind == ArtifactKind::Pdf {
+        return if data.starts_with(b"%PDF-") {
+            Ok(())
+        } else {
+            Err(invalid(format!(
+                "the contents of '{file_name}' are not a PDF"
+            )))
+        };
     }
     let looks_right = match ext.as_str() {
         "png" => data.starts_with(b"\x89PNG\r\n\x1a\n"),
@@ -266,6 +292,22 @@ mod tests {
     }
 
     #[test]
+    fn pdfs_are_accepted_by_their_header() {
+        let pdf = ArtifactKind::Pdf;
+        assert_eq!(
+            clean_name("Spec Sheet.PDF").unwrap(),
+            ("Spec-Sheet.pdf".into(), pdf)
+        );
+        assert!(validate_content("a.pdf", pdf, b"%PDF-1.7\n%...").is_ok());
+        let wrong = validate_content("a.pdf", pdf, PNG).unwrap_err().to_string();
+        assert!(
+            wrong.contains("a.pdf") && wrong.contains("not a PDF"),
+            "{wrong}"
+        );
+        assert!(validate_content("a.pdf", pdf, b"").is_err());
+    }
+
+    #[test]
     fn size_limits_apply_per_type() {
         let big_text = vec![b'a'; MAX_TEXT_BYTES + 1];
         assert!(validate_content("a.md", ArtifactKind::Markdown, &big_text).is_err());
@@ -274,6 +316,13 @@ mod tests {
         assert!(validate_content("a.png", ArtifactKind::Image, &big_png).is_ok());
         big_png.resize(MAX_IMAGE_BYTES + 1, 0);
         assert!(validate_content("a.png", ArtifactKind::Image, &big_png).is_err());
+        let mut big_pdf = b"%PDF-1.7".to_vec();
+        big_pdf.resize(MAX_PDF_BYTES, 0);
+        assert!(validate_content("a.pdf", ArtifactKind::Pdf, &big_pdf).is_ok());
+        big_pdf.push(0);
+        assert!(validate_content("a.pdf", ArtifactKind::Pdf, &big_pdf).is_err());
+        assert_eq!(max_bytes("a.svg", ArtifactKind::Image), MAX_TEXT_BYTES);
+        assert_eq!(max_bytes("a.png", ArtifactKind::Image), MAX_IMAGE_BYTES);
     }
 
     #[test]

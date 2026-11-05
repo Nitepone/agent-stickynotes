@@ -25,7 +25,7 @@ pub fn router(service: AgentService) -> Router {
         .route("/tasks/{id}/criteria/{cid}", put(set_criterion))
         .route(
             "/tasks/{id}/artifacts",
-            // Images arrive base64 encoded: room for the largest one.
+            // Files arrive base64 encoded: room for the largest (a PDF).
             post(add_artifact).layer(DefaultBodyLimit::max(ARTIFACT_BODY_LIMIT)),
         )
         .route(
@@ -35,7 +35,9 @@ pub fn router(service: AgentService) -> Router {
         .with_state(service)
 }
 
-pub(crate) const ARTIFACT_BODY_LIMIT: usize = 8 << 20;
+/// Base64 makes a file a third bigger; this fits a PDF at its 10 MiB limit
+/// plus the JSON around it.
+pub(crate) const ARTIFACT_BODY_LIMIT: usize = 15 << 20;
 
 type ApiResult = Result<Response, ServiceError>;
 

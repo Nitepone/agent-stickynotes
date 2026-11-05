@@ -141,8 +141,8 @@ pub struct ArtifactView {
 pub struct ArtifactContent {
     #[serde(flatten)]
     pub artifact: ArtifactView,
-    /// The file's text for Markdown and SVG; images are binary, so this is
-    /// null for them and the file at `path` is the content.
+    /// The file's text for Markdown and SVG; raster images and PDFs are
+    /// binary, so this is null for them and the file at `path` is the content.
     pub content: Option<String>,
 }
 
@@ -153,20 +153,21 @@ pub struct ArtifactAdded {
 }
 
 // Body of an add-artifact request. Give `content` for text, or
-// `content_base64` for any file (needed for raster images).
+// `content_base64` for any file (needed for raster images and PDFs).
 //
 // The input structs below also supply the MCP tool schemas, so their field doc
 // comments are what agents read: keep them agent-facing.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct NewArtifact {
-    /// File name with extension: .md for Markdown, or .png .jpg .jpeg .gif
-    /// .webp .svg for images. It is cleaned up and made unique, so check the
-    /// returned name.
+    /// File name with extension: .md for Markdown, .png .jpg .jpeg .gif
+    /// .webp .svg for images, or .pdf. It is cleaned up and made unique, so
+    /// check the returned name.
     pub name: String,
     /// The text, for .md and .svg files. Give this or content_base64.
     pub content: Option<String>,
-    /// The file's bytes, base64 encoded (needed for raster images). Limits:
-    /// 1 MiB for Markdown and SVG, 5 MiB for other images.
+    /// The file's bytes, base64 encoded (needed for raster images and PDFs).
+    /// Limits: 1 MiB for Markdown and SVG, 5 MiB for other images, 10 MiB for
+    /// PDFs.
     pub content_base64: Option<String>,
 }
 
@@ -461,7 +462,7 @@ impl AgentService {
         let content = match found.kind {
             ArtifactKind::Markdown => Some(self.read_text(&found)?),
             ArtifactKind::Image if found.name.ends_with(".svg") => Some(self.read_text(&found)?),
-            ArtifactKind::Image => None,
+            ArtifactKind::Image | ArtifactKind::Pdf => None,
         };
         Ok(ArtifactContent {
             artifact: artifact_view(&found),

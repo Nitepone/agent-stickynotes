@@ -262,11 +262,7 @@ pub fn task_json(board: &Board, id: Uuid) -> String {
 /// agents. Nothing is attached on error.
 pub fn attach_bytes(store: &BoardStore, task: Uuid, name: &str, data: &[u8]) -> Result<(), Error> {
     let (clean, kind) = artifact::clean_name(name)?;
-    let limit = match kind {
-        ArtifactKind::Markdown => artifact::MAX_TEXT_BYTES,
-        ArtifactKind::Image if clean.ends_with(".svg") => artifact::MAX_TEXT_BYTES,
-        ArtifactKind::Image => artifact::MAX_IMAGE_BYTES,
-    };
+    let limit = artifact::max_bytes(&clean, kind);
     if data.len() > limit {
         return Err(Error::Validation(format!(
             "{name} is too big (the limit is {} MiB)",
@@ -288,11 +284,7 @@ pub fn attach_file(store: &BoardStore, task: Uuid, path: &Path) -> Result<(), Er
         .ok_or_else(|| Error::Validation("that file has no usable name".into()))?;
     // Name and type are checked before the file is read.
     let (clean, kind) = artifact::clean_name(name)?;
-    let limit = match kind {
-        ArtifactKind::Markdown => artifact::MAX_TEXT_BYTES,
-        ArtifactKind::Image if clean.ends_with(".svg") => artifact::MAX_TEXT_BYTES,
-        ArtifactKind::Image => artifact::MAX_IMAGE_BYTES,
-    };
+    let limit = artifact::max_bytes(&clean, kind);
     let len = std::fs::metadata(path)
         .map_err(|e| Error::Validation(format!("cannot read {name}: {e}")))?
         .len();
@@ -396,18 +388,39 @@ pub fn artifacts_json(files: &[ArtifactFile]) -> String {
     serde_json::Value::Array(list).to_string()
 }
 
+/// A `file://` URL for a local path, with every byte that is not plainly
+/// safe in a URL percent-encoded (spaces, `#`, `?`, non-ASCII, ...).
+/// Windows paths (`C:\x\y.pdf`) become `file:///C:/x/y.pdf`.
+pub fn file_url(path: &Path) -> String {
+    let text = path.to_string_lossy().replace('\\', "/");
+    let mut out = String::from(if text.starts_with('/') {
+        "file://"
+    } else {
+        "file:///"
+    });
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~/:".contains(&b) {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
 /// What `ArtifactViewer.qml` shows for a file in `artifacts/`: Markdown comes
-/// with its text, images with the path of the file.
+/// with its text, images with the path of the file. PDFs are not shown in the
+/// app: `url` is what the system's PDF viewer is asked to open.
 pub fn artifact_json(store: &BoardStore, name: &str) -> String {
     let shown = store.artifact_path(name).and_then(|path| {
         let kind = artifact::kind_of(name).ok_or_else(|| {
-            Error::Validation(format!("'{name}' is not a Markdown or image file"))
+            Error::Validation(format!("'{name}' is not a Markdown, image or PDF file"))
         })?;
         let text = match kind {
             ArtifactKind::Markdown => {
                 Some(String::from_utf8_lossy(&store.read_artifact(name)?).into_owned())
             }
-            ArtifactKind::Image => None,
+            ArtifactKind::Image | ArtifactKind::Pdf => None,
         };
         let html = text.as_deref().map(crate::markdown::to_html);
         Ok(json!({
@@ -417,6 +430,7 @@ pub fn artifact_json(store: &BoardStore, name: &str) -> String {
             "text": text,
             "html": html,
             "path": path.to_string_lossy(),
+            "url": file_url(&path),
         }))
     });
     match shown {
@@ -942,6 +956,41 @@ mod tests {
     }
 
     #[test]
+    fn file_urls_encode_what_a_url_cannot_hold() {
+        assert_eq!(
+            file_url(Path::new("/home/a b/#1?/résumé.pdf")),
+            "file:///home/a%20b/%231%3F/r%C3%A9sum%C3%A9.pdf"
+        );
+        assert_eq!(
+            file_url(Path::new(r"C:\Users\me\x.pdf")),
+            "file:///C:/Users/me/x.pdf"
+        );
+    }
+
+    #[test]
+    fn pdfs_attach_from_files_and_fakes_or_oversized_ones_are_refused() {
+        let (root, store, id) = store_with_artifacts();
+        let count = || store.snapshot().board.task(id).unwrap().artifacts.len();
+        let before = count();
+        let good = root.path().join("spec.pdf");
+        std::fs::write(&good, b"%PDF-1.5 body").unwrap();
+        attach_file(&store, id, &good).unwrap();
+        assert_eq!(count(), before + 1);
+
+        let fake = root.path().join("fake.pdf");
+        std::fs::write(&fake, b"<html>").unwrap();
+        let err = attach_file(&store, id, &fake).unwrap_err().to_string();
+        assert!(err.contains("not a PDF"), "{err}");
+        let mut big = b"%PDF-1.5".to_vec();
+        big.resize(artifact::MAX_PDF_BYTES + 1, 0);
+        let err = attach_bytes(&store, id, "big.pdf", &big)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("too big"), "{err}");
+        assert_eq!(count(), before + 1);
+    }
+
+    #[test]
     fn a_batch_attaches_the_good_files_and_lists_the_refused_ones() {
         let (root, store, id) = store_with_artifacts();
         let good1 = root.path().join("one.md");
@@ -1039,7 +1088,7 @@ mod tests {
 
     #[test]
     fn viewer_gets_text_for_markdown_and_a_path_for_images() {
-        let (_root, store, _) = store_with_artifacts();
+        let (_root, store, task) = store_with_artifacts();
         let md: serde_json::Value =
             serde_json::from_str(&artifact_json(&store, "plan.md")).unwrap();
         assert_eq!(md["ok"], true);
@@ -1051,6 +1100,17 @@ mod tests {
         assert_eq!(img["kind"], "image");
         assert!(img["text"].is_null());
         assert!(img["path"].as_str().unwrap().ends_with("artifacts/x.png"));
+
+        attach_bytes(&store, task, "Data Sheet.pdf", b"%PDF-1.7 x").unwrap();
+        let pdf: serde_json::Value =
+            serde_json::from_str(&artifact_json(&store, "Data-Sheet.pdf")).unwrap();
+        assert_eq!(pdf["kind"], "pdf");
+        assert!(pdf["text"].is_null() && pdf["html"].is_null());
+        let url = pdf["url"].as_str().unwrap();
+        assert!(
+            url.starts_with("file:///") && url.ends_with("/artifacts/Data-Sheet.pdf"),
+            "{url}"
+        );
 
         for bad in ["../stickynotes.json", "missing.md", "stickynotes.json", ""] {
             let v: serde_json::Value = serde_json::from_str(&artifact_json(&store, bad)).unwrap();

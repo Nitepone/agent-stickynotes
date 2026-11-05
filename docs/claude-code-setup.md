@@ -118,8 +118,8 @@ error that tells the agent to ask you.
 | `task_advance` | Move one column to the right; the agent must check `next_column.description` first |
 | `task_delete` | Delete a task |
 | `criterion_set` | Tick or untick an acceptance criterion |
-| `artifact_add` | Attach a Markdown (`.md`) or image (`.png .jpg .gif .webp .svg`) file to a task, as `content` (text) or `content_base64` |
-| `artifact_get` | Read an attached artifact: text for Markdown and SVG, metadata and path for other images |
+| `artifact_add` | Attach a Markdown (`.md`), image (`.png .jpg .gif .webp .svg`) or PDF (`.pdf`) file to a task, as `content` (text) or `content_base64` |
+| `artifact_get` | Read an attached artifact: text for Markdown and SVG, metadata and path for other images and PDFs |
 | `artifact_detach` | Detach an artifact from a task; the file stays in `artifacts/` |
 
 Every task has a permanent number shown as `#12`. Every tool (and the REST paths) accepts `#12` or `12` wherever a task id is expected, and task views include `number`, so you can say "look at #12" and the agent can find it. Numbers are never reused after a task is deleted.
@@ -144,9 +144,10 @@ written to the `artifacts/` folder of the open project right away (the record on
 the task is saved with the board), so a project must be open. Names are cleaned
 to a plain file name and never overwrite an existing file (`notes.md` becomes
 `notes-2.md`); only the accepted types are stored, their contents are checked
-against the type, and the limits are 1 MiB for Markdown and SVG, 5 MiB for other
-images and 50 artifacts per task. Request bodies up to 8 MiB are accepted, which
-covers a base64-encoded 5 MiB image. Base64 costs output tokens (about 4/3 of
+against the type (a PDF must start with `%PDF-`), and the limits are 1 MiB for
+Markdown and SVG, 5 MiB for other images, 10 MiB for PDFs and 50 artifacts per
+task. Request bodies up to 15 MiB are accepted, which covers a base64-encoded
+10 MiB PDF. Base64 costs output tokens (about 4/3 of
 the file size), so agents should prefer text formats where they can.
 
 Each artifact records who added it (`added_by`: `user` for files the user

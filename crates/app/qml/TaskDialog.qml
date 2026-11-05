@@ -328,6 +328,13 @@ StickyDialog {
         chooser.open()
     }
 
+    // The type shown next to an attached file.
+    function kindLabel(kind) {
+        if (kind === "image") return qsTr("Image")
+        if (kind === "pdf") return qsTr("PDF")
+        return qsTr("Markdown")
+    }
+
     // "You · 3/5/26, 10:12 · in Backlog"; only what is known is shown.
     function artifactMeta(addedBy, byAgent, addedAt, stage) {
         const parts = []
@@ -404,9 +411,10 @@ StickyDialog {
         title: qsTr("Attach a file")
         fileMode: FileDialog.OpenFile
         nameFilters: [
-            qsTr("Markdown and images (*.md *.png *.jpg *.jpeg *.gif *.webp *.svg)"),
+            qsTr("Markdown, images and PDFs (*.md *.png *.jpg *.jpeg *.gif *.webp *.svg *.pdf)"),
             qsTr("Markdown (*.md)"),
-            qsTr("Images (*.png *.jpg *.jpeg *.gif *.webp *.svg)")]
+            qsTr("Images (*.png *.jpg *.jpeg *.gif *.webp *.svg)"),
+            qsTr("PDF (*.pdf)")]
         onAccepted: dialog.attachRequested(dialog.taskId, selectedFile)
     }
 
@@ -730,7 +738,7 @@ StickyDialog {
                 objectName: "noArtifacts"
                 Layout.fillWidth: true
                 visible: !dialog.creating && artifactsModel.count === 0
-                text: qsTr("No files attached. You and agents can attach Markdown and images; drop files here or press Ctrl+V.")
+                text: qsTr("No files yet. You and agents can attach Markdown, images or PDFs; drop them here or press Ctrl+V.")
                 color: Theme.subtleText
                 font.pixelSize: Theme.fs(12)
                 wrapMode: Text.Wrap
@@ -768,7 +776,8 @@ StickyDialog {
                             onClicked: dialog.artifactClicked(parent.parent.aname)
                         }
                         Label {
-                            text: parent.parent.akind === "image" ? qsTr("Image") : qsTr("Markdown")
+                            objectName: "artifactKind"
+                            text: dialog.kindLabel(parent.parent.akind)
                             color: Theme.subtleText
                             font.pixelSize: Theme.fs(12)
                         }

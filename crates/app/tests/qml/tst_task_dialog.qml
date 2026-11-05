@@ -100,6 +100,19 @@ Item {
             compare(artifactSpy.signalArguments[0][0], "flow.png")
         }
 
+        function test_each_artifact_shows_its_type_and_a_pdf_opens_through_the_same_signal() {
+            openWithArtifacts([
+                { id: "a1", name: "plan.md", kind: "markdown" },
+                { id: "a2", name: "flow.png", kind: "image" },
+                { id: "a3", name: "datasheet.pdf", kind: "pdf" },
+            ])
+            compare(fields("artifactKind").map(l => l.text), ["Markdown", "Image", "PDF"])
+            // clicked() rather than mouseClick: a real click scrolls the dialog,
+            // and the tests after this one expect it at the top.
+            fields("artifactLink")[2].clicked()
+            compare(artifactSpy.signalArguments[0][0], "datasheet.pdf")
+        }
+
         function test_artifact_metadata_and_the_attach_button() {
             openWithArtifacts([
                 { id: "a1", name: "plan.md", kind: "markdown", byAgent: true, addedBy: "claude-code",

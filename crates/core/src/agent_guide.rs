@@ -33,7 +33,7 @@ pub const TOOLS: &[(&str, &str)] = &[
     ("criterion_set", "tick or untick an acceptance criterion"),
     (
         "artifact_add",
-        "attach a Markdown or image file to a task (stored in the project's artifacts folder)",
+        "attach a Markdown, image or PDF file to a task (stored in the project's artifacts folder)",
     ),
     (
         "artifact_get",
@@ -65,7 +65,7 @@ one fits; names match case-insensitively.
 - Tick acceptance criteria with criterion_set as you complete them.
 - Link related tasks with references in task_update (blocks, blocked_by, relates_to, duplicates, \
 duplicated_by); the other task is updated to match.
-- Attach documents and diagrams you produce for a task with artifact_add (Markdown or images) \
+- Attach documents and diagrams you produce for a task with artifact_add (Markdown, images or PDFs) \
 instead of pasting them into the description. Artifacts cannot be replaced: add a new one and \
 detach the old; detaching never deletes the file.
 - The human may disable write access at any time; write tools then fail and you should tell the user.

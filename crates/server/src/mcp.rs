@@ -178,7 +178,7 @@ impl BoardMcp {
     }
 
     #[tool(
-        description = "Attach a file to a task: Markdown (.md) or an image (.png .jpg .gif .webp .svg), for example a design note, a report or a diagram. Pass text as content, or bytes as content_base64. The file is stored in the project's artifacts folder and shown to the user on the task. You cannot replace an existing artifact; add a new one and detach the old."
+        description = "Attach a file to a task: Markdown (.md), an image (.png .jpg .gif .webp .svg) or a PDF (.pdf), for example a design note, a report, a diagram or a datasheet. Pass text as content, or bytes as content_base64. The file is stored in the project's artifacts folder and shown to the user on the task. You cannot replace an existing artifact; add a new one and detach the old."
     )]
     fn artifact_add(
         &self,
@@ -194,7 +194,7 @@ impl BoardMcp {
     }
 
     #[tool(
-        description = "Read an artifact attached to a task. Markdown and SVG come back as text; for other images only the metadata and path are returned."
+        description = "Read an artifact attached to a task. Markdown and SVG come back as text; for other images and PDFs only the metadata and path are returned."
     )]
     fn artifact_get(&self, Parameters(a): Parameters<ArtifactRefArgs>) -> ToolResult {
         json(self.service.artifact(&a.task_id, &a.artifact))
