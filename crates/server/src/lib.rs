@@ -32,9 +32,15 @@ impl ServerHandle {
     }
 }
 
-/// Build the full router (REST + MCP + auth).
-pub fn router(store: Arc<BoardStore>, token: String, cancel: CancellationToken) -> Router {
-    let service = AgentService::new(store);
+/// Build the full router (REST + MCP + auth). `port` is what agents are told
+/// the server listens on.
+pub fn router(
+    store: Arc<BoardStore>,
+    token: String,
+    cancel: CancellationToken,
+    port: Option<u16>,
+) -> Router {
+    let service = AgentService::new(store).with_port(port);
     let mcp_service = service.clone();
     let mut config = StreamableHttpServerConfig::default();
     config.cancellation_token = cancel.child_token();
@@ -69,7 +75,7 @@ pub async fn start(
     };
     let addr = listener.local_addr()?;
     let cancel = CancellationToken::new();
-    let app = router(store, token, cancel.clone());
+    let app = router(store, token, cancel.clone(), Some(addr.port()));
     let shutdown = cancel.clone();
     tokio::spawn(async move {
         let result = axum::serve(listener, app)

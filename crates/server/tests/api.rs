@@ -22,7 +22,8 @@ struct Api {
 impl Api {
     fn new(agent_write: bool) -> Self {
         let store = BoardStore::new(agent_write);
-        let app = stickynotes_server::router(store.clone(), TOKEN.into(), CancellationToken::new());
+        let app =
+            stickynotes_server::router(store.clone(), TOKEN.into(), CancellationToken::new(), None);
         Api { store, app }
     }
 
@@ -378,6 +379,53 @@ async fn patching_a_criterion_with_a_malformed_id_is_a_bad_request() {
         err,
         json!({"error": "bad_request", "message": "'nope' is not a valid criterion id"})
     );
+}
+
+#[tokio::test]
+async fn agents_are_told_the_board_and_the_port_it_really_got() {
+    // Another board already has the preferred port, so this one falls back.
+    let taken = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let preferred = taken.local_addr().unwrap().port();
+    let store = BoardStore::new(true);
+    store
+        .apply(
+            Origin::User,
+            Command::RenameBoard {
+                title: "Codec driver".into(),
+            },
+            None,
+        )
+        .unwrap();
+    let handle = stickynotes_server::start(store.clone(), TOKEN.into(), preferred)
+        .await
+        .unwrap();
+    let port = handle.addr.port();
+    assert_ne!(port, preferred);
+
+    let config =
+        StreamableHttpClientTransportConfig::with_uri(format!("http://{}/mcp", handle.addr))
+            .auth_header(TOKEN);
+    let client = ().serve(StreamableHttpClientTransport::from_config(config)).await.unwrap();
+    let instructions = client.peer_info().unwrap().instructions.clone().unwrap();
+    assert!(
+        instructions.contains(&format!(
+            "\"Codec driver\" (agent-stickynotes) on port {port}"
+        )),
+        "{instructions}"
+    );
+    assert!(instructions.contains("wait for them to confirm before your first write"));
+
+    let result = client
+        .call_tool(CallToolRequestParams::new("project_get"))
+        .await
+        .unwrap();
+    let project: Value = serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+    assert_eq!(project["title"], "Codec driver");
+    assert_eq!(project["port"], port);
+
+    client.cancel().await.unwrap();
+    handle.shutdown();
+    drop(taken);
 }
 
 #[tokio::test]

@@ -98,6 +98,21 @@ for every project:
 
 Sources: <https://opencode.ai/docs/mcp-servers/>, <https://opencode.ai/docs/config/>.
 
+### Several boards at once
+
+Each open board is its own app window with its own agent server. The first one
+gets port 7317; the others get a free port, which changes each time they start.
+**Agent ▸ Connect Agent…** and **Preferences ▸ About** show a board's port.
+
+So that an agent never writes to the wrong board, it is told (in the MCP
+instructions and the exported skill) to name the board and port it is connected
+to at the start of a session (`project_get` returns both) and to wait for you
+to confirm before its first change. If it is on the wrong board, or its tools
+stop responding after a restart, it asks which board you meant: open
+**Agent ▸ Connect Agent…** in that board's window, run the command shown there,
+then run `/mcp` in Claude Code to reconnect. The agent never reads the token
+itself.
+
 ## 2. Allow writes (when you want them)
 
 Agents can always read. To let them create, edit or move tasks, enable
@@ -109,7 +124,7 @@ error that tells the agent to ask you.
 
 | Tool | Purpose |
 |---|---|
-| `project_get` | The project's instructions from **Board ▸ Project Settings…**: how to write documents and code. Agents are told to call it first |
+| `project_get` | The board's title and the server's port, and the project's instructions from **Board ▸ Project Settings…**: how to write documents and code. Agents are told to call it first and tell you which board and port they are on |
 | `board_get` | Columns in order (with their entry criteria), task summaries, revision, write flag |
 | `task_list` | Task summaries, optionally for one column (id or title) |
 | `task_get` | Full task plus `next_column` (where `task_advance` would move it, with its criteria) |

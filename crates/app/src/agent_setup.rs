@@ -67,6 +67,14 @@ fn pretty(value: Value) -> String {
 /// Ask the app's own server for the project with the bearer token. This shows
 /// that the endpoint is up and the token is accepted; it says nothing about an
 /// external client's configuration.
+/// The port of an endpoint such as `http://127.0.0.1:7317`; 0 if it has none.
+pub fn port_of(endpoint: &str) -> u16 {
+    endpoint
+        .rsplit_once(':')
+        .and_then(|(_, port)| port.trim_end_matches('/').parse().ok())
+        .unwrap_or(0)
+}
+
 pub fn check_endpoint(endpoint: &str, token: &str) -> Result<(), String> {
     let host = endpoint
         .strip_prefix("http://")
@@ -112,6 +120,13 @@ mod tests {
     use stickynotes_core::BoardStore;
 
     const EP: &str = "http://127.0.0.1:7317";
+
+    #[test]
+    fn the_port_comes_from_the_endpoint() {
+        assert_eq!(port_of("http://127.0.0.1:7317"), 7317);
+        assert_eq!(port_of("http://127.0.0.1:40123/"), 40123);
+        assert_eq!(port_of("http://localhost"), 0);
+    }
 
     #[test]
     fn cli_command_text_is_unchanged() {

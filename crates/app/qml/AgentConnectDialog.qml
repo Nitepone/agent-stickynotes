@@ -15,6 +15,8 @@ StickyDialog {
     property string desktopBridgeJson: ""     // Claude Desktop, claude_desktop_config.json
     property string opencodeJson: ""          // OpenCode, opencode.json
     property string endpoint: ""
+    // This board's agent server port; each open board has its own.
+    property int port: 0
     property bool agentWrite: false
     property bool reducedMotion: false
 
@@ -60,6 +62,14 @@ StickyDialog {
                 Layout.fillWidth: true
                 wrapMode: Text.Wrap
                 text: qsTr("Pick your client and follow its steps. The agent server runs while this window is open.")
+            }
+            Label {
+                objectName: "portLabel"
+                Layout.fillWidth: true
+                wrapMode: Text.Wrap
+                visible: dialog.port > 0
+                text: qsTr("This board's agent server is on port %1. Each open board has its own port, and agents tell you which board and port they are on before they change anything. To point a session at this board, run the command below and then /mcp in Claude Code.").arg(dialog.port)
+                Accessible.name: text
             }
 
             CollapsibleSection {

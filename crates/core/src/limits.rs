@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn the_agent_guide_tells_agents_the_limits() {
-        let text = crate::agent_guide::mcp_instructions();
+        let text = crate::agent_guide::mcp_instructions("B", None);
         assert!(text.contains("Size limits"));
         assert!(text.contains(&MAX_TASKS.to_string()));
         assert!(text.contains(&MAX_DESCRIPTION_CHARS.to_string()));

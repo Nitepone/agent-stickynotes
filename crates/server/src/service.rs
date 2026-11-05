@@ -49,7 +49,12 @@ pub struct BoardView {
 /// The user's project-level instructions for agents (read-only for agents).
 #[derive(Debug, Serialize)]
 pub struct ProjectView {
+    /// The board's title. Several boards can be open at once; tell the user
+    /// which one you are working on.
     pub title: String,
+    /// The port of the agent server you are connected to (each open board
+    /// has its own). Null when it is not known.
+    pub port: Option<u16>,
     /// How to write documents (specs, reports, release notes) for this project.
     pub document_prompt: String,
     /// How code for this project should be written.
@@ -247,6 +252,8 @@ pub struct AgentService {
     store: Arc<BoardStore>,
     /// The calling agent's name (the MCP client), for the activity log.
     client: Option<String>,
+    /// The port the server listens on, reported to agents.
+    port: Option<u16>,
 }
 
 impl AgentService {
@@ -254,7 +261,17 @@ impl AgentService {
         AgentService {
             store,
             client: None,
+            port: None,
         }
+    }
+
+    /// The same service, reporting `port` as the server's.
+    pub fn with_port(self, port: Option<u16>) -> Self {
+        AgentService { port, ..self }
+    }
+
+    pub fn port(&self) -> Option<u16> {
+        self.port
     }
 
     /// The same service acting for the named client (`None`: REST, unnamed).
@@ -262,6 +279,7 @@ impl AgentService {
         AgentService {
             store: self.store.clone(),
             client,
+            port: self.port,
         }
     }
 
@@ -290,6 +308,7 @@ impl AgentService {
     pub fn project(&self) -> ProjectView {
         self.store.read(|board, _| ProjectView {
             title: board.title.clone(),
+            port: self.port,
             document_prompt: board.project.document_prompt.clone(),
             code_guidance: board.project.code_guidance.clone(),
         })

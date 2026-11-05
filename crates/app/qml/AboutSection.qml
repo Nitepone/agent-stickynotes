@@ -3,11 +3,13 @@ import QtQuick.Controls.Fusion
 import QtQuick.Layouts
 import StickyNotes
 
-// Preferences > About: the application name and version.
+// Preferences > About: the application name and version, and the port of
+// this board's agent server.
 PreferencesSection {
     title: qsTr("About")
 
     property string version: ""
+    property int agentPort: 0
 
     ColumnLayout {
         x: Theme.px(32)
@@ -28,6 +30,13 @@ PreferencesSection {
         Label {
             objectName: "versionLabel"
             text: qsTr("Version %1").arg(version)
+            color: Theme.text
+            Accessible.name: text
+        }
+        Label {
+            objectName: "agentPortLabel"
+            visible: agentPort > 0
+            text: qsTr("Agent server port: %1").arg(agentPort)
             color: Theme.text
             Accessible.name: text
         }

@@ -804,6 +804,7 @@ ApplicationWindow {
 
         AboutSection {
             version: controller.appVersion
+            agentPort: controller.agentPort
         }
     }
 
@@ -914,6 +915,7 @@ ApplicationWindow {
         desktopBridgeJson: agentSetup.desktop_bridge
         opencodeJson: agentSetup.opencode
         endpoint: controller.endpoint
+        port: controller.agentPort
         agentWrite: controller.agentWrite
         reducedMotion: prefs.reduce_motion
         onTestRequested: (client) => controller.checkAgentConnection(client)

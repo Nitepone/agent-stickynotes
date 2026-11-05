@@ -107,7 +107,7 @@ impl BoardMcp {
 #[tool_router]
 impl BoardMcp {
     #[tool(
-        description = "Get the project's instructions from the user: document_prompt (how to write documents) and code_guidance (how to write code). Call this first and follow it."
+        description = "Get which board you are connected to (title, and the server's port: several boards can be open at once) and the project's instructions from the user: document_prompt (how to write documents) and code_guidance (how to write code). Call this first, tell the user the board and port, and follow the instructions."
     )]
     fn project_get(&self) -> ToolResult {
         json(Ok(self.service.project()))
@@ -242,7 +242,10 @@ impl ServerHandler for BoardMcp {
             "stickynotes",
             env!("CARGO_PKG_VERSION"),
         ))
-        .with_instructions(agent_guide::mcp_instructions())
+        .with_instructions(agent_guide::mcp_instructions(
+            &self.service.project().title,
+            self.service.port(),
+        ))
     }
 
     async fn list_resources(

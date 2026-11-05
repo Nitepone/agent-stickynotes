@@ -12,7 +12,7 @@ Item {
         id: page
         anchors.fill: parent
         PreferencesSection { title: "First" }
-        AboutSection { id: about; version: "1.2.3" }
+        AboutSection { id: about; version: "1.2.3"; agentPort: 7317 }
     }
 
     TestCase {
@@ -26,6 +26,9 @@ Item {
             const label = TestHelpers.findByName(page, "versionLabel")
             verify(label.visible)
             compare(label.text, "Version 1.2.3")
+            const port = TestHelpers.findByName(page, "agentPortLabel")
+            verify(port.visible)
+            compare(port.text, "Agent server port: 7317")
         }
     }
 }

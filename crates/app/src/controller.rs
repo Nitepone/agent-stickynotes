@@ -37,6 +37,7 @@ pub mod qobject {
         #[qproperty(QString, undo_label)]
         #[qproperty(QString, redo_label)]
         #[qproperty(QString, endpoint)]
+        #[qproperty(i32, agent_port)]
         #[qproperty(i64, last_interaction_ms)]
         #[qproperty(QString, prefs_json)]
         #[qproperty(bool, spell_available)]
@@ -241,6 +242,8 @@ pub struct BoardControllerRust {
     undo_label: QString,
     redo_label: QString,
     endpoint: QString,
+    /// The agent server's port, shown so the user can tell boards apart.
+    agent_port: i32,
     last_interaction_ms: i64,
     /// The preferences as JSON (see `Settings::prefs_json`).
     prefs_json: QString,
@@ -261,6 +264,8 @@ impl cxx_qt::Initialize for qobject::BoardController {
         let ctx = context::get();
         self.as_mut()
             .set_endpoint(QString::from(ctx.endpoint.as_str()));
+        self.as_mut()
+            .set_agent_port(i32::from(agent_setup::port_of(&ctx.endpoint)));
         self.as_mut()
             .set_app_version(QString::from(env!("CARGO_PKG_VERSION")));
         {

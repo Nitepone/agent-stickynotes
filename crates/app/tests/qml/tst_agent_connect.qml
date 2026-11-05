@@ -16,6 +16,7 @@ Item {
         desktopBridgeJson: "{ \"bridge\": 1 }"
         opencodeJson: "{ \"opencode\": 1 }"
         endpoint: "http://h:1"
+        port: 40123
         reducedMotion: true
     }
     // Never touched, to check the defaults.
@@ -37,6 +38,14 @@ Item {
         function cleanup() { dlg.close() }
 
         function named(n) { return TestHelpers.findByName(dlg.contentItem, n) }
+
+        function test_the_dialog_names_this_boards_port() {
+            const label = named("portLabel")
+            verify(label.visible)
+            verify(label.text.indexOf("port 40123") >= 0, label.text)
+            verify(!TestHelpers.findByName(pristine.contentItem, "portLabel").visible,
+                   "no port line before the port is known")
+        }
         function header(section) { return TestHelpers.findByName(named(section), "sectionHeader") }
         function inSection(section, n) { return TestHelpers.findByName(named(section), n) }
         // Scroll the dialog's content so `item` is in view, then click it.

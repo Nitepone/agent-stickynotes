@@ -9,7 +9,7 @@ use crate::model::Board;
 pub const TOOLS: &[(&str, &str)] = &[
     (
         "project_get",
-        "the project's instructions: how to write documents and code",
+        "which board and port you are on, and the project's instructions: how to write documents and code",
     ),
     (
         "board_get",
@@ -49,6 +49,13 @@ pub const TOOLS: &[(&str, &str)] = &[
 pub const WORKFLOW_RULES: &str = "\
 - Start by calling project_get and follow the project's document_prompt and code_guidance in \
 everything you write.
+- Several boards can be open at once, each with its own server and port. At the start of a \
+session, tell the user which board (project_get's title) and port you are connected to, and wait \
+for them to confirm before your first write.
+- If the user says it is the wrong board, or the tools stop responding, ask which board they \
+meant and tell them to copy the command from Agent > Connect Agent in that board's window, run \
+it, then run /mcp to reconnect. Never read the API token from the app's files or ask the user \
+for it.
 - Columns are an ordered pipeline, left to right. Each column's description is the bar a task \
 must meet to enter that column.
 - You move tasks only with task_advance, one column at a time, left to right. Before advancing, \
@@ -72,10 +79,15 @@ detach the old; detaching never deletes the file.
 - Write tools accept expected_revision. If it no longer matches, the board changed: re-read and retry.
 - Columns cannot be created, edited, reordered or deleted by agents, and neither can project settings.";
 
-/// The text of the MCP `instructions` field.
-pub fn mcp_instructions() -> String {
+/// The text of the MCP `instructions` field, naming the board (`title`) and
+/// the server's `port` as they are when a client connects.
+pub fn mcp_instructions(title: &str, port: Option<u16>) -> String {
+    let on_port = port.map(|p| format!(" on port {p}")).unwrap_or_default();
     format!(
-        "This server exposes the user's kanban board (agent-stickynotes).\n\nWorkflow rules:\n{WORKFLOW_RULES}\n{}",
+        "This server exposes the user's kanban board \"{}\" (agent-stickynotes){on_port}. \
+         That is the board as it was when you connected; project_get returns its current title \
+         and port.\n\nWorkflow rules:\n{WORKFLOW_RULES}\n{}",
+        title.replace('"', "'"),
         crate::limits::rule()
     )
 }
@@ -169,8 +181,26 @@ mod tests {
 
     #[test]
     fn instructions_point_agents_at_project_get() {
-        let text = mcp_instructions();
+        let text = mcp_instructions("Board", Some(7317));
         assert!(text.contains("project_get"));
         assert!(text.contains("task_advance"));
+    }
+
+    #[test]
+    fn instructions_name_the_board_and_port() {
+        let text = mcp_instructions("Launch \"v2\"", Some(40123));
+        assert!(text.contains("board \"Launch 'v2'\" (agent-stickynotes) on port 40123."));
+        assert!(!mcp_instructions("Launch", None).contains("on port"));
+    }
+
+    #[test]
+    fn instructions_and_skill_say_to_confirm_the_board_before_writing() {
+        let skill = skill_markdown(&Board::new_default());
+        for text in [mcp_instructions("B", Some(1)), skill] {
+            assert!(text.contains("wait for them to confirm before your first write"));
+            assert!(text.contains("Agent > Connect Agent in that board's window"));
+            assert!(text.contains("/mcp"));
+            assert!(text.contains("Never read the API token"));
+        }
     }
 }
