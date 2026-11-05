@@ -35,6 +35,11 @@ folders, a `dictionaries` folder next to the executable (the AppImage ships
 underlined, and Preferences ▸ Editor says so. Acronyms, `camelCase`, words with
 digits and paths or addresses are not flagged.
 
+Right-click an underlined word (or press the Menu key or Shift+F10 with the
+cursor in it) for up to five replacements; choosing one replaces the word, and
+one Ctrl+Z puts the original back. The same menu has Cut, Copy, Paste and
+Select All, in every multi-line field.
+
 ## Drafting (Claude Code or an Ollama-style server)
 
 The draft button runs `claude -p` as a subprocess, with no tools, MCP servers or

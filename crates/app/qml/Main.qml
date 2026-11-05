@@ -77,6 +77,9 @@ ApplicationWindow {
     // Misspelled words in the task editor, or null with spell check off.
     readonly property var spellRanges: prefs.spell_check
         ? (text) => JSON.parse(controller.misspelledRanges(text)) : null
+    // Replacements for one misspelled word, or null with spell check off.
+    readonly property var spellSuggestions: prefs.spell_check
+        ? (word) => JSON.parse(controller.spellingSuggestions(word)) : null
 
     // Notes an agent changed glow until the user has been back for a while.
     GlowTracker {
@@ -831,6 +834,7 @@ ApplicationWindow {
     TaskDialog {
         id: taskDialog
         spellRanges: window.spellRanges
+        spellSuggestions: window.spellSuggestions
         generating: controller.generating
         generatorName: controller.generatorName
         onGenerateRequested: (form) => controller.startGeneration(form)

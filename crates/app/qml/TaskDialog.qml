@@ -28,6 +28,8 @@ StickyDialog {
     property string loadedForm: ""
     // Finds misspelled words for the text fields (see SpellUnderline); null for none.
     property var spellRanges: null
+    // Replacements for a misspelled word, for the fields' right-click menu; null for none.
+    property var spellSuggestions: null
     // Why the last attach failed; shown in the Artifacts section.
     property string attachError: ""
     // A file is being dragged over the dialog (it will be attached on drop).
@@ -510,6 +512,7 @@ StickyDialog {
                 id: descriptionField
                 objectName: "descriptionField"
                 spellRanges: dialog.spellRanges
+                spellSuggestions: dialog.spellSuggestions
                 Layout.fillWidth: true
                 Layout.minimumHeight: Theme.px(70)
                 placeholderText: qsTr("Short, sticky-note sized summary")
@@ -526,6 +529,7 @@ StickyDialog {
             FormTextArea {
                 id: extendedField
                 spellRanges: dialog.spellRanges
+                spellSuggestions: dialog.spellSuggestions
                 Layout.fillWidth: true
                 Layout.minimumHeight: Theme.px(110)
                 placeholderText: qsTr("Optional details, context, links…")
@@ -673,6 +677,7 @@ StickyDialog {
                     WrappingField {
                         objectName: "requirementField"
                         spellRanges: dialog.spellRanges
+                        spellSuggestions: dialog.spellSuggestions
                         Layout.fillWidth: true
                         text: parent.text
                         placeholderText: qsTr("Requirement")
@@ -714,6 +719,7 @@ StickyDialog {
                     WrappingField {
                         objectName: "criterionField"
                         spellRanges: dialog.spellRanges
+                        spellSuggestions: dialog.spellSuggestions
                         Layout.fillWidth: true
                         text: parent.text
                         placeholderText: qsTr("Acceptance criterion")

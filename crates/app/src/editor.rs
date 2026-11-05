@@ -138,6 +138,28 @@ impl SpellChecker {
         }
         found
     }
+
+    /// Up to `max` replacements for `word`, best first; none without a
+    /// dictionary or for a word that is spelled right.
+    pub fn suggestions(&self, word: &str, max: usize) -> Vec<String> {
+        let Some(dictionary) = &self.dictionary else {
+            return Vec::new();
+        };
+        let normalized = word.trim().replace('\u{2019}', "'");
+        if normalized.is_empty() || dictionary.check(&normalized) {
+            return Vec::new();
+        }
+        let mut found = Vec::new();
+        dictionary.suggest(&normalized, &mut found);
+        let mut unique: Vec<String> = Vec::new();
+        for s in found {
+            if !unique.contains(&s) {
+                unique.push(s);
+            }
+        }
+        unique.truncate(max);
+        unique
+    }
 }
 
 fn dictionary_dirs() -> Vec<PathBuf> {
@@ -293,6 +315,24 @@ mod tests {
             .into_iter()
             .map(|(start, len)| String::from_utf16(&units[start..start + len]).unwrap())
             .collect()
+    }
+
+    #[test]
+    fn misspelled_words_get_suggestions_and_correct_ones_none() {
+        let c = checker();
+        let wrold = c.suggestions("wrold", 5);
+        assert_eq!(
+            wrold.first().map(String::as_str),
+            Some("world"),
+            "{wrold:?}"
+        );
+        assert!(c.suggestions("brwn", 5).contains(&"brown".to_string()));
+        assert!(c.suggestions("world", 5).is_empty());
+        assert!(c.suggestions("", 5).is_empty());
+        assert!(c.suggestions("qzxjv", 5).len() <= 5);
+        assert!(c.suggestions("wrold", 1).len() <= 1);
+        let none = SpellChecker { dictionary: None };
+        assert!(none.suggestions("wrold", 5).is_empty());
     }
 
     #[test]

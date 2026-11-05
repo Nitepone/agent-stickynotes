@@ -19,6 +19,11 @@ Item {
         return found
     }
 
+    // Stand-in for the dictionary's suggestions: "teh" has two, "wrold" none.
+    property var suggester: function(word) {
+        return word === "teh" ? ["the", "tech"] : []
+    }
+
     FormTextArea {
         id: field
         objectName: "field"
@@ -26,6 +31,16 @@ Item {
         height: 120
         text: "Hello teh wrold"
         spellRanges: scene.checker
+        spellSuggestions: scene.suggester
+    }
+
+    WrappingField {
+        id: listItem
+        y: 140
+        width: 400
+        text: "teh fox"
+        spellRanges: scene.checker
+        spellSuggestions: scene.suggester
     }
 
     TestCase {
@@ -34,8 +49,119 @@ Item {
 
         function init() {
             field.spellRanges = scene.checker
-            field.text = "Hello teh wrold"
+            field.spellSuggestions = scene.suggester
+            listItem.text = "teh fox"
+            if (field.text !== "Hello teh wrold") {
+                // Underlines follow a change after a short delay; let them catch up.
+                field.text = "Hello teh wrold"
+                wait(400)
+            }
             wait(0)
+        }
+
+        function cleanup() {
+            field.contextMenu.close()
+            listItem.contextMenu.close()
+            tryCompare(field.contextMenu, "visible", false)
+            tryCompare(listItem.contextMenu, "visible", false)
+        }
+
+        // The menu's visible items with this objectName.
+        function menuItems(menu, name) {
+            const found = []
+            for (let i = 0; i < menu.count; ++i) {
+                const item = menu.itemAt(i)
+                if (item && item.objectName === name && item.visible)
+                    found.push(item)
+            }
+            return found
+        }
+
+        // Right-click inside the character at `pos` and wait for the menu.
+        function rightClickAt(editor, pos) {
+            const r = editor.positionToRectangle(pos)
+            mouseClick(editor, r.x + 2, r.y + r.height / 2, Qt.RightButton)
+            tryCompare(editor.contextMenu, "opened", true)
+            // Let the menu lay out its items before anything is clicked.
+            waitForRendering(editor.contextMenu.contentItem)
+        }
+
+        function test_right_click_on_a_misspelled_word_offers_its_suggestions() {
+            rightClickAt(field, 7)   // inside "teh"
+            const menu = field.contextMenu
+            compare(menuItems(menu, "spellSuggestion").map(i => i.text), ["the", "tech"])
+            compare(menuItems(menu, "noSuggestions").length, 0)
+            for (const name of ["cutItem", "copyItem", "pasteItem", "selectAllItem"])
+                compare(menuItems(menu, name).length, 1, name)
+        }
+
+        function test_choosing_a_suggestion_replaces_the_word_and_one_undo_restores_it() {
+            tryCompare({ get n() { return underlines().length } }, "n", 2)
+            rightClickAt(field, 7)
+            mouseClick(menuItems(field.contextMenu, "spellSuggestion")[0])
+            compare(field.text, "Hello the wrold")
+            tryCompare(field.contextMenu, "visible", false)
+            tryCompare({ get n() { return underlines().length } }, "n", 1, 2000)
+            verify(field.activeFocus, "focus goes back to the field")
+
+            keyClick(Qt.Key_Z, Qt.ControlModifier)
+            compare(field.text, "Hello teh wrold", "one undo brings the word back")
+            keyClick(Qt.Key_Z, Qt.ControlModifier | Qt.ShiftModifier)
+            compare(field.text, "Hello the wrold", "and one redo replaces it again")
+        }
+
+        function test_a_word_without_suggestions_says_so() {
+            rightClickAt(field, 12)  // inside "wrold"
+            const menu = field.contextMenu
+            compare(menuItems(menu, "spellSuggestion").length, 0)
+            const none = menuItems(menu, "noSuggestions")
+            compare(none.length, 1)
+            verify(!none[0].enabled)
+        }
+
+        function test_a_correct_word_gets_only_the_edit_items() {
+            rightClickAt(field, 2)   // inside "Hello"
+            const menu = field.contextMenu
+            compare(menuItems(menu, "spellSuggestion").length, 0)
+            compare(menuItems(menu, "noSuggestions").length, 0)
+            compare(menuItems(menu, "selectAllItem").length, 1)
+        }
+
+        function test_with_spell_check_off_there_are_no_spelling_items() {
+            field.spellRanges = null
+            rightClickAt(field, 7)
+            const menu = field.contextMenu
+            compare(menuItems(menu, "spellSuggestion").length, 0)
+            compare(menuItems(menu, "noSuggestions").length, 0)
+            compare(menuItems(menu, "pasteItem").length, 1)
+        }
+
+        function test_cut_from_the_menu_takes_the_selection() {
+            field.forceActiveFocus()
+            field.select(0, 6)       // "Hello "
+            rightClickAt(field, 2)   // inside the selection: it stays
+            const [cut] = menuItems(field.contextMenu, "cutItem")
+            verify(cut.enabled)
+            mouseClick(cut)
+            compare(field.text, "teh wrold")
+        }
+
+        function test_shift_f10_opens_the_menu_for_the_word_at_the_cursor() {
+            listItem.forceActiveFocus()
+            listItem.cursorPosition = 1
+            keyClick(Qt.Key_F10, Qt.ShiftModifier)
+            tryCompare(listItem.contextMenu, "opened", true)
+            waitForRendering(listItem.contextMenu.contentItem)
+            compare(menuItems(listItem.contextMenu, "spellSuggestion").map(i => i.text), ["the", "tech"])
+            listItem.contextMenu.close()
+            tryCompare(listItem.contextMenu, "visible", false)
+
+            // The list item's own key handling still runs: Enter adds no line.
+            listItem.forceActiveFocus()
+            keyClick(Qt.Key_Return)
+            compare(listItem.text, "teh fox")
+            keyClick(Qt.Key_Menu)
+            tryCompare(listItem.contextMenu, "opened", true)
         }
 
         function underlines() {

@@ -176,6 +176,10 @@ pub mod qobject {
         /// UTF-16 units. Empty while spell check is off.
         #[qinvokable]
         fn misspelled_ranges(self: &BoardController, text: &QString) -> QString;
+        /// Up to five replacements for a misspelled word, as a JSON array of
+        /// strings. Empty while spell check is off.
+        #[qinvokable]
+        fn spelling_suggestions(self: &BoardController, word: &QString) -> QString;
 
         #[qinvokable]
         fn save_screenshot(self: &BoardController, path: &QString) -> bool;
@@ -601,6 +605,14 @@ impl qobject::BoardController {
         }
         let ranges = context::get().spell.misspelled(&String::from(text));
         to_qstring(serde_json::to_string(&ranges).expect("ranges serialize"))
+    }
+
+    fn spelling_suggestions(&self, word: &QString) -> QString {
+        if !stickynotes_core::store::relock(&context::get().settings).spell_check {
+            return QString::from("[]");
+        }
+        let found = context::get().spell.suggestions(&String::from(word), 5);
+        to_qstring(serde_json::to_string(&found).expect("strings serialize"))
     }
 
     fn record_interaction(mut self: Pin<&mut Self>, ms: i64) {
